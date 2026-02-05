@@ -1,0 +1,2 @@
+@echo off
+"C:\Users\amoma\DOWNLO~1\firebase-tools-instant-win.exe"  C:\Users\amoma\CACHE~1\firebase\runtime\node.js %*

@@ -1,0 +1,44 @@
+type User @table {
+  username: String!
+  email: String!
+  createdAt: Timestamp!
+  displayName: String
+  profilePictureUrl: String
+  bio: String
+  phoneNumber: String
+}
+
+type Content @table {
+  author: User
+  contentType: String!
+  createdAt: Timestamp!
+  privacySetting: String!
+  title: String
+  textBody: String
+  mediaUrl: String
+}
+
+type Message @table {
+  sender: User
+  receiver: User
+  messageText: String!
+  timestamp: Timestamp!
+  mediaUrl: String
+}
+
+type CallRecord @table {
+  initiator: User
+  recipient: User
+  callType: String!
+  startTime: Timestamp!
+  duration: Int64!
+  endTime: Timestamp
+}
+
+type Connection @table(key: ["userA", "userB"]) {
+  userA: User!
+  userB: User!
+  status: String!
+  createdAt: Timestamp!
+  updatedAt: Timestamp
+}
