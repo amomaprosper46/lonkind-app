@@ -1,4 +1,3 @@
-
 import { config } from 'dotenv';
 config();
 
@@ -27,3 +26,5 @@ import '@/ai/flows/generate-video-story.ts';
 import '@/ai/flows/create-video-post.ts';
 import '@/ai/flows/search-nearby-posts.ts';
 import '@/ai/flows/remix-image.ts';
+import '@/ai/flows/gift-coins.ts';
+import '@/ai/flows/purchase-coins.ts';
