@@ -94,3 +94,17 @@ This is also a great option because it keeps your application and your backend s
     ```
 
 After the command finishes, it will give you a URL where your live application can be viewed. That's it! Your app will be live on the internet.
+
+---
+
+## Troubleshooting
+
+### Vercel Deployment Fails with "No Next.js version detected"
+
+This error usually means Vercel's "Root Directory" setting is incorrect. If you have moved files around, you may need to update this setting.
+
+1.  Go to your project's dashboard on Vercel.
+2.  Click on the **"Settings"** tab, then go to the **"General"** page.
+3.  Find the **"Root Directory"** setting.
+4.  Ensure it is set to `./` (the default, top-level directory). If it's set to `app` or another subfolder, edit it, clear the input, and save.
+5.  Go to the **"Deployments"** tab and redeploy your project.
