@@ -26,6 +26,7 @@ export const storage = getStorage(app);
 export const rtdb = getDatabase(app);
 
 
+
 // Copy these key-value pairs into your Vercel project's Environment Variables settings:
 /*
 NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyAk4DcDNed4OWSahdV56ll1wI973-0wgS4
