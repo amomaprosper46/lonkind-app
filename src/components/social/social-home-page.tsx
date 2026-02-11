@@ -1,3 +1,4 @@
+
 'use client';
 import React, { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ import { toast } from '@/hooks/use-toast';
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { useLocalization } from '@/hooks/use-localization';
 import QuickStartGuide from './quick-start-guide';
-import placeholderImages from '../../lib/placeholder-images.json';
+import placeholderImages from '@/lib/placeholder-images.json';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 
