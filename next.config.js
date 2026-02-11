@@ -10,17 +10,6 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@grpc/grpc-js', '@opentelemetry/exporter-trace-otlp-grpc'],
   },
-  // images: {
-  //   unoptimized: true,
-  //   remotePatterns: [
-  //     ...
-  //   ],
-  // },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  srcDir: 'src',
-};
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -41,6 +30,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  srcDir: 'src',
 };
 
 module.exports = withPWA(nextConfig);
