@@ -5,7 +5,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, notFound, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, query, where, orderBy, updateDoc, increment, serverTimestamp, addDoc, onSnapshot, runTransaction, writeBatch, deleteDoc, setDoc, collectionGroup } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import ProfileView from '@/components/social/profile-view';
@@ -19,6 +18,8 @@ import CallView from '@/components/social/call-view';
 import type { ProfileData } from '@/components/social/edit-profile-dialog';
 import { createOrGetConversation } from '@/ai/flows/create-or-get-conversation';
 import type { CurrentUser } from '@/components/social/social-dashboard';
+import placeholderImages from '@/lib/placeholder-images.json';
+import { useAuthState } from 'react-firebase-hooks/auth';
 
 
 interface UserProfile {
@@ -65,82 +66,62 @@ export default function UserProfilePage() {
     }, [loggedInUser]);
 
 
-    const fetchProfileAndPosts = useCallback(async () => {
+     useEffect(() => {
         if (!handle) return;
-        setIsLoading(true);
-
-        try {
-            // Fetch Profile User
-            const usersRef = collection(db, 'users');
-            const userQuery = query(usersRef, where('handle', '==', handle.toLowerCase()));
-            
-            const unsubscribeProfile = onSnapshot(userQuery, (userSnapshot) => {
-                if (userSnapshot.empty) {
-                    setProfileUser(null);
-                    // notFound() is not ideal inside onSnapshot, handle gracefully
-                    setIsLoading(false);
-                    return;
-                }
-
-                const userDoc = userSnapshot.docs[0];
-                const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
-                setProfileUser(userData);
-
-                // Once we have the profile, fetch posts
-                const postsCollection = collection(db, "posts");
-                const q = query(postsCollection, where("author.handle", "==", handle.toLowerCase()), orderBy("timestamp", "desc"));
-                const unsubscribePosts = onSnapshot(q, (postSnapshot) => {
-                    const postList = postSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-                    setPosts(postList);
-                    setIsLoading(false);
+    
+        let profileUnsubscribe: (() => void) | null = null;
+        let postsUnsubscribe: (() => void) | null = null;
+    
+        const setupListeners = async () => {
+            setIsLoading(true);
+            try {
+                const usersRef = collection(db, 'users');
+                const userQuery = query(usersRef, where('handle', '==', handle.toLowerCase()));
+    
+                profileUnsubscribe = onSnapshot(userQuery, (userSnapshot) => {
+                    if (userSnapshot.empty) {
+                        setProfileUser(null);
+                        setIsLoading(false);
+                        return;
+                    }
+    
+                    const userDoc = userSnapshot.docs[0];
+                    const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+                    setProfileUser(userData);
+    
+                    // Kill previous posts listener if profile changes
+                    if (postsUnsubscribe) postsUnsubscribe();
+    
+                    const postsCollection = collection(db, "posts");
+                    const q = query(postsCollection, where("author.handle", "==", handle.toLowerCase()), orderBy("timestamp", "desc"));
+                    
+                    postsUnsubscribe = onSnapshot(q, (postSnapshot) => {
+                        const postList = postSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+                        setPosts(postList);
+                        setIsLoading(false);
+                    }, (error) => {
+                        console.error("Error fetching posts in real-time:", error);
+                        toast({ variant: 'destructive', title: 'Error', description: 'Could not load posts.' });
+                        setIsLoading(false);
+                    });
                 }, (error) => {
-                    console.error("Error fetching posts in real-time:", error);
-                    toast({ variant: 'destructive', title: 'Error', description: 'Could not load posts.' });
+                    console.error("Error fetching profile in real-time:", error);
                     setIsLoading(false);
                 });
-                
-                // Return the posts unsubscriber to be managed by the parent useEffect
-                return unsubscribePosts;
-            }, (error) => {
-                console.error("Error fetching profile in real-time:", error);
+            } catch (error) {
+                console.error("Error setting up profile fetch: ", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not load profile data.' });
                 setIsLoading(false);
-            });
-
-
-            return unsubscribeProfile;
-
-        } catch (error) {
-            console.error("Error setting up profile fetch: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not load profile data.' });
-            setIsLoading(false);
-        }
-
-    }, [handle]);
-
-
-    useEffect(() => {
-        let postsUnsubscribe: (() => void) | undefined;
-    
-        const profileUnsubscribePromise = fetchProfileAndPosts();
-    
-        profileUnsubscribePromise.then(unsubscribe => {
-            if (unsubscribe && typeof unsubscribe === 'function') {
-                // This is the profile unsubscriber
-                const profileUnsubscriber = unsubscribe;
-                
-                // This is where we get the posts unsubscriber
-                const checkPostsUnsubscriber = () => {
-                    // It was returned from the profile onSnapshot, need to handle this async nature
-                };
-                
-                return () => {
-                    profileUnsubscriber();
-                    if(postsUnsubscribe) postsUnsubscribe();
-                };
             }
-        });
+        };
     
-    }, [fetchProfileAndPosts]);
+        setupListeners();
+    
+        return () => {
+            if (profileUnsubscribe) profileUnsubscribe();
+            if (postsUnsubscribe) postsUnsubscribe();
+        };
+    }, [handle]);
     
     // This effect now sets up real-time listeners for user-specific data
     useEffect(() => {
@@ -221,7 +202,7 @@ export default function UserProfilePage() {
                     }
                     transaction.set(reactionRef, {
                         type: reaction,
-                        user: { name: loggedInUser.displayName, avatarUrl: loggedInUser.photoURL, handle: currentUser?.handle, uid: loggedInUser.uid },
+                        user: { name: currentUser.name, avatarUrl: currentUser.avatarUrl, handle: currentUser.handle, uid: currentUser.uid },
                         timestamp: serverTimestamp()
                     });
                     transaction.update(postRef, { [`reactions.${reaction}`]: increment(1) });
@@ -477,7 +458,8 @@ export default function UserProfilePage() {
                     <ProfileView 
                         user={profileUser} 
                         posts={posts} 
-                        currentUserUid={loggedInUser.uid}
+                        currentUser={currentUser}
+                        isCurrentUser={loggedInUser.uid === profileUser.uid}
                         onReact={(postId, reaction) => {
                             const post = posts.find(p => p.id === postId);
                             if (post) handleReact(postId, reaction, post.author.uid);
@@ -487,7 +469,6 @@ export default function UserProfilePage() {
                         onDeletePost={handleDeletePost}
                         userReactions={userReactions}
                         savedPostIds={savedPostIds}
-                        isCurrentUser={loggedInUser.uid === profileUser.uid}
                         onFollowAction={handleFollowAction}
                         onMessage={handleStartMessage}
                         followStatus={followStatus}
@@ -518,5 +499,3 @@ export default function UserProfilePage() {
         </div>
     );
 }
-
-    
