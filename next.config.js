@@ -8,11 +8,6 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 
 const nextConfig = {
   experimental: {
-    const nextConfig = {
-  // ...
-  pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
-  // ...
-    };
     serverComponentsExternalPackages: ['@grpc/grpc-js', '@opentelemetry/exporter-trace-otlp-grpc'],
   },
   images: {
@@ -36,6 +31,7 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   srcDir: 'src',
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
 };
 
 module.exports = withPWA(nextConfig);
