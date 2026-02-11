@@ -7,9 +7,19 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 });
 
 const nextConfig = {
-  // ...
+  experimental: {
+    serverComponentsExternalPackages: ['@grpc/grpc-js', '@opentelemetry/exporter-trace-otlp-grpc'],
+  },
+  // images: {
+  //   unoptimized: true,
+  //   remotePatterns: [
+  //     ...
+  //   ],
+  // },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   srcDir: 'src',
-  // ...
 };
   images: {
     unoptimized: true,
