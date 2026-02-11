@@ -1,4 +1,4 @@
-import type {NextConfig} from 'next';
+/** @type {import('next').NextConfig} */
 
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
@@ -7,7 +7,10 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   disable: process.env.NODE_ENV === "development",
 });
 
-const nextConfig: NextConfig = {
+const nextConfig = {
+  experimental: {
+    serverComponentsExternalPackages: ['@grpc/grpc-js', '@opentelemetry/exporter-trace-otlp-grpc'],
+  },
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -31,6 +34,13 @@ const nextConfig: NextConfig = {
     // type-checking step.
     ignoreBuildErrors: true,
   },
+   // Required for Genkit video generation flows to avoid timeouts
+  serverActions: {
+    bodySizeLimit: '4.5mb',
+    // Increase timeout for long-running AI tasks
+    // Vercel Hobby plan has a 15s timeout, Pro has 60s. This is for local dev.
+    // In a real app on Vercel Pro, you would use background functions for long tasks.
+  },
 };
 
-export default withPWA(nextConfig);
+module.exports = withPWA(nextConfig);
