@@ -1,4 +1,3 @@
-
 'use client';
 import React, { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -19,6 +18,9 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { useLocalization } from '@/hooks/use-localization';
+import QuickStartGuide from './quick-start-guide';
+import placeholderImages from '../../lib/placeholder-images.json';
+import { useAuthState } from 'react-firebase-hooks/auth';
 
 
 declare global {
@@ -65,7 +67,7 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
                 return;
             }
 
-            const avatarUrl = `https://placehold.co/100x100.png?text=${name.charAt(0)}`;
+            const avatarUrl = placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
             const isProfessionalAccount = user.email?.toLowerCase() === 'admin@lonkind.com';
 
             const userDocRef = doc(db, "users", user.uid);
@@ -81,13 +83,15 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
                 followersCount: 0,
                 followingCount: 0,
                 balance: isProfessionalAccount ? 123.45 : 0,
+                coins: 100, // Starting coins for new users
+                diamonds: 0,
             });
 
             await updateProfile(user, { displayName: name, photoURL: avatarUrl });
 
             if (isProfessionalAccount) {
               await addDummyFollowers({ userId: user.uid, count: 500000 });
-              await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000 }, { merge: true });
+              await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
             }
 
             toast({ title: 'Welcome to Lonkind!', description: 'Your profile has been created.' });
@@ -132,12 +136,12 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
 
 
 export default function SocialHomePage() {
+  const [user, isLoading, error] = useAuthState(auth);
   const [showAuth, setShowAuth] = React.useState(false);
   const [authView, setAuthView] = React.useState<'signIn' | 'signUp'>('signIn');
-  const [currentUser, setCurrentUser] = React.useState<User | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [isOnline, setIsOnline] = React.useState(true);
   const [isNewUser, setIsNewUser] = React.useState(false);
+  const [showTutorial, setShowTutorial] = React.useState(false);
   
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
   const [isResetLoading, setIsResetLoading] = React.useState(false);
@@ -172,7 +176,7 @@ export default function SocialHomePage() {
                 
                 const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
                 const user = userCredential.user;
-                const avatarUrl = `https://placehold.co/100x100.png?text=A`;
+                const avatarUrl = placeholderImages.avatar.url.replace('<seed>', 'A');
                 
                 await updateProfile(user, { displayName: 'Alex Taylor', photoURL: avatarUrl });
                 await setDoc(doc(db, "users", user.uid), {
@@ -183,9 +187,11 @@ export default function SocialHomePage() {
                     email: adminEmail,
                     isProfessional: true,
                     bio: 'CEO of Lonkind. Connecting the world, one idea at a time.',
-                    followersCount: 500000,
-                    followingCount: 1,
+                    followersCount: 0,
+                    followingCount: 0,
                     balance: 123.45,
+                    coins: 1000000,
+                    diamonds: 1000000,
                 });
                 await addDummyFollowers({ userId: user.uid, count: 500000 });
                 console.log("Admin account for Alex Taylor created successfully.");
@@ -204,23 +210,6 @@ export default function SocialHomePage() {
     
     setupAdmin();
 
-
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (!userDoc.exists()) {
-              setIsNewUser(true);
-          } else {
-              setIsNewUser(false);
-          }
-      } else {
-          setIsNewUser(false);
-      }
-      setCurrentUser(user);
-      setIsLoading(false);
-    });
-
     if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
             'size': 'invisible',
@@ -231,9 +220,21 @@ export default function SocialHomePage() {
     return () => {
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('offline', handleOffline);
-        unsubscribe();
     };
   }, []);
+  
+    React.useEffect(() => {
+    const checkIsNewUser = async () => {
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        setIsNewUser(!userDoc.exists());
+      } else {
+        setIsNewUser(false);
+      }
+    };
+    checkIsNewUser();
+  }, [user]);
 
   const handleAuthSuccess = () => {
     setShowAuth(false);
@@ -290,14 +291,20 @@ export default function SocialHomePage() {
   }
   
   const AppContent = () => {
-      if (currentUser) {
+      if (user) {
         if (isNewUser) {
-            return <WelcomeDialog user={currentUser} onProfileCreated={() => setIsNewUser(false)} />;
+            return <WelcomeDialog user={user} onProfileCreated={() => {
+                setIsNewUser(false);
+                setShowTutorial(true);
+            }} />;
+        }
+        if (showTutorial) {
+            return <QuickStartGuide onFinish={() => setShowTutorial(false)} />;
         }
         return (
             <>
                 <PresenceSystem />
-                <SocialDashboard user={currentUser} onSignOut={handleSignOut} />
+                <SocialDashboard user={user} onSignOut={handleSignOut} />
             </>
         );
       }
@@ -363,7 +370,7 @@ export default function SocialHomePage() {
                       </Card>
                       ) : (
                           <div className="p-8 rounded-lg bg-card border shadow-xl">
-                              <Image src="https://picsum.photos/seed/social/600/400" alt="Social connections illustration" width={600} height={400} className="rounded-lg" data-ai-hint="social connections" />
+                              <Image src={placeholderImages.landing.url} alt="Social connections illustration" width={600} height={400} className="rounded-lg" data-ai-hint={placeholderImages.landing.hint} />
                           </div>
                       )}
                   </div>
@@ -419,7 +426,6 @@ export default function SocialHomePage() {
               <footer className="py-6 border-t bg-background">
                   <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-4 gap-y-2">
                     <p>{t('footer_copyright')}</p>
-                    <Link href="/rules" className="hover:text-primary hover:underline">{t('footer_rules')}</Link>
                     <Link href="/terms" className="hover:text-primary hover:underline">Terms of Service</Link>
                   </div>
               </footer>
