@@ -1,13 +1,12 @@
-
 'use client';
 import React, { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SignUpForm } from '@/components/social/sign-up-form';
 import { SignInForm } from '@/components/social/sign-in-form';
-import { Users, Video, Share2, Loader2, WifiOff } from 'lucide-react';
+import { Users, Video, Share2, Loader2, WifiOff, AlertTriangle } from 'lucide-react';
 import SocialDashboard from './social-dashboard';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, isFirebaseConfigValid } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, User, sendPasswordResetEmail, RecaptchaVerifier, updateProfile, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Image from 'next/image';
@@ -20,7 +19,7 @@ import { toast } from '@/hooks/use-toast';
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { useLocalization } from '@/hooks/use-localization';
 import QuickStartGuide from './quick-start-guide';
-import placeholderImages from '@/lib/placeholder-images.json';
+import placeholderImages from '../../lib/placeholder-images.json';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 
@@ -41,6 +40,32 @@ const OfflineIndicator = () => (
         </div>
     </div>
 );
+
+const FirebaseConfigError = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="w-full max-w-2xl p-8 rounded-lg bg-card border border-destructive shadow-xl text-center">
+      <AlertTriangle className="h-16 w-16 text-destructive mx-auto mb-4" />
+      <h1 className="text-2xl font-bold text-destructive">Configuration Error</h1>
+      <p className="text-foreground mt-4">
+        The application is not configured to connect to Firebase. This is usually because the necessary environment variables are missing from your hosting provider (e.g., Vercel).
+      </p>
+      <p className="text-muted-foreground mt-2">
+        Please ensure you have set all the <strong>`NEXT_PUBLIC_FIREBASE_*`</strong> variables in your Vercel project settings.
+      </p>
+      <div className="mt-6 text-left bg-muted p-4 rounded-md text-sm">
+        <h3 className="font-semibold">Action Required:</h3>
+        <ol className="list-decimal list-inside mt-2 space-y-1">
+          <li>Go to your Firebase Console &gt; Project Settings &gt; General tab.</li>
+          <li>Find your Web App and copy the `firebaseConfig` values.</li>
+          <li>Go to your Vercel Project &gt; Settings &gt; Environment Variables.</li>
+          <li>Add each key from `firebaseConfig`, prefixed with `NEXT_PUBLIC_`. For example, `apiKey` becomes `NEXT_PUBLIC_FIREBASE_API_KEY`.</li>
+          <li>Redeploy your application for the changes to take effect.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+);
+
 
 const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreated: () => void }) => {
     const [name, setName] = React.useState(user.displayName || '');
@@ -473,7 +498,7 @@ export default function SocialHomePage() {
   return (
     <>
         {!isOnline && <OfflineIndicator />}
-        <AppContent />
+        {isFirebaseConfigValid ? <AppContent /> : <FirebaseConfigError />}
     </>
   );
 }
