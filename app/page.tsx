@@ -196,7 +196,7 @@ export default function UserProfilePage() {
                     newReactionsMap.delete(postId);
                 } else { // Reacting or changing reaction
                     if (existingReaction) { // Changing reaction
-                         if (postData.reactions?.[existingReaction]) {
+                         if (postData.reactions?.[Reaction]) {
                             transaction.update(postRef, { [reactions.${existingReaction}]: increment(-1) });
                         }
                     }
