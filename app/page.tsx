@@ -276,10 +276,9 @@ export default function UserProfilePage() {
       console.error(e);
       toast({ variant: 'destructive', title: 'Error', description: 'Could not start a conversation.' });
     }
-    console.log({
+    console.log(state:, {
   loadingAuth,
   isLoading,
-  currentUser
 });
   };
 
