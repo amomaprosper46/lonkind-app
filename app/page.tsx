@@ -276,6 +276,11 @@ export default function UserProfilePage() {
       console.error(e);
       toast({ variant: 'destructive', title: 'Error', description: 'Could not start a conversation.' });
     }
+    console.log({
+  loadingAuth,
+  isLoading,
+  currentUser
+});
   };
 
   if (loadingAuth || isLoading || !currentUser) {
