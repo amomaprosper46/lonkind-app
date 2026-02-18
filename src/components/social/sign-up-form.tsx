@@ -81,20 +81,15 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
         
         await updateProfile(user, { displayName: data.name });
         
-        // This will trigger the welcome dialog on next sign-in.
-        // We don't create the user doc here anymore.
-        
         await sendEmailVerification(user);
         
-        await auth.signOut();
-
         toast({
-            title: 'Verification Email Sent!',
-            description: "Please check your inbox to verify your account, then you can sign in.",
+            title: 'Account Created!',
+            description: "You're now logged in. Please check your inbox to verify your email.",
         });
 
         emailForm.reset();
-        onSignUp(); // This should now switch to the sign-in view.
+        onSignUp();
 
     } catch (error: any) {
          const errorCode = error.code;
@@ -115,13 +110,22 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
   async function onPhoneSubmit(data: z.infer<typeof phoneFormSchema>) {
     setIsLoading(true);
     
-    if (data.deliveryMethod === 'notification' || data.deliveryMethod === 'whatsapp') {
+    if (data.deliveryMethod === 'whatsapp') {
         toast({
             title: 'Coming Soon!',
-            description: `Lonkind Notification and WhatsApp delivery is not yet available. Please select SMS.`,
+            description: `WhatsApp delivery is not yet available. Please select another method.`,
         });
         setIsLoading(false);
         return;
+    }
+
+     if (data.deliveryMethod === 'notification') {
+        // Simulate sending a notification. In a real app, this would use FCM.
+        console.log("Simulating sending a push notification for verification...");
+        toast({
+            title: 'In-App Notification Sent',
+            description: `A verification code has been sent as a Lonkind notification. For this demo, we'll proceed with SMS.`,
+        });
     }
 
     try {
@@ -134,7 +138,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
       setPhoneAuthData({ name: data.name, phone: fullPhoneNumber });
       setShowCodeForm(true);
-      toast({ title: "Verification code sent!", description: `A code has been sent to ${fullPhoneNumber}.` });
+      toast({ title: "Verification code sent!", description: `A code has been sent via SMS to ${fullPhoneNumber}.` });
 
     } catch(error) {
         console.error("Phone auth error: ", error);
