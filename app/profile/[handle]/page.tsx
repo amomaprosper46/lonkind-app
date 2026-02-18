@@ -352,28 +352,37 @@ export default function UserProfilePage() {
     };
     
     const handleUpdateProfile = async (data: ProfileData): Promise<boolean> => {
-        if (!currentUser) return false;
-        
-        try {
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            await updateDoc(userDocRef, {
-                name: data.name,
-                handle: data.handle,
-                bio: data.bio,
-                businessUrl: data.businessUrl,
-            });
+    if (!currentUser) return false;
 
-            toast({ title: "Success", description: "Profile updated!" });
+    try {
+        const userDocRef = doc(db, 'users', currentUser.uid);
 
-            }
-            return true;
+        await updateDoc(userDocRef, {
+            name: data.name,
+            handle: data.handle,
+            bio: data.bio,
+            businessUrl: data.businessUrl,
+        });
 
-        } catch (error) {
-            console.error("Error updating profile:", error);
-            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update your profile.' });
-            return false;
-        }
-    };
+        toast({ 
+            title: "Success", 
+            description: "Profile updated!" 
+        });
+
+        return true;
+
+    } catch (error) {
+        console.error("Error updating profile:", error);
+
+        toast({ 
+            variant: 'destructive', 
+            title: 'Update Failed', 
+            description: 'Could not update your profile.' 
+        });
+
+        return false;
+    }
+};
     
     const handleStartCall = (type: 'audio' | 'video') => {
         setCallState({ active: true, type });
