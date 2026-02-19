@@ -20,7 +20,7 @@ import { toast } from '@/hooks/use-toast';
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { useLocalization } from '@/hooks/use-localization';
 import QuickStartGuide from './quick-start-guide';
-import placeholderImages from '@/lib/placeholder-images.json';
+import placeholderImages from '../../lib/placeholder-images.json';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 
@@ -70,29 +70,39 @@ const FirebaseConfigError = () => (
 
 const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreated: () => void }) => {
     const [name, setName] = React.useState(user.displayName || '');
-    const [handle, setHandle] = React.useState('');
     const [isSaving, setIsSaving] = React.useState(false);
 
     const handleSaveProfile = async () => {
-        if (!name.trim() || !handle.trim()) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Please fill out both name and handle.' });
-            return;
-        }
-        if (!/^[a-zA-Z0-9_]{3,15}$/.test(handle)) {
-            toast({ variant: 'destructive', title: 'Invalid Handle', description: 'Handle must be 3-15 characters and can only contain letters, numbers, and underscores.' });
+        if (!name.trim()) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please fill out your name.' });
             return;
         }
         
         setIsSaving(true);
         try {
             const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('handle', '==', handle.toLowerCase()));
-            const handleDoc = await getDocs(q);
-            if (!handleDoc.empty) {
-                toast({ variant: 'destructive', title: 'Handle taken', description: 'This handle is already in use. Please choose another.' });
-                setIsSaving(false);
-                return;
+            let finalHandle = '';
+            let isHandleUnique = false;
+            const baseHandle = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+
+            // Try up to 10 times to find a unique handle
+            for (let i = 0; i < 10; i++) {
+                const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
+                const q = query(usersRef, where('handle', '==', handleCandidate));
+                const handleDoc = await getDocs(q);
+                if (handleDoc.empty) {
+                    finalHandle = handleCandidate;
+                    isHandleUnique = true;
+                    break;
+                }
             }
+
+            if (!isHandleUnique) {
+                 toast({ variant: 'destructive', title: 'Could not create handle', description: 'Could not generate a unique handle. Please try again.' });
+                 setIsSaving(false);
+                 return;
+            }
+
 
             const avatarUrl = placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
             const isProfessionalAccount = user.email?.toLowerCase() === 'admin@lonkind.com';
@@ -101,7 +111,7 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
             await setDoc(userDocRef, {
                 uid: user.uid,
                 name: name,
-                handle: handle.toLowerCase(),
+                handle: finalHandle,
                 avatarUrl: avatarUrl,
                 ...(user.email && { email: user.email.toLowerCase() }),
                 ...(user.phoneNumber && { phoneNumber: user.phoneNumber }),
@@ -121,7 +131,7 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
               await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
             }
 
-            toast({ title: 'Welcome to Lonkind!', description: 'Your profile has been created.' });
+            toast({ title: 'Welcome to Lonkind!', description: `Your profile has been created with handle @${finalHandle}` });
             onProfileCreated();
 
         } catch (error) {
@@ -137,17 +147,12 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
             <DialogContent showCloseButton={false}>
                 <DialogHeader>
                     <DialogTitle>Welcome to Lonkind!</DialogTitle>
-                    <DialogDescription>Let's set up your profile. Choose a name and a unique handle.</DialogDescription>
+                    <DialogDescription>Let's set up your profile. Please confirm your name.</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div>
                         <Label htmlFor="name">Display Name</Label>
                         <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your Name" />
-                    </div>
-                    <div>
-                        <Label htmlFor="handle">Handle</Label>
-                        <Input id="handle" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="your_unique_handle" />
-                         <p className="text-xs text-muted-foreground mt-1">This is how people will find you. Cannot be changed later.</p>
                     </div>
                 </div>
                 <DialogFooter>
@@ -223,8 +228,11 @@ export default function SocialHomePage() {
                 await addDummyFollowers({ userId: user.uid, count: 500000 });
                 console.log("Admin account for Alex Taylor created successfully.");
 
-                await signOut(auth); 
-                // We will just log out completely. The user can sign back in.
+                if (currentAuthUser) {
+                    // If a user was logged in, we need to sign them back in. This is a tricky flow.
+                    // For now, we will just log out completely. The user can sign back in.
+                    await signOut(auth);
+                }
             }
         } catch (error: any) {
             if (error.code === 'auth/email-already-in-use') {
@@ -264,8 +272,7 @@ export default function SocialHomePage() {
   }, [user]);
 
   const handleAuthSuccess = () => {
-    setShowAuth(false);
-    setAuthView('signIn');
+    // onAuthStateChanged will handle the rest.
   };
   
   const handleSignOut = async () => {
