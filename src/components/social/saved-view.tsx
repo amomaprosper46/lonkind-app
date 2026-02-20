@@ -6,10 +6,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import PostCard, { Post, ReactionType } from './post-card';
 import { Loader2, Bookmark } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, documentId, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where, documentId, onSnapshot, doc } from 'firebase/firestore';
+import type { CurrentUser } from './social-dashboard';
 
 interface SavedViewProps {
-    userId: string;
+    currentUser: CurrentUser;
     onReact: (postId: string, reaction: ReactionType, authorUid: string) => void;
     onComment: (post: Post) => void;
     onSavePost: (postId: string) => void;
@@ -18,12 +19,12 @@ interface SavedViewProps {
     savedPostIds: Set<string>;
 }
 
-export default function SavedView({ userId, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: SavedViewProps) {
+export default function SavedView({ currentUser, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: SavedViewProps) {
     const [savedPosts, setSavedPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    const fetchSavedPosts = useCallback(async () => {
-        if (!userId) {
+    useEffect(() => {
+        if (!currentUser.uid) {
             setIsLoading(false);
             return;
         }
@@ -35,34 +36,44 @@ export default function SavedView({ userId, onReact, onComment, onSavePost, onDe
             setIsLoading(false);
             return;
         }
+
+        setIsLoading(true);
         
-        const fetchedPosts: Post[] = [];
         // Firestore 'in' query is limited to 30 elements.
         // For larger lists, you'd need to batch the requests.
-        const idBatches = [];
+        const idBatches: string[][] = [];
         for (let i = 0; i < postIds.length; i += 30) {
             idBatches.push(postIds.slice(i, i + 30));
         }
 
-        for (const batch of idBatches) {
-             if (batch.length === 0) continue;
+        const unsubscribes = idBatches.map(batch => {
+            if (batch.length === 0) return () => {};
             const postsRef = collection(db, 'posts');
             const q = query(postsRef, where(documentId(), 'in', batch));
-            const postsSnap = await getDocs(q);
-            postsSnap.forEach(d => fetchedPosts.push({ id: d.id, ...d.data() } as Post));
-        }
+            
+            return onSnapshot(q, (snapshot) => {
+                const fetchedPosts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Post));
+                
+                setSavedPosts(prevPosts => {
+                    const postMap = new Map(prevPosts.map(p => [p.id, p]));
+                    fetchedPosts.forEach(p => postMap.set(p.id, p));
+                    const allPosts = Array.from(postMap.values());
+                    // Filter out posts that are no longer saved
+                    const currentSavedSet = new Set(postIds);
+                    const filteredPosts = allPosts.filter(p => currentSavedSet.has(p.id));
+                    // Sort by the original saved order
+                    return filteredPosts.sort((a, b) => postIds.indexOf(b.id) - postIds.indexOf(a.id));
+                });
+                setIsLoading(false);
+            }, (error) => {
+                console.error("Error fetching saved posts in real-time:", error);
+                setIsLoading(false);
+            });
+        });
 
-        // Re-sort the fetched posts to match the saved order (most recent first)
-        const sortedPosts = fetchedPosts.sort((a, b) => postIds.indexOf(b.id) - postIds.indexOf(a.id));
 
-        setSavedPosts(sortedPosts);
-        setIsLoading(false);
-    }, [userId, savedPostIds]);
-
-    useEffect(() => {
-        setIsLoading(true);
-        fetchSavedPosts();
-    }, [fetchSavedPosts]);
+        return () => unsubscribes.forEach(unsub => unsub());
+    }, [currentUser.uid, savedPostIds]);
 
     return (
         <main className="col-span-9 space-y-8">
@@ -82,7 +93,7 @@ export default function SavedView({ userId, onReact, onComment, onSavePost, onDe
                         <PostCard 
                             key={post.id} 
                             post={post}
-                            currentUserUid={userId}
+                            currentUser={currentUser}
                             onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
                             onCommentClick={onComment} 
                             onSavePost={onSavePost}
@@ -104,5 +115,3 @@ export default function SavedView({ userId, onReact, onComment, onSavePost, onDe
         </main>
     );
 }
-
-    

@@ -6,11 +6,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import PostCard, { Post, ReactionType } from './post-card';
 import { Loader2, Heart } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, documentId, getDoc, doc, collectionGroup } from 'firebase/firestore';
+import { collection, getDocs, query, where, documentId, getDoc, doc, onSnapshot, collectionGroup } from 'firebase/firestore';
+import type { CurrentUser } from './social-dashboard';
 
 interface LikesViewProps {
     userId: string;
-    currentUserUid: string;
+    currentUser: CurrentUser;
     onReact: (postId: string, reaction: ReactionType, authorUid: string) => void;
     onComment: (post: Post) => void;
     onSavePost: (postId: string) => void;
@@ -19,56 +20,62 @@ interface LikesViewProps {
     savedPostIds: Set<string>;
 }
 
-export default function LikesView({ userId, currentUserUid, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: LikesViewProps) {
+export default function LikesView({ userId, currentUser, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: LikesViewProps) {
     const [likedPosts, setLikedPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    const fetchLikedPosts = useCallback(async () => {
-        setIsLoading(true);
+    useEffect(() => {
         if (!userId) {
             setIsLoading(false);
             return;
         }
 
-        // This is a collection group query. It will require a Firestore index if you add more constraints.
+        setIsLoading(true);
+
+        // This is a collection group query. It will require a Firestore index.
         const reactionsQuery = query(
             collectionGroup(db, 'reactions'),
             where('user.uid', '==', userId)
         );
         
-        const reactionsSnapshot = await getDocs(reactionsQuery);
-        
-        const postIds = reactionsSnapshot.docs.map(reactionDoc => {
-            return reactionDoc.ref.parent.parent?.id;
-        }).filter((id): id is string => !!id);
+        const unsubscribe = onSnapshot(reactionsQuery, async (reactionsSnapshot) => {
+            const postIds = reactionsSnapshot.docs
+                .map(reactionDoc => reactionDoc.ref.parent.parent?.id)
+                .filter((id): id is string => !!id);
 
-        if (postIds.length === 0) {
-            setLikedPosts([]);
-            setIsLoading(false);
-            return;
-        }
-        
-        const uniquePostIds = [...new Set(postIds)];
-        
-        const fetchedPosts: Post[] = [];
-        // Fetch each post document. In a real app with many likes, this could be optimized.
-        for (const id of uniquePostIds) {
-            const postDoc = await getDoc(doc(db, 'posts', id));
-            if(postDoc.exists()) {
-                fetchedPosts.push({ id: postDoc.id, ...postDoc.data() } as Post);
+            if (postIds.length === 0) {
+                setLikedPosts([]);
+                setIsLoading(false);
+                return;
             }
-        }
-        
-        // Sort by timestamp if available
-        fetchedPosts.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+            
+            const uniquePostIds = [...new Set(postIds)];
+            
+            const fetchedPosts: Post[] = [];
+            // Fetch each post document. In a real app with many likes, this could be optimized.
+            for (const id of uniquePostIds) {
+                try {
+                    const postDoc = await getDoc(doc(db, 'posts', id));
+                    if(postDoc.exists()) {
+                        fetchedPosts.push({ id: postDoc.id, ...postDoc.data() } as Post);
+                    }
+                } catch (e) {
+                    console.error(`Error fetching liked post with id ${id}`, e);
+                }
+            }
+            
+            // Sort by timestamp if available, most recent first
+            fetchedPosts.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
 
-        setLikedPosts(fetchedPosts);
-        setIsLoading(false);
+            setLikedPosts(fetchedPosts);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching liked posts in real-time:", error);
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
     }, [userId]);
-
-    useEffect(() => {
-        fetchLikedPosts();
-    }, [fetchLikedPosts]);
 
     return (
         <div className="space-y-6">
@@ -81,7 +88,7 @@ export default function LikesView({ userId, currentUserUid, onReact, onComment, 
                     <PostCard 
                         key={post.id} 
                         post={post}
-                        currentUserUid={currentUserUid}
+                        currentUser={currentUser}
                         onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
                         onCommentClick={onComment} 
                         onSavePost={onSavePost}
@@ -102,5 +109,3 @@ export default function LikesView({ userId, currentUserUid, onReact, onComment, 
         </div>
     );
 }
-
-    
