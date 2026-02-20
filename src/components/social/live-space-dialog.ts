@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -38,30 +37,36 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
                 avatarUrl: currentUser.avatarUrl,
                 isMuted: true,
             };
+            
+            const spaceSnap = await getDoc(spaceRef);
+            if (!spaceSnap.exists()) return;
+            const spaceData = spaceSnap.data() as Space;
+            const alreadyExists = spaceData.listeners.some(l => l.uid === currentUser.uid) || spaceData.speakers.some(s => s.uid === currentUser.uid);
 
-            await updateDoc(spaceRef, {
-                listeners: arrayUnion(participant),
-                listenerCount: increment(1)
-            });
+            if (!alreadyExists) {
+                await updateDoc(spaceRef, {
+                    listeners: arrayUnion(participant),
+                    listenerCount: increment(1)
+                });
+            }
         };
 
         const leaveSpace = async () => {
-             const participantToRemove: Partial<SpaceParticipant> = {
-                uid: currentUser.uid,
-            };
-            
             const spaceSnap = await getDoc(spaceRef);
             if (!spaceSnap.exists()) return;
             const currentSpaceData = spaceSnap.data() as Space;
 
             const isCurrentUserHost = currentSpaceData.host.uid === currentUser.uid;
-            
-            if (isCurrentUserHost && currentSpaceData.speakers.length <= 1 && currentSpaceData.listeners.length <= 1) {
-                await deleteDoc(spaceRef);
-            } else {
-                const speakerToRemove = currentSpaceData.speakers.find(s => s.uid === currentUser.uid);
-                const listenerToRemove = currentSpaceData.listeners.find(l => l.uid === currentUser.uid);
 
+            if (isCurrentUserHost && currentSpaceData.speakers.length <= 1 && currentSpaceData.listeners.length === 0) {
+                await deleteDoc(spaceRef);
+                return;
+            }
+            
+            const speakerToRemove = currentSpaceData.speakers.find(s => s.uid === currentUser.uid);
+            const listenerToRemove = currentSpaceData.listeners.find(l => l.uid === currentUser.uid);
+            
+            if (speakerToRemove || listenerToRemove) {
                  await updateDoc(spaceRef, {
                     ...(listenerToRemove && { listeners: arrayRemove(listenerToRemove) }),
                     ...(speakerToRemove && { speakers: arrayRemove(speakerToRemove) }),
@@ -85,7 +90,6 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
             }
         });
 
-        // Use beforeunload to handle tab closing
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             leaveSpace();
         };
@@ -181,7 +185,7 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
                                     {speaker.uid === liveSpace.host.uid && <ShieldCheck className="absolute top-0 right-0 h-5 w-5 text-primary fill-background" />}
                                     <p className="text-xs truncate w-full">{speaker.name}</p>
                                     {isHost && speaker.uid !== currentUser.uid && (
-                                        <Button size="xs" variant="destructive" onClick={() => handleHostAction(speaker.uid, 'demote')}>Demote</Button>
+                                        <Button size="sm" variant="destructive" className="h-auto px-2 py-1 mt-1 text-xs" onClick={() => handleHostAction(speaker.uid, 'demote')}>Demote</Button>
                                     )}
                                 </div>
                             ))}
