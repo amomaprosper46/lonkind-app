@@ -8,7 +8,7 @@ import { Mic, MicOff, Phone, Hand, UserPlus, Loader2, Check, X, ShieldCheck } fr
 import { type Space, type SpaceParticipant } from './spaces-view';
 import { type CurrentUser } from './social-dashboard';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDoc, increment } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDoc, increment, runTransaction } from 'firebase/firestore';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { toast } from '@/hooks/use-toast';
 import { ScrollArea } from '../ui/scroll-area';
@@ -30,59 +30,72 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
     useEffect(() => {
         const spaceRef = doc(db, 'spaces', space.id);
 
-        const joinSpace = async () => {
-            const participant: SpaceParticipant = {
-                uid: currentUser.uid,
-                name: currentUser.name,
-                avatarUrl: currentUser.avatarUrl,
-                isMuted: true,
-            };
-            
-            const spaceSnap = await getDoc(spaceRef);
-            if (!spaceSnap.exists()) return;
-            const spaceData = spaceSnap.data() as Space;
-            const alreadyExists = spaceData.listeners.some(l => l.uid === currentUser.uid) || spaceData.speakers.some(s => s.uid === currentUser.uid);
-
-            if (!alreadyExists) {
-                await updateDoc(spaceRef, {
-                    listeners: arrayUnion(participant),
-                    listenerCount: increment(1)
-                });
-            }
-        };
-
         const leaveSpace = async () => {
-            const spaceSnap = await getDoc(spaceRef);
-            if (!spaceSnap.exists()) return;
-            const currentSpaceData = spaceSnap.data() as Space;
+            // This function runs on unmount or before unload.
+            const spaceRef = doc(db, 'spaces', space.id);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const spaceDoc = await transaction.get(spaceRef);
+                    if (!spaceDoc.exists()) return;
 
-            const isCurrentUserHost = currentSpaceData.host.uid === currentUser.uid;
+                    const spaceData = spaceDoc.data() as Space;
+                    const isHost = spaceData.host.uid === currentUser.uid;
 
-            if (isCurrentUserHost && currentSpaceData.speakers.length <= 1 && currentSpaceData.listeners.length === 0) {
-                await deleteDoc(spaceRef);
-                return;
-            }
-            
-            const speakerToRemove = currentSpaceData.speakers.find(s => s.uid === currentUser.uid);
-            const listenerToRemove = currentSpaceData.listeners.find(l => l.uid === currentUser.uid);
-            
-            if (speakerToRemove || listenerToRemove) {
-                 await updateDoc(spaceRef, {
-                    ...(listenerToRemove && { listeners: arrayRemove(listenerToRemove) }),
-                    ...(speakerToRemove && { speakers: arrayRemove(speakerToRemove) }),
-                    pendingSpeakers: arrayRemove(currentUser.uid),
-                    listenerCount: increment(-1),
+                    // If host is the last one out, delete the whole space.
+                    if (isHost && spaceData.speakers.length === 1 && spaceData.listeners.length === 0) {
+                        transaction.delete(spaceRef);
+                        return;
+                    }
+
+                    const updates: any = {
+                        pendingSpeakers: arrayRemove(currentUser.uid)
+                    };
+
+                    const speakerToRemove = spaceData.speakers.find(s => s.uid === currentUser.uid);
+                    if (speakerToRemove) {
+                        updates.speakers = arrayRemove(speakerToRemove);
+                    }
+
+                    const listenerToRemove = spaceData.listeners.find(l => l.uid === currentUser.uid);
+                    if (listenerToRemove) {
+                        updates.listeners = arrayRemove(listenerToRemove);
+                        updates.listenerCount = increment(-1);
+                    }
+                    
+                    if(speakerToRemove || listenerToRemove) {
+                        transaction.update(spaceRef, updates);
+                    }
                 });
+            } catch (error) {
+                console.error("Failed to leave space cleanly:", error);
             }
         };
-        
-        joinSpace();
+
         const unsubscribe = onSnapshot(spaceRef, (docSnap) => {
             if (docSnap.exists()) {
                 const spaceData = { id: docSnap.id, ...docSnap.data() } as Space;
+                
+                // Join space if not already in it
+                const isSpeaker = spaceData.speakers.some(p => p.uid === currentUser.uid);
+                const isListener = spaceData.listeners.some(p => p.uid === currentUser.uid);
+
+                if (!isSpeaker && !isListener) {
+                    const participant: SpaceParticipant = {
+                        uid: currentUser.uid,
+                        name: currentUser.name,
+                        avatarUrl: currentUser.avatarUrl,
+                        isMuted: true,
+                    };
+                    updateDoc(spaceRef, {
+                        listeners: arrayUnion(participant),
+                        listenerCount: increment(1)
+                    });
+                    // The snapshot will fire again with the updated data.
+                }
+
                 setLiveSpace(spaceData);
                 setIsHost(spaceData.host.uid === currentUser.uid);
-                setIsSpeaker(spaceData.speakers.some(p => p.uid === currentUser.uid));
+                setIsSpeaker(isSpeaker);
                 setHasRequested(spaceData.pendingSpeakers.includes(currentUser.uid));
             } else {
                 toast({ title: "Space Ended", description: "The host has ended this space." });
@@ -90,6 +103,7 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
             }
         });
 
+        // Use beforeunload to handle tab closing
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             leaveSpace();
         };
@@ -97,7 +111,7 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
 
         return () => {
             unsubscribe();
-            leaveSpace();
+            leaveSpace(); // This runs on component unmount
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
     }, [space.id, currentUser.uid, currentUser.name, currentUser.avatarUrl, onLeave]);
@@ -259,5 +273,6 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+    );
     );
 }
