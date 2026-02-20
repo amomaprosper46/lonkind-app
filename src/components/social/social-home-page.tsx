@@ -56,9 +56,9 @@ const FirebaseConfigError = () => (
       <div className="mt-6 text-left bg-muted p-4 rounded-md text-sm">
         <h3 className="font-semibold">Action Required:</h3>
         <ol className="list-decimal list-inside mt-2 space-y-1">
-          <li>Go to your Firebase Console > Project Settings > General tab.</li>
+          <li>Go to your Firebase Console &gt; Project Settings &gt; General tab.</li>
           <li>Find your Web App and copy the `firebaseConfig` values.</li>
-          <li>Go to your Vercel Project > Settings > Environment Variables.</li>
+          <li>Go to your Vercel Project &gt; Settings &gt; Environment Variables.</li>
           <li>Add each key from `firebaseConfig`, prefixed with `NEXT_PUBLIC_`. For example, `apiKey` becomes `NEXT_PUBLIC_FIREBASE_API_KEY`.</li>
           <li>Redeploy your application for the changes to take effect.</li>
         </ol>
@@ -129,6 +129,8 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
             if (isProfessionalAccount) {
               await addDummyFollowers({ userId: user.uid, count: 500000 });
               await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
+               // Add user to the admins collection
+              await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
             }
 
             toast({ title: 'Welcome to Lonkind!', description: `Your profile has been created with handle @${finalHandle}` });
@@ -225,13 +227,22 @@ export default function SocialHomePage() {
                     coins: 1000000,
                     diamonds: 1000000,
                 });
+                // Add user to the admins collection
+                await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
+
                 await addDummyFollowers({ userId: user.uid, count: 500000 });
                 console.log("Admin account for Alex Taylor created successfully.");
 
                 if (currentAuthUser) {
-                    // If a user was logged in, we need to sign them back in. This is a tricky flow.
-                    // For now, we will just log out completely. The user can sign back in.
                     await signOut(auth);
+                }
+            } else {
+                 // Ensure admin doc exists if user doc exists
+                const adminDoc = snapshot.docs[0];
+                const adminRef = doc(db, 'admins', adminDoc.id);
+                const adminSnap = await getDoc(adminRef);
+                if (!adminSnap.exists()) {
+                    await setDoc(adminRef, { addedAt: new Date() });
                 }
             }
         } catch (error: any) {

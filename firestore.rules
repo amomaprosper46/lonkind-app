@@ -3,6 +3,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Function to check if a user is an administrator
+    function isAdmin() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).exists;
+    }
+
     match /users/{userId} {
       allow get, list: if request.auth != null;
       allow create, update, delete: if request.auth != null && request.auth.uid == userId;
@@ -25,7 +30,8 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null;
       allow update: if request.auth != null && request.auth.uid == resource.data.author.uid;
-      allow delete: if request.auth != null && request.auth.uid == resource.data.author.uid;
+      // Allow deletion if the user is the author OR if they are an admin
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.author.uid || isAdmin());
 
       match /reactions/{reactionId} {
         allow read, write: if request.auth != null;
@@ -74,6 +80,13 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read, write: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
       }
+    }
+    
+    // New collection for administrators
+    match /admins/{userId} {
+      // Only other admins can read or write to this collection.
+      // In a real app, you might make this even more restrictive.
+      allow read, write: if isAdmin();
     }
   }
 }
