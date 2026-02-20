@@ -1,0 +1,10 @@
+ {
+    "landing": {
+        "url": "https://picsum.photos/seed/social/600/400",
+        "hint": "social connections"
+    },
+    "avatar": {
+        "url": "https://placehold.co/100x100.png?text=<seed>",
+        "hint": ""
+    }
+}
