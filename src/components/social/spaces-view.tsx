@@ -12,7 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import type { CurrentUser } from './social-dashboard';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import LiveSpaceDialog from './live-space-dialog';
+import LiveSpaceDialog from './live-space-dialog.tsx';
 
 export interface SpaceParticipant {
     uid: string;
@@ -220,3 +220,5 @@ export default function SpacesView({ currentUser }: { currentUser: CurrentUser }
         </main>
     );
 }
+
+    
