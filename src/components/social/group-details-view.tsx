@@ -1,11 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Loader2, Users, UserPlus, Mail, Settings } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
@@ -233,7 +233,7 @@ export default function GroupDetailsView({
                                 <PostCard 
                                     key={post.id} 
                                     post={post}
-                                    currentUserUid={currentUser.uid}
+                                    currentUser={currentUser}
                                     onReact={onReact} 
                                     onCommentClick={onComment} 
                                     onSavePost={onSavePost} 

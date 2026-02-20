@@ -1,4 +1,4 @@
-'use client';
+
 
 import SocialHomePage from '@/components/social/social-home-page';
 

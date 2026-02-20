@@ -8,16 +8,19 @@ import { db } from '@/lib/firebase';
 import type { Post, ReactionType } from './post-card';
 import PostCard from './post-card';
 import { Card, CardContent } from '@/components/ui/card';
+import type { CurrentUser } from './social-dashboard';
 
 interface ExploreViewProps {
+    currentUser: CurrentUser;
     onReact: (postId: string, reaction: ReactionType, authorUid: string) => void;
     onComment: (post: Post) => void;
     onSavePost: (postId: string) => void;
+    onDeletePost: (postId: string) => void;
     userReactions: Map<string, ReactionType>;
     savedPostIds: Set<string>;
 }
 
-export default function ExploreView({ onReact, onComment, onSavePost, userReactions, savedPostIds }: ExploreViewProps) {
+export default function ExploreView({ currentUser, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: ExploreViewProps) {
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -59,10 +62,12 @@ export default function ExploreView({ onReact, onComment, onSavePost, userReacti
                     posts.map(post => (
                         <PostCard 
                             key={post.id} 
-                            post={post} 
+                            post={post}
+                            currentUser={currentUser}
                             onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
                             onCommentClick={onComment} 
-                            onSavePost={onSavePost} 
+                            onSavePost={onSavePost}
+                            onDeletePost={onDeletePost}
                             userReaction={userReactions.get(post.id)} 
                             isSaved={savedPostIds.has(post.id)} 
                         />

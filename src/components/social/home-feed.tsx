@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -216,7 +217,7 @@ export default function HomeFeed({
                 isCreatingPost={isCreatingPost}
             />
             
-            <div className="space-y-6">
+            <div className="space-y-6 mt-8">
                 {isLoadingPosts ? (
                     <div className="flex justify-center items-center p-8">
                         <Loader2 className="h-8 w-8 animate-spin text-primary"/>
@@ -226,7 +227,7 @@ export default function HomeFeed({
                         <PostCard 
                             key={post.id} 
                             post={post}
-                            currentUserUid={currentUser.uid}
+                            currentUser={currentUser}
                             onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
                             onCommentClick={onComment} 
                             onSavePost={onSavePost} 

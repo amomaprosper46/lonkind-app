@@ -18,15 +18,6 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-export const isFirebaseConfigValid = 
-    !!firebaseConfig.apiKey &&
-    !!firebaseConfig.authDomain &&
-    !!firebaseConfig.projectId &&
-    !!firebaseConfig.storageBucket &&
-    !!firebaseConfig.messagingSenderId &&
-    !!firebaseConfig.appId;
-
-
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);

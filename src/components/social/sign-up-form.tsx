@@ -40,7 +40,8 @@ const emailFormSchema = z.object({
 
 const phoneFormSchema = z.object({
     name: z.string().min(2, { message: 'Name must be at least 2 characters.'}),
-    phone: z.string().regex(/^\+\d{10,}$/, { message: 'Please enter a valid phone number with country code (e.g., +11234567890).'}),
+    countryCode: z.string().min(1, "Please select a country."),
+    phone: z.string().min(5, { message: 'Please enter a valid phone number.'}),
     deliveryMethod: z.enum(['sms', 'notification', 'whatsapp'], { required_error: 'You need to select a delivery method.' }),
 });
 
@@ -65,7 +66,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   const phoneForm = useForm<z.infer<typeof phoneFormSchema>>({
       resolver: zodResolver(phoneFormSchema),
-      defaultValues: { name: '', phone: '', deliveryMethod: 'sms' },
+      defaultValues: { name: '', countryCode: '+234', phone: '', deliveryMethod: 'sms' },
   });
 
   const codeForm = useForm<z.infer<typeof codeFormSchema>>({
@@ -132,7 +133,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       const verifier = window.recaptchaVerifier;
       if (!verifier) throw new Error('Recaptcha verifier not initialized');
       
-      const fullPhoneNumber = data.phone;
+      const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
       const confirmationResult = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
       window.confirmationResult = confirmationResult;
 
@@ -268,19 +269,41 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                                 </FormItem>
                                 )}
                             />
-                            <FormField
-                                control={phoneForm.control}
-                                name="phone"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Phone Number</FormLabel>
-                                    <FormControl>
-                                        <Input type="tel" placeholder="+11234567890" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
+                            <FormItem>
+                                <FormLabel>Phone Number</FormLabel>
+                                <div className="flex gap-2">
+                                    <FormField
+                                        control={phoneForm.control}
+                                        name="countryCode"
+                                        render={({ field }) => (
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger className="w-28">
+                                                        <SelectValue placeholder="Code" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {countries.map(country => (
+                                                        <SelectItem key={country.code} value={country.dial_code}>
+                                                            {country.code} ({country.dial_code})
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={phoneForm.control}
+                                        name="phone"
+                                        render={({ field }) => (
+                                            <FormControl>
+                                                <Input type="tel" placeholder="123 456 7890" {...field} />
+                                            </FormControl>
+                                        )}
+                                    />
+                                </div>
+                                <FormMessage>{phoneForm.formState.errors.phone?.message || phoneForm.formState.errors.countryCode?.message}</FormMessage>
+                            </FormItem>
                             
                             <FormField
                                 control={phoneForm.control}
@@ -343,7 +366,3 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
     </>
   );
 }
-
-  
-
-    

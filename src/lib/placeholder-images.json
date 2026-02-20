@@ -1,9 +1,0 @@
-{
-  "avatar": {
-    "url": "https://api.dicebear.com/9.x/initials/svg?seed=<seed>&backgroundColor=c0aede,d1d4f9,b6e3f4,ffd5dc,ffdfbf"
-  },
-  "landing": {
-    "url": "https://placehold.co/600x400/e2e8f0/475569?text=Connect+With+Friends",
-    "hint": "social media connections illustration"
-  }
-}

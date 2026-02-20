@@ -19,16 +19,19 @@ import {
   CarouselPrevious,
   type CarouselApi
 } from "@/components/ui/carousel"
+import type { CurrentUser } from './social-dashboard';
 
 interface VideosViewProps {
+    currentUser: CurrentUser;
     onReact: (postId: string, reaction: ReactionType, authorUid: string) => void;
     onComment: (post: Post) => void;
     onSavePost: (postId: string) => void;
+    onDeletePost: (postId: string) => void;
     userReactions: Map<string, ReactionType>;
     savedPostIds: Set<string>;
 }
 
-const VideoPost = ({ videoPost, onReact, onComment, onSavePost, userReactions, savedPostIds, isVisible }: { videoPost: Post, isVisible: boolean } & Omit<VideosViewProps, 'videos'>) => {
+const VideoPost = ({ videoPost, currentUser, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds, isVisible }: { videoPost: Post } & VideosViewProps & { isVisible: boolean }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isPaused, setIsPaused] = useState(true);
 
@@ -125,7 +128,7 @@ const VideoPost = ({ videoPost, onReact, onComment, onSavePost, userReactions, s
 };
 
 
-export default function VideosView({ onReact, onComment, onSavePost, userReactions, savedPostIds }: VideosViewProps) {
+export default function VideosView({ currentUser, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: VideosViewProps) {
   const [videos, setVideos] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [api, setApi] = React.useState<CarouselApi>()
@@ -184,9 +187,11 @@ export default function VideosView({ onReact, onComment, onSavePost, userReactio
                         <VideoPost 
                             key={videoPost.id}
                             videoPost={videoPost}
+                            currentUser={currentUser}
                             onReact={onReact}
                             onComment={onComment}
                             onSavePost={onSavePost}
+                            onDeletePost={onDeletePost}
                             userReactions={userReactions}
                             savedPostIds={savedPostIds}
                             isVisible={current === index}

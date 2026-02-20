@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -12,7 +11,7 @@ import { toast } from '@/hooks/use-toast';
 import type { CurrentUser } from './social-dashboard';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import LiveSpaceDialog from './live-space-dialog.tsx';
+import LiveSpaceDialog from './live-space-dialog';
 
 export interface SpaceParticipant {
     uid: string;
@@ -220,5 +219,3 @@ export default function SpacesView({ currentUser }: { currentUser: CurrentUser }
         </main>
     );
 }
-
-    

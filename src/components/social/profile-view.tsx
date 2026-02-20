@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import EditProfileDialog, { type ProfileData } from './edit-profile-dialog';
 import Link from 'next/link';
 import LikesView from './likes-view';
+import type { CurrentUser } from './social-dashboard';
 
 
 interface UserProfile {
@@ -31,7 +32,7 @@ interface UserProfile {
 interface ProfileViewProps {
     user: UserProfile;
     posts: Post[];
-    currentUserUid: string;
+    currentUser: CurrentUser;
     isCurrentUser: boolean;
     followStatus: FollowStatus;
     onFollowAction: (action: 'follow' | 'unfollow', targetUser: UserProfile) => void;
@@ -53,7 +54,7 @@ const formatCount = (num: number = 0) => {
 };
 
 
-const ProfileView = ({ user, posts, currentUserUid, isCurrentUser, followStatus, onFollowAction, onMessage, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds, onStartCall, onUpdateProfile }: ProfileViewProps) => {
+const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, onFollowAction, onMessage, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds, onStartCall, onUpdateProfile }: ProfileViewProps) => {
     const [isEditOpen, setIsEditOpen] = useState(false);
     
     const handleProfileUpdate = async (data: ProfileData) => {
@@ -171,7 +172,7 @@ const ProfileView = ({ user, posts, currentUserUid, isCurrentUser, followStatus,
                 </TabsList>
                 <TabsContent value="posts" className="space-y-4 mt-4">
                     {posts.length > 0 ? (
-                         posts.map(post => <PostCard key={post.id} post={post} currentUserUid={currentUserUid} onReact={onReact} onCommentClick={onComment} onSavePost={onSavePost} onDeletePost={onDeletePost} userReaction={userReactions.get(post.id)} isSaved={savedPostIds.has(post.id)}/>)
+                         posts.map(post => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={onReact} onCommentClick={onComment} onSavePost={onSavePost} onDeletePost={onDeletePost} userReaction={userReactions.get(post.id)} isSaved={savedPostIds.has(post.id)}/>)
                     ) : (
                         <Card>
                             <CardContent className="p-8 text-center text-muted-foreground">
@@ -193,7 +194,7 @@ const ProfileView = ({ user, posts, currentUserUid, isCurrentUser, followStatus,
                 <TabsContent value="media" className="space-y-4 mt-4">
                      {mediaPosts.length > 0 ? (
                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                             {mediaPosts.map(post => <PostCard key={post.id} post={post} currentUserUid={currentUserUid} onReact={onReact} onCommentClick={onComment} onSavePost={onSavePost} onDeletePost={onDeletePost} userReaction={userReactions.get(post.id)} isSaved={savedPostIds.has(post.id)}/>)}
+                             {mediaPosts.map(post => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={onReact} onCommentClick={onComment} onSavePost={onSavePost} onDeletePost={onDeletePost} userReaction={userReactions.get(post.id)} isSaved={savedPostIds.has(post.id)}/>)}
                          </div>
                     ) : (
                         <Card>
@@ -207,7 +208,7 @@ const ProfileView = ({ user, posts, currentUserUid, isCurrentUser, followStatus,
                  <TabsContent value="likes" className="space-y-4 mt-4">
                     <LikesView 
                         userId={user.uid}
-                        currentUserUid={currentUserUid}
+                        currentUser={currentUser}
                         onReact={onReact}
                         onComment={onComment}
                         onSavePost={onSavePost}
@@ -222,5 +223,3 @@ const ProfileView = ({ user, posts, currentUserUid, isCurrentUser, followStatus,
 };
 
 export default ProfileView;
-
-    

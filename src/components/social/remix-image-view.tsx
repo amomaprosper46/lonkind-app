@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -81,10 +82,10 @@ export default function RemixImageView() {
                 <CardTitle>AI Image Remixer</CardTitle>
                 <CardDescription>Upload an image and use a text prompt to transform it into something new.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                        <Label>1. Original Image</Label>
+                        <Label>Original Image</Label>
                         <div 
                             className="aspect-square w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-center text-muted-foreground p-4 cursor-pointer hover:bg-accent/50"
                             onClick={() => fileInputRef.current?.click()}
@@ -108,7 +109,7 @@ export default function RemixImageView() {
                         />
                     </div>
                      <div className="space-y-2">
-                        <Label>2. Remix Result</Label>
+                        <Label>Remix Result</Label>
                         <div className="aspect-square w-full border rounded-lg bg-muted flex items-center justify-center">
                              {isLoading ? (
                                 <div className="text-center p-4">
@@ -128,7 +129,7 @@ export default function RemixImageView() {
                     </div>
                 </div>
                  <div className="space-y-2">
-                     <Label htmlFor="remix-prompt">3. Remix Prompt</Label>
+                     <Label htmlFor="remix-prompt">Remix Prompt</Label>
                      <Textarea 
                         id="remix-prompt"
                         placeholder="e.g., Change the style to a watercolor painting"

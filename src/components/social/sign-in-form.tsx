@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,6 +24,8 @@ import { countries } from '@/lib/countries';
 import { Separator } from '../ui/separator';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { resetAdminPassword } from '@/ai/flows/reset-admin-password';
+
 
 declare global {
   interface Window {
@@ -36,7 +39,8 @@ const formSchema = z.object({
 });
 
 const phoneFormSchema = z.object({
-    phone: z.string().regex(/^\+\d{10,}$/, { message: 'Please enter a valid phone number with country code (e.g., +11234567890).'}),
+    countryCode: z.string().min(1, "Please select a country."),
+    phone: z.string().min(5, { message: 'Please enter a valid phone number.'}),
     deliveryMethod: z.enum(['sms', 'notification', 'whatsapp'], { required_error: 'You need to select a delivery method.' }),
 });
 
@@ -55,6 +59,8 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
   const [isLoading, setIsLoading] = React.useState(false);
   const [authMode, setAuthMode] = useState<'email-password' | 'phone-code'>('email-password');
   const [showCodeForm, setShowCodeForm] = useState(false);
+  const [showAdminReset, setShowAdminReset] = useState(false);
+  const [isResettingAdmin, setIsResettingAdmin] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -63,7 +69,7 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
 
   const phoneForm = useForm<z.infer<typeof phoneFormSchema>>({
       resolver: zodResolver(phoneFormSchema),
-      defaultValues: { phone: '', deliveryMethod: 'sms' },
+      defaultValues: { countryCode: '+234', phone: '', deliveryMethod: 'sms' },
   });
 
   const codeForm = useForm<z.infer<typeof codeFormSchema>>({
@@ -73,8 +79,29 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
   
   const isEmail = (identifier: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
 
+  const handleAdminReset = async () => {
+    setIsResettingAdmin(true);
+    try {
+        const result = await resetAdminPassword();
+        toast({
+            title: 'Admin Reset Successful',
+            description: result.message,
+        });
+        setShowAdminReset(false);
+    } catch (error) {
+        toast({
+            variant: 'destructive',
+            title: 'Reset Failed',
+            description: 'Could not reset the admin password. Please check the logs.',
+        });
+    } finally {
+        setIsResettingAdmin(false);
+    }
+  };
+
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true);
+    setShowAdminReset(false);
     if (isEmail(data.identifier)) {
         // Email sign in
         if (!data.password) {
@@ -90,6 +117,9 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
             });
             onSignIn();
         } catch(error: any) {
+            if (data.identifier.toLowerCase() === 'admin@lonkind.com') {
+                setShowAdminReset(true);
+            }
             toast({
                 variant: "destructive",
                 title: 'Sign In Failed',
@@ -135,7 +165,7 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
       if (!verifier) {
           throw new Error('Recaptcha verifier not initialized');
       }
-      const fullPhoneNumber = data.phone;
+      const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
       const confirmationResult = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
       window.confirmationResult = confirmationResult;
       setShowCodeForm(true);
@@ -195,19 +225,41 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
              ) : (
                 <Form {...phoneForm}>
                     <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-4 pt-4">
-                        <FormField
-                            control={phoneForm.control}
-                            name="phone"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Phone Number</FormLabel>
-                                <FormControl>
-                                    <Input type="tel" placeholder="+11234567890" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
+                        <FormItem>
+                            <FormLabel>Phone Number</FormLabel>
+                            <div className="flex gap-2">
+                                <FormField
+                                    control={phoneForm.control}
+                                    name="countryCode"
+                                    render={({ field }) => (
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger className="w-28">
+                                                    <SelectValue placeholder="Code" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {countries.map(country => (
+                                                    <SelectItem key={country.code} value={country.dial_code}>
+                                                        {country.code} ({country.dial_code})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                />
+                                 <FormField
+                                    control={phoneForm.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                        <FormControl>
+                                            <Input type="tel" placeholder="123 456 7890" {...field} />
+                                        </FormControl>
+                                    )}
+                                />
+                            </div>
+                            <FormMessage>{phoneForm.formState.errors.phone?.message || phoneForm.formState.errors.countryCode?.message}</FormMessage>
+                        </FormItem>
                         <FormField
                             control={phoneForm.control}
                             name="deliveryMethod"
@@ -311,6 +363,23 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
                 </Button>
             </form>
         </Form>
+         {showAdminReset && (
+            <Alert variant="destructive" className="mt-4">
+                <AlertTitle>Admin Login Failed</AlertTitle>
+                <AlertDescription className="space-y-2">
+                    <p>You can reset the admin password to the default ('password123').</p>
+                    <Button
+                        variant="link"
+                        className="p-0 h-auto font-bold text-destructive-foreground"
+                        onClick={handleAdminReset}
+                        disabled={isResettingAdmin}
+                    >
+                        {isResettingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Click here to reset admin password
+                    </Button>
+                </AlertDescription>
+            </Alert>
+        )}
         <div className="relative my-4">
             <Separator />
             <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-card px-2 text-xs text-muted-foreground">OR</span>
@@ -327,7 +396,3 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
     </>
   );
 }
-
-  
-
-    

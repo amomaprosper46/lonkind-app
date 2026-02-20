@@ -18,7 +18,7 @@ import CallView from '@/components/social/call-view';
 import type { ProfileData } from '@/components/social/edit-profile-dialog';
 import { createOrGetConversation } from '@/ai/flows/create-or-get-conversation';
 import type { CurrentUser } from '@/components/social/social-dashboard';
-import placeholderImages from '@/app/lib/placeholder-images.json';
+import placeholderImages from '@/lib/placeholder-images.json';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 
@@ -352,37 +352,30 @@ export default function UserProfilePage() {
     };
     
     const handleUpdateProfile = async (data: ProfileData): Promise<boolean> => {
-    if (!currentUser) return false;
+        if (!currentUser) return false;
+        
+        try {
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            await updateDoc(userDocRef, {
+                name: data.name,
+                handle: data.handle,
+                bio: data.bio,
+                businessUrl: data.businessUrl,
+            });
 
-    try {
-        const userDocRef = doc(db, 'users', currentUser.uid);
+            toast({ title: "Success", description: "Profile updated!" });
 
-        await updateDoc(userDocRef, {
-            name: data.name,
-            handle: data.handle,
-            bio: data.bio,
-            businessUrl: data.businessUrl,
-        });
+            if (data.handle && data.handle.toLowerCase() !== handle.toLowerCase()) {
+                router.push(`/profile/${data.handle.toLowerCase()}`);
+            }
+            return true;
 
-        toast({ 
-            title: "Success", 
-            description: "Profile updated!" 
-        });
-
-        return true;
-
-    } catch (error) {
-        console.error("Error updating profile:", error);
-
-        toast({ 
-            variant: 'destructive', 
-            title: 'Update Failed', 
-            description: 'Could not update your profile.' 
-        });
-
-        return false;
-    }
-};
+        } catch (error) {
+            console.error("Error updating profile:", error);
+            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update your profile.' });
+            return false;
+        }
+    };
     
     const handleStartCall = (type: 'audio' | 'video') => {
         setCallState({ active: true, type });
@@ -415,7 +408,7 @@ export default function UserProfilePage() {
         }
     }
 
-    if (loadingAuth || isLoading ) {
+    if (loadingAuth || isLoading || !currentUser) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />

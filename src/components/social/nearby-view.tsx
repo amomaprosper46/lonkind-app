@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -47,6 +48,8 @@ export default function NearbyView({ currentUser, onReact, onComment, onSavePost
                     
                     const result = await searchNearbyPosts({ geohash: hash });
                     
+                    // The AI flow returns a slightly different Post type, we need to cast it
+                    // In a real app, we'd have shared types.
                     const fetchedPosts = result.posts as unknown as Post[];
 
                     setPosts(fetchedPosts);
@@ -102,7 +105,7 @@ export default function NearbyView({ currentUser, onReact, onComment, onSavePost
                         <PostCard 
                             key={post.id} 
                             post={post}
-                            currentUserUid={currentUser.uid}
+                            currentUser={currentUser}
                             onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
                             onCommentClick={onComment} 
                             onSavePost={onSavePost}

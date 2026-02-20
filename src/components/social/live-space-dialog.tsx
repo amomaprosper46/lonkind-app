@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -200,7 +199,7 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
                                     {speaker.uid === liveSpace.host.uid && <ShieldCheck className="absolute top-0 right-0 h-5 w-5 text-primary fill-background" />}
                                     <p className="text-xs truncate w-full">{speaker.name}</p>
                                     {isHost && speaker.uid !== currentUser.uid && (
-                                        <Button size="sm" variant="destructive" onClick={() => handleHostAction(speaker.uid, 'demote')}>Demote</Button>
+                                        <Button size="sm" variant="destructive" className="h-auto px-2 py-1 mt-1 text-xs" onClick={() => handleHostAction(speaker.uid, 'demote')}>Demote</Button>
                                     )}
                                 </div>
                             ))}

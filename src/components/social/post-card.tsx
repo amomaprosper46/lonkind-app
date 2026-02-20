@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2 } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Timestamp } from 'firebase/firestore';
@@ -20,6 +21,8 @@ import { remixImage } from '@/ai/flows/remix-image';
 import { PulseLoader } from 'react-spinners';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog';
+import GiftDialog from './gift-dialog';
+import type { CurrentUser } from './social-dashboard';
 
 
 interface PostAuthor {
@@ -47,7 +50,7 @@ export interface Post {
 
 interface PostCardProps {
     post: Post;
-    currentUserUid: string;
+    currentUser: CurrentUser;
     onReact: (postId: string, reaction: ReactionType, authorUid: string) => void;
     onCommentClick: (post: Post) => void;
     onSavePost: (postId: string) => void;
@@ -78,7 +81,7 @@ const ReactionButton = ({ reaction, onReact, isActive }: { reaction: ReactionTyp
     )
 };
 
-export default function PostCard({ post, currentUserUid, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved }: PostCardProps) {
+export default function PostCard({ post, currentUser, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved }: PostCardProps) {
     const { author, content, imageUrl, videoUrl, reactions, comments, timestamp } = post;
     const totalReactions = Object.values(reactions || {}).reduce((a, b) => a + (b || 0), 0);
     const CurrentReactionIcon = userReaction ? reactionIcons[userReaction] : ThumbsUp;
@@ -99,8 +102,9 @@ export default function PostCard({ post, currentUserUid, onReact, onCommentClick
     const [isRemixing, setIsRemixing] = useState(false);
 
     const [activeAiTask, setActiveAiTask] = useState<string | null>(null);
+    const [isGiftOpen, setIsGiftOpen] = useState(false);
 
-    const isAuthor = author.uid === currentUserUid;
+    const isAuthor = author.uid === currentUser.uid;
 
 
     const formattedTimestamp = timestamp ? formatDistanceToNow(timestamp.toDate(), { addSuffix: true }) : 'Just now';
@@ -212,6 +216,7 @@ export default function PostCard({ post, currentUserUid, onReact, onCommentClick
 
     return (
         <Card className={cn("overflow-hidden")}>
+            {currentUser && <GiftDialog isOpen={isGiftOpen} onOpenChange={setIsGiftOpen} currentUser={currentUser} recipient={post.author} />}
             <CardHeader className="p-4 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-3">
                     <Link href={`/profile/${author.handle}`}>
@@ -369,6 +374,12 @@ export default function PostCard({ post, currentUserUid, onReact, onCommentClick
                     </Button>
                 </div>
                  <div className="flex items-center gap-1">
+                    {!isAuthor && (
+                         <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary" onClick={() => setIsGiftOpen(true)}>
+                            <Gift className="h-5 w-5" />
+                            <span>Gift</span>
+                        </Button>
+                    )}
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                              <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary" disabled={isAiBusy}>
