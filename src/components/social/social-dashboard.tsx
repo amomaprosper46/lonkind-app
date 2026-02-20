@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin } from 'lucide-react';
+import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import { Input } from '@/components/ui/input';
 import { db, storage, auth } from '@/lib/firebase';
@@ -35,9 +36,11 @@ const VideosView = dynamic(() => import('./videos-view'), { loading: () => <Load
 const SavedView = dynamic(() => import('./saved-view'), { loading: () => <LoadingComponent />, ssr: false });
 const ExploreView = dynamic(() => import('./explore-view'), { loading: () => <LoadingComponent />, ssr: false });
 const GroupsView = dynamic(() => import('./groups-view'), { loading: () => <LoadingComponent />, ssr: false });
+const SpacesView = dynamic(() => import('./spaces-view'), { loading: () => <LoadingComponent />, ssr: false });
 const NearbyView = dynamic(() => import('./nearby-view'), { loading: () => <LoadingComponent />, ssr: false });
 const CommentSheet = dynamic(() => import('./comment-sheet'), { ssr: false });
 const GroupDetailsView = dynamic(() => import('./group-details-view'), { loading: () => <LoadingComponent />, ssr: false });
+const WalletView = dynamic(() => import('./wallet-view'), { loading: () => <LoadingComponent />, ssr: false });
 
 
 type SocialDashboardProps = {
@@ -45,7 +48,7 @@ type SocialDashboardProps = {
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'monetization' | 'spaces' | 'nearby' | 'group-details';
+type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'monetization' | 'spaces' | 'nearby' | 'group-details' | 'wallet';
 
 export interface SuggestedUser {
     id: string;
@@ -92,6 +95,8 @@ export interface CurrentUser {
     bio?: string;
     businessUrl?: string;
     balance?: number;
+    coins?: number;
+    diamonds?: number;
 }
 
 function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
@@ -159,6 +164,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     bio: '',
                     businessUrl: '',
                     balance: 0,
+                    coins: 100,
+                    diamonds: 0,
                 });
             }
         });
@@ -659,41 +666,6 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         }
         window.history.pushState({}, '', url);
     }
-
-    const NavButton = ({ view, icon, tooltip, proFeature = false }: { view: View, icon: React.ElementType, tooltip: string, proFeature?: boolean }) => {
-        const Icon = icon;
-        const isLocked = proFeature && !currentUser?.isProfessional;
-        
-        const button = (
-            <Button 
-                variant={currentView === view ? 'secondary' : 'ghost'} 
-                size="icon" 
-                onClick={() => !isLocked && changeView(view)}
-                disabled={isLocked}
-                className="relative"
-            >
-                <Icon className="h-6 w-6" />
-            </Button>
-        );
-
-        if (isLocked) {
-            return (
-                 <Tooltip>
-                    <TooltipTrigger asChild>{button}</TooltipTrigger>
-                    <TooltipContent><p>{tooltip} (Professional Feature)</p></TooltipContent>
-                </Tooltip>
-            )
-        }
-
-        return (
-             <Tooltip>
-                <TooltipTrigger asChild>{button}</TooltipTrigger>
-                <TooltipContent>
-                    <p>{tooltip}</p>
-                </TooltipContent>
-            </Tooltip>
-        )
-    };
     
     const renderMainContent = () => {
         if (!currentUser) return <main className="col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></main>;
@@ -754,7 +726,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 );
             case 'saved':
                 return <SavedView 
-                            userId={currentUser.uid}
+                            currentUser={currentUser}
                             onReact={handleReact}
                             onComment={handleOpenComments}
                             onSavePost={handleSavePost}
@@ -773,7 +745,6 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                             savedPostIds={savedPostIds}
                         />;
             case 'settings':
-            case 'monetization':
                 return (
                     <SettingsView 
                         user={currentUser}
@@ -783,6 +754,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         onDeleteAccount={handleDeleteAccount}
                     />
                 );
+            case 'wallet':
+            case 'monetization':
+                 return <WalletView currentUser={currentUser} />;
             case 'ai-command-center':
                  return <AICommandCenterView isProfessional={currentUser.isProfessional} />;
             case 'story-writer':
@@ -880,8 +854,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
     return (
         <TooltipProvider>
-            <div className="min-h-screen bg-secondary">
-                <header className="sticky top-0 z-40 w-full border-b bg-background">
+            <div className="min-h-screen bg-secondary/40">
+                <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
                     <div className="container flex items-center justify-between h-16">
                     <Link href="/" className="flex items-center gap-2" onClick={() => changeView('home')}>
                         <Image src="/logo.png" alt="Lonkind Logo" width={32} height={32} />
@@ -953,12 +927,43 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         </div>
                     </div>
                     <div className="flex items-center gap-1 sm:gap-2">
-                        <NavButton view="home" icon={Home} tooltip="Home" />
-                        <NavButton view="explore" icon={Compass} tooltip="Explore" />
-                        <NavButton view="nearby" icon={MapPin} tooltip="Nearby" />
-                        <NavButton view="spaces" icon={Radio} tooltip="Spaces" />
-                        <NavButton view="messages" icon={MessageSquare} tooltip="Messages" />
-                        <NavButton view="videos" icon={Video} tooltip="Videos" />
+                         <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button 
+                                    variant={currentView === 'home' ? 'secondary' : 'ghost'} 
+                                    size="icon" 
+                                    onClick={() => changeView('home')}
+                                >
+                                    <Home className="h-6 w-6" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Home</p></TooltipContent>
+                        </Tooltip>
+                         <Tooltip>
+                            <TooltipTrigger asChild>
+                                 <Button 
+                                    variant={currentView === 'explore' ? 'secondary' : 'ghost'} 
+                                    size="icon" 
+                                    onClick={() => changeView('explore')}
+                                >
+                                    <Compass className="h-6 w-6" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Explore</p></TooltipContent>
+                        </Tooltip>
+                         <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button 
+                                    variant={currentView === 'messages' ? 'secondary' : 'ghost'} 
+                                    size="icon" 
+                                    onClick={() => changeView('messages')}
+                                >
+                                    <MessageSquare className="h-6 w-6" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Messages</p></TooltipContent>
+                        </Tooltip>
+                        
                         {isClient && <Popover onOpenChange={(open) => { if(open) handleMarkNotificationsRead() } }>
                             <PopoverTrigger asChild>
                                 <Button variant="ghost" size="icon" className="relative">
@@ -1023,6 +1028,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                     <span><User className="mr-2 h-4 w-4" />My Profile</span>
                                   </Button>
                                 </Link>
+                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('wallet')}>
+                                    <Wallet className="mr-2 h-4 w-4" />
+                                    My Wallet
+                                </Button>
                                 <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('saved')}>
                                     <Bookmark className="mr-2 h-4 w-4" />
                                     Saved
@@ -1052,14 +1061,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                     <Button variant={currentView === 'explore' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('explore')}>
                                         <Compass className="h-5 w-5" /> Explore
                                     </Button>
-                                     <Button variant={currentView === 'nearby' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('nearby')}>
-                                        <MapPin className="h-5 w-5" /> Nearby
-                                    </Button>
                                     <Button variant={currentView === 'groups' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('groups')}>
                                         <Users className="h-5 w-5" /> Groups
                                     </Button>
                                     <Button variant={currentView === 'spaces' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('spaces')}>
                                         <Radio className="h-5 w-5" /> Spaces
+                                    </Button>
+                                     <Button variant={currentView === 'videos' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('videos')}>
+                                        <Video className="h-5 w-5" /> Videos
                                     </Button>
                                      <Link href={`/profile/${currentUser.handle}`} className="w-full">
                                         <Button variant='ghost' className="w-full justify-start gap-2">
