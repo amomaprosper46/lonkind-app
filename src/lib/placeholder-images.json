@@ -1,0 +1,9 @@
+{
+  "avatar": {
+    "url": "https://api.dicebear.com/7.x/avataaars/svg?seed=<seed>"
+  },
+  "landing": {
+    "url": "https://images.unsplash.com/photo-1511632765486-a01980e01a18?q=80&w=2070&auto=format&fit=crop",
+    "hint": "A group of friends laughing together"
+  }
+}

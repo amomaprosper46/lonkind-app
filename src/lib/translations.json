@@ -1,0 +1,22 @@
+{
+    "app_name": "Lonkind",
+    "headline": "Join the Lonkind Beta",
+    "tagline": "Be among the first to experience a new way to connect and create with AI.",
+    "launch_button": "Request Early Access",
+    "feature_1_title": "Make Friends",
+    "feature_1_desc": "Discover and connect with new people from around the world.",
+    "feature_2_title": "Voice & Video Calls",
+    "feature_2_desc": "High-quality audio and video calls to talk face-to-face.",
+    "feature_3_title": "Share Content",
+    "feature_3_desc": "Upload and share photos, videos, and text with your network.",
+    "sign_in_header": "Welcome Back",
+    "sign_in_desc": "Sign in to access your world.",
+    "sign_up_header": "Create an Account",
+    "sign_up_desc": "Join the community. It's free and only takes a minute.",
+    "no_account": "Don't have an account?",
+    "sign_up_link": "Sign up",
+    "have_account": "Already have an account?",
+    "sign_in_link": "Sign in",
+    "footer_copyright": "© 2024 Lonkind. All rights reserved.",
+    "footer_rules": "Community Guidelines"
+}

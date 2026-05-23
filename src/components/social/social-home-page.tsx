@@ -1,0 +1,528 @@
+
+'use client';
+import React, { ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SignUpForm } from '@/components/social/sign-up-form';
+import { SignInForm } from '@/components/social/sign-in-form';
+import { Users, Video, Share2, Loader2, WifiOff, AlertTriangle } from 'lucide-react';
+import SocialDashboard from './social-dashboard';
+import { auth, db, isFirebaseConfigValid } from '@/lib/firebase';
+import { onAuthStateChanged, signOut, User, sendPasswordResetEmail, RecaptchaVerifier, updateProfile, createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import Image from 'next/image';
+import Link from 'next/link';
+import PresenceSystem from './presence-system';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { toast } from '@/hooks/use-toast';
+import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
+import { useLocalization } from '@/hooks/use-localization';
+import QuickStartGuide from './quick-start-guide';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import placeholderImages from '@/lib/placeholder-images.json';
+
+declare global {
+  interface Window {
+    recaptchaVerifier?: RecaptchaVerifier;
+  }
+}
+
+const OfflineIndicator = () => (
+    <div className="fixed inset-0 z-[200] bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center">
+        <div className="text-center p-8 rounded-lg bg-card border shadow-xl">
+            <WifiOff className="h-16 w-16 text-destructive mx-auto mb-4" />
+            <h2 className="text-2xl font-bold">You are offline</h2>
+            <p className="text-muted-foreground mt-2">
+                An internet connection is required to use Lonkind.
+            </p>
+        </div>
+    </div>
+);
+
+const FirebaseConfigError = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="w-full max-w-2xl p-8 rounded-lg bg-card border border-destructive shadow-xl text-center">
+      <AlertTriangle className="h-16 w-16 text-destructive mx-auto mb-4" />
+      <h1 className="text-2xl font-bold text-destructive">Configuration Error</h1>
+      <p className="text-foreground mt-4">
+        The application is not configured to connect to Firebase. This is usually because the necessary environment variables are missing from your hosting provider (e.g., Vercel).
+      </p>
+      <p className="text-muted-foreground mt-2">
+        Please ensure you have set all the <strong>`NEXT_PUBLIC_FIREBASE_*`</strong> variables in your Vercel project settings.
+      </p>
+      <div className="mt-6 text-left bg-muted p-4 rounded-md text-sm">
+        <h3 className="font-semibold">Action Required:</h3>
+        <ol className="list-decimal list-inside mt-2 space-y-1">
+          <li>Go to your Firebase Console &gt; Project Settings &gt; General tab.</li>
+          <li>Find your Web App and copy the `firebaseConfig` values.</li>
+          <li>Go to your Vercel Project &gt; Settings &gt; Environment Variables.</li>
+          <li>Add each key from `firebaseConfig`, prefixed with `NEXT_PUBLIC_`. For example, `apiKey` becomes `NEXT_PUBLIC_FIREBASE_API_KEY`.</li>
+          <li>Redeploy your application for the changes to take effect.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+);
+
+
+const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreated: () => void }) => {
+    const [name, setName] = React.useState(user.displayName || '');
+    const [isSaving, setIsSaving] = React.useState(false);
+
+    const handleSaveProfile = async () => {
+        if (!name.trim()) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please fill out your name.' });
+            return;
+        }
+        
+        setIsSaving(true);
+        try {
+            const usersRef = collection(db, 'users');
+            let finalHandle = '';
+            let isHandleUnique = false;
+            const baseHandle = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+
+            // Try up to 10 times to find a unique handle
+            for (let i = 0; i < 10; i++) {
+                const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
+                const q = query(usersRef, where('handle', '==', handleCandidate));
+                const handleDoc = await getDocs(q);
+                if (handleDoc.empty) {
+                    finalHandle = handleCandidate;
+                    isHandleUnique = true;
+                    break;
+                }
+            }
+
+            if (!isHandleUnique) {
+                 toast({ variant: 'destructive', title: 'Could not create handle', description: 'Could not generate a unique handle. Please try again.' });
+                 setIsSaving(false);
+                 return;
+            }
+
+
+            const avatarUrl = placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
+            const isProfessionalAccount = user.email?.toLowerCase() === 'admin@lonkind.com';
+
+            const userDocRef = doc(db, "users", user.uid);
+            await setDoc(userDocRef, {
+                uid: user.uid,
+                name: name,
+                handle: finalHandle,
+                avatarUrl: avatarUrl,
+                ...(user.email && { email: user.email.toLowerCase() }),
+                ...(user.phoneNumber && { phoneNumber: user.phoneNumber }),
+                isProfessional: isProfessionalAccount,
+                bio: isProfessionalAccount ? 'CEO of Lonkind. Connecting the world, one idea at a time.' : 'Hey there! I am using Lonkind.',
+                followersCount: 0,
+                followingCount: 0,
+                balance: isProfessionalAccount ? 123.45 : 0,
+                coins: 100, // Starting coins for new users
+                diamonds: 0,
+            });
+
+            await updateProfile(user, { displayName: name, photoURL: avatarUrl });
+
+            if (isProfessionalAccount) {
+              await addDummyFollowers({ userId: user.uid, count: 500000 });
+              await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
+               // Add user to the admins collection
+              await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
+            }
+
+            toast({ title: 'Welcome to Lonkind!', description: `Your profile has been created with handle @${finalHandle}` });
+            onProfileCreated();
+
+        } catch (error) {
+            console.error("Error creating profile:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not create your profile.' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <Dialog open={true}>
+            <DialogContent showCloseButton={false}>
+                <DialogHeader>
+                    <DialogTitle>Welcome to Lonkind!</DialogTitle>
+                    <DialogDescription>Let's set up your profile. Please confirm your name.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div>
+                        <Label htmlFor="name">Display Name</Label>
+                        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your Name" />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleSaveProfile} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Save and Continue
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+
+export default function SocialHomePage() {
+  const [user, isLoading, error] = useAuthState(auth);
+  const [showAuth, setShowAuth] = React.useState(true);
+  const [authView, setAuthView] = React.useState<'signIn' | 'signUp'>('signUp');
+  const [isOnline, setIsOnline] = React.useState(true);
+  const [isNewUser, setIsNewUser] = React.useState(false);
+  const [showTutorial, setShowTutorial] = React.useState(false);
+  
+  const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
+  const [isResetLoading, setIsResetLoading] = React.useState(false);
+  const [resetEmail, setResetEmail] = React.useState('');
+  
+  const recaptchaContainerRef = React.useRef<HTMLDivElement>(null);
+  const { t, isLoading: isLoadingTranslations } = useLocalization();
+
+
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    if (typeof window !== 'undefined' && typeof window.navigator !== 'undefined') {
+        setIsOnline(window.navigator.onLine);
+    }
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const setupAdmin = async () => {
+        const adminEmail = 'admin@lonkind.com';
+        const adminPassword = 'password123';
+        try {
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('email', '==', adminEmail));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                console.log("Admin account not found, creating...");
+                const currentAuthUser = auth.currentUser;
+                
+                const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
+                const user = userCredential.user;
+                const avatarUrl = placeholderImages.avatar.url.replace('<seed>', 'A');
+                
+                await updateProfile(user, { displayName: 'Alex Taylor', photoURL: avatarUrl });
+                await setDoc(doc(db, "users", user.uid), {
+                    uid: user.uid,
+                    name: 'Alex Taylor',
+                    handle: 'admin',
+                    avatarUrl: avatarUrl,
+                    email: adminEmail,
+                    isProfessional: true,
+                    bio: 'CEO of Lonkind. Connecting the world, one idea at a time.',
+                    followersCount: 0,
+                    followingCount: 0,
+                    balance: 123.45,
+                    coins: 1000000,
+                    diamonds: 1000000,
+                });
+                // Add user to the admins collection
+                await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
+
+                await addDummyFollowers({ userId: user.uid, count: 500000 });
+                console.log("Admin account for Alex Taylor created successfully.");
+
+                if (currentAuthUser) {
+                    await signOut(auth);
+                }
+            } else {
+                 // Ensure admin doc exists if user doc exists
+                const adminDoc = snapshot.docs[0];
+                const adminRef = doc(db, 'admins', adminDoc.id);
+                const adminSnap = await getDoc(adminRef);
+                if (!adminSnap.exists()) {
+                    await setDoc(adminRef, { addedAt: new Date() });
+                }
+            }
+        } catch (error: any) {
+            if (error.code === 'auth/email-already-in-use') {
+                 console.log("Admin auth user already exists.");
+            } else {
+                 console.error("Error creating admin account: ", error);
+            }
+        }
+    };
+
+    if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+            'size': 'invisible',
+            'callback': (response: any) => {},
+        });
+    }
+    
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+    React.useEffect(() => {
+    const checkIsNewUser = async () => {
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        setIsNewUser(!userDoc.exists());
+      } else {
+        setIsNewUser(false);
+      }
+    };
+    checkIsNewUser();
+  }, [user]);
+
+  const handleAuthSuccess = () => {
+    // A small delay to allow the auth state to propagate and avoid a flicker.
+    setTimeout(() => {
+        setShowAuth(false);
+    }, 500);
+  };
+  
+  const handleSignOut = async () => {
+    await signOut(auth);
+  };
+  
+    const handleSendResetEmail = async () => {
+      if(!resetEmail) {
+          toast({ variant: 'destructive', title: 'Email required', description: 'Please enter your email address.'});
+          return;
+      }
+      setIsResetLoading(true);
+      try {
+          await sendPasswordResetEmail(auth, resetEmail); 
+          toast({
+              title: 'Password Reset Email Sent',
+              description: 'Please check your inbox for a link to reset your password.'
+          });
+          setIsResetDialogOpen(false);
+      } catch (error: any) {
+          console.error(error);
+          toast({
+              variant: 'destructive',
+              title: 'Failed to Send',
+              description: 'Could not send reset email. Please check if the email is correct and try again.'
+          });
+      } finally {
+          setIsResetLoading(false);
+      }
+  };
+
+  const resetDialogOnOpenChange = (open: boolean) => {
+    if (!open) {
+        setResetEmail('');
+    }
+    setIsResetDialogOpen(open);
+  }
+
+  const openSignUpCard = () => {
+    setAuthView('signUp');
+    setShowAuth(true);
+  }
+
+  const openSignInCard = () => {
+    setAuthView('signIn');
+    setShowAuth(true);
+  }
+
+  if (isLoading || isLoadingTranslations) {
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+    );
+  }
+  
+  const AppContent = () => {
+      if (user) {
+        if (isNewUser) {
+            return <WelcomeDialog user={user} onProfileCreated={() => {
+                setIsNewUser(false);
+                setShowTutorial(true);
+            }} />;
+        }
+        if (showTutorial) {
+            return <QuickStartGuide onFinish={() => setShowTutorial(false)} />;
+        }
+        return (
+            <>
+                <PresenceSystem />
+                <SocialDashboard user={user} onSignOut={handleSignOut} />
+            </>
+        );
+      }
+      
+      return (
+         <>
+          <div ref={recaptchaContainerRef}></div>
+          <div className="flex flex-col min-h-screen">
+              <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
+                  <div className="container flex items-center justify-between h-16">
+                  <Link href="/" className="flex items-center gap-2">
+                      <Image src="/logo.png" alt={`${t('app_name')} Logo`} width={32} height={32} />
+                      <span className="text-xl font-bold">{t('app_name')}</span>
+                  </Link>
+                  <Button onClick={openSignInCard}>{t('sign_in_link')}</Button>
+                  </div>
+              </header>
+          
+              <main className="flex-1">
+                  <section className="container grid items-center gap-8 py-12 md:grid-cols-2 lg:py-24">
+                  <div className="space-y-4">
+                      <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+                          {t('headline')}
+                      </h1>
+                      <p className="text-lg text-muted-foreground">
+                          {t('tagline')}
+                      </p>
+                      <Button size="lg" onClick={openSignUpCard}>
+                          {t('launch_button')}
+                      </Button>
+                  </div>
+                  <div className="flex items-center justify-center">
+                      {showAuth ? (
+                      <Card className="w-full max-w-md shadow-2xl">
+                          {authView === 'signIn' ? (
+                              <>
+                                  <CardHeader>
+                                      <CardTitle className="text-2xl">{t('sign_in_header')}</CardTitle>
+                                      <CardDescription>{t('sign_in_desc')}</CardDescription>
+                                  </CardHeader>
+                                  <CardContent>
+                                      <SignInForm 
+                                        onSignIn={handleAuthSuccess} 
+                                        onForgotPassword={() => setIsResetDialogOpen(true)} 
+                                        onShowSignUp={() => setAuthView('signUp')}
+                                      />
+                                  </CardContent>
+                              </>
+                          ) : (
+                              <>
+                                  <CardHeader>
+                                      <CardTitle className="text-2xl">{t('sign_up_header')}</CardTitle>
+                                      <CardDescription>{t('sign_up_desc')}</CardDescription>
+                                  </CardHeader>
+                                  <CardContent>
+                                      <SignUpForm 
+                                        onSignUp={handleAuthSuccess} 
+                                        onShowSignIn={() => setAuthView('signIn')} 
+                                      />
+                                  </CardContent>
+                              </>
+                          )}
+                      </Card>
+                      ) : (
+                          <div className="p-8 rounded-lg bg-card border shadow-xl">
+                              <Image src={placeholderImages.landing.url} alt="Social connections illustration" width={600} height={400} className="rounded-lg" data-ai-hint={placeholderImages.landing.hint} />
+                          </div>
+                      )}
+                  </div>
+                  </section>
+          
+                  <section className="py-12 bg-secondary/40 lg:py-24">
+                  <div className="container">
+                      <div className="text-center">
+                      <h2 className="text-3xl font-bold">Everything you need to stay connected</h2>
+                      <p className="mt-2 text-muted-foreground">
+                          Our platform is packed with features to help you build and maintain relationships.
+                      </p>
+                      </div>
+                      <div className="grid gap-8 mt-12 md:grid-cols-3">
+                      <Card className="text-center shadow-lg">
+                          <CardHeader>
+                          <Users className="w-12 h-12 mx-auto text-primary" />
+                          </CardHeader>
+                          <CardContent>
+                          <h3 className="text-xl font-semibold">{t('feature_1_title')}</h3>
+                          <p className="mt-2 text-muted-foreground">
+                              {t('feature_1_desc')}
+                          </p>
+                          </CardContent>
+                      </Card>
+                      <Card className="text-center shadow-lg">
+                          <CardHeader>
+                          <Video className="w-12 h-12 mx-auto text-primary" />
+                          </CardHeader>
+                          <CardContent>
+                          <h3 className="text-xl font-semibold">{t('feature_2_title')}</h3>
+                          <p className="mt-2 text-muted-foreground">
+                              {t('feature_2_desc')}
+                          </p>
+                          </CardContent>
+                      </Card>
+                      <Card className="text-center shadow-lg">
+                          <CardHeader>
+                            <Share2 className="w-12 h-12 mx-auto text-primary" />
+                          </CardHeader>
+                          <CardContent>
+                          <h3 className="text-xl font-semibold">{t('feature_3_title')}</h3>
+                          <p className="mt-2 text-muted-foreground">
+                              {t('feature_3_desc')}
+                          </p>
+                          </CardContent>
+                      </Card>
+                      </div>
+                  </div>
+                  </section>
+              </main>
+          
+              <footer className="py-6 border-t bg-background">
+                  <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-4 gap-y-2">
+                    <p>{t('footer_copyright')}</p>
+                    <Link href="/terms" className="hover:text-primary hover:underline">Terms of Service</Link>
+                  </div>
+              </footer>
+          </div>
+
+          <Dialog open={isResetDialogOpen} onOpenChange={resetDialogOnOpenChange}>
+              <DialogContent>
+                  <DialogHeader>
+                      <DialogTitle>Reset Your Password</DialogTitle>
+                      <DialogDescription>
+                          Enter your email address below. We'll send a link to your inbox to reset your password.
+                      </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="reset-email" className="text-right">
+                              Email
+                          </Label>
+                          <Input 
+                              id="reset-email" 
+                              type="email"
+                              value={resetEmail}
+                              onChange={(e) => setResetEmail(e.target.value)}
+                              placeholder="you@example.com"
+                              className="col-span-3" 
+                          />
+                      </div>
+                  </div>
+                  <DialogFooter>
+                      <DialogClose asChild>
+                          <Button variant="outline">Cancel</Button>
+                      </DialogClose>
+                      <Button onClick={handleSendResetEmail} disabled={isResetLoading}>
+                          {isResetLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Send Reset Link
+                      </Button>
+                  </DialogFooter>
+              </DialogContent>
+          </Dialog>
+        </>
+      );
+  }
+
+  return (
+    <>
+        {!isOnline && <OfflineIndicator />}
+        {isFirebaseConfigValid ? <AppContent /> : <FirebaseConfigError />}
+    </>
+  );
+}

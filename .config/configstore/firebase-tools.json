@@ -1,0 +1,69 @@
+{
+	"motd": {
+		"cloudBuildErrorAfter": 1594252800000,
+		"cloudBuildWarnAfter": 1590019200000,
+		"defaultNode10After": 1594252800000,
+		"minVersion": "3.0.5",
+		"node8DeploysDisabledAfter": 1613390400000,
+		"node8RuntimeDisabledAfter": 1615809600000,
+		"node8WarnAfter": 1600128000000,
+		"fetched": 1768733319630
+	},
+	"gemini": true,
+	"usage": true,
+	"analytics-uuid": "c7fb3c9c-d388-42ad-80e3-0a7779abafbf",
+	"user": {
+		"iss": "accounts.google.com",
+		"azp": "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com",
+		"aud": "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com",
+		"sub": "112928909563107504720",
+		"email": "amomaprosper2525@gmail.com",
+		"email_verified": true,
+		"at_hash": "Ndr0DDisC5D2Ir7sDdNztA",
+		"iat": 1763989869,
+		"exp": 1763993469
+	},
+	"tokens": {
+		"expires_at": 1768736918787,
+		"refresh_token": "1//03STljJOhNgZUCgYIARAAGAMSNwF-L9IrqUfeTMecdpJw97LLnbmZQycAWlZ8v2YQdRe9dTo5ZLzFETwsH9747u6RBY-5NQ9OZfs",
+		"scopes": [],
+		"access_token": "ya29.a0AUMWg_Ij8HfTSlyBjGsDTzmrUPVTBfuC1JJbVlXCXbCDxADIYz-5srCN1UPDfGA8dENjjDBtdJUORmilioaa3wX-CFxVKd0jHX0YX8fzJ1xfuuBudZJUpm6pimhuu_qd713F_HiX_6YNpZZKl_LvIPNp2IhFoq7dsY36NLxBogBmPCoW0F-ShcKO39QWt8yrAb9coXy8rwnhVREaCgYKAckSARUSFQHGX2Miv_j_plBaTc1hEyDbhvzoaA0214",
+		"expires_in": 3599,
+		"scope": "https://www.googleapis.com/auth/userinfo.email openid https://www.googleapis.com/auth/cloudplatformprojects.readonly https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/firebase",
+		"token_type": "Bearer",
+		"id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjdiZjU5NTQ4OWEwYmIxNThiMDg1ZTIzZTdiNTJiZjk4OTFlMDQ1MzgiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhY2NvdW50cy5nb29nbGUuY29tIiwiYXpwIjoiNTYzNTg0MzM1ODY5LWZncmhnbWQ0N2JxbmVraWo1aThiNXByMDNobzg0OWU2LmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwiYXVkIjoiNTYzNTg0MzM1ODY5LWZncmhnbWQ0N2JxbmVraWo1aThiNXByMDNobzg0OWU2LmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwic3ViIjoiMTEyOTI4OTA5NTYzMTA3NTA0NzIwIiwiZW1haWwiOiJhbW9tYXByb3NwZXIyNTI1QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoib1RkdmNSSk1RQnNqMkp0S0hfWmlNZyIsImlhdCI6MTc2ODczMzMxOCwiZXhwIjoxNzY4NzM2OTE4fQ.T-CR4lSot_17TWlyp8jNgBTKB_HHJMfxSzut3yDxkdpVr_BrNlhNHv1VAfTQSUwXfdNsQhuIyML0xFjQdP2GafR645GHC2xDStdewN5jnxeJvw7nAf-uOmo9i4fJQx2KwGO4wPY2gEsPa_ziHdrIdh0VtVyyvdlc222cAGRYnlG9SkptHgavKr_pS5kNS60dI2sI9p9RFHxFFwG2Xisyayi8TEEKz9dDKGFezKuJX3tE1zQEPSpY7K_NqLV_4LCV9TGVL7ixizkII46MwkK_mwpXpzR4p9NiP7knafd2A3dXaKuYEDbNz5hpzxQfsWCC2RfEp09aWWgjqC0FmxpVQg"
+	},
+	"activeProjects": {
+		"C:\\WINDOWS\\system32": "impactful-ideas",
+		"E:\\lonkind": "impactful-ideas",
+		"C:\\Users\\amoma\\Downloads\\my-site": "impactful-ideas",
+		"C:\\Users\\amoma": "impactful-ideas"
+	},
+	"apiEnablementCache": {
+		"impactful-ideas": {
+			"sqladmin.googleapis.com": true,
+			"firebasedataconnect.googleapis.com": true,
+			"cloudaicompanion.googleapis.com": true,
+			"cloudresourcemanager.googleapis.com": true,
+			"firebasedatabase.googleapis.com": true,
+			"firestore.googleapis.com": true,
+			"runtimeconfig.googleapis.com": true,
+			"cloudfunctions.googleapis.com": true
+		}
+	},
+	"emulator-analytics-clientId": "a0b8f32d-30b1-4de4-b6ed-3324caf903b3",
+	"webconfig": {
+		"impactful-ideas": {
+			"projectId": "impactful-ideas",
+			"appId": "1:494901200454:web:0ea71cc5dbe22b22f6ac47",
+			"storageBucket": "impactful-ideas.firebasestorage.app",
+			"apiKey": "AIzaSyAk4DcDNed4OWSahdV56ll1wI973-0wgS4",
+			"authDomain": "impactful-ideas.firebaseapp.com",
+			"messagingSenderId": "494901200454",
+			"measurementId": "G-P5TSD6JL5Y",
+			"projectNumber": "494901200454",
+			"version": "2"
+		}
+	},
+	"lastError": 1768734129345
+}
