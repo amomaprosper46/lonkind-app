@@ -22,6 +22,9 @@ const nextConfig = {
     // type-checking step.
     ignoreBuildErrors: true,
   },
+  experimental: {
+    serverComponentsExternalPackages: ["@genkit-ai/core", "@genkit-ai/google-genai", "genkit", "@opentelemetry/instrumentation", "require-in-the-middle"],
+  },
   outputFileTracing: false,
 };
 
