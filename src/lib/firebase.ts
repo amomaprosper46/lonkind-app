@@ -18,12 +18,20 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const db = getFirestore(app);
-export const auth = getAuth(app);
-export const storage = getStorage(app);
-export const rtdb = getDatabase(app);
+// Initialize Firebase Safely (Vercel SSR compatible)
+let app;
+if (isFirebaseConfigValid) {
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
+  }
+}
+
+export const db = app ? getFirestore(app) : null;
+export const auth = app ? getAuth(app) : null;
+export const storage = app ? getStorage(app) : null;
+export const rtdb = app ? getDatabase(app) : null;
 
 export const isFirebaseConfigValid = Boolean(
   firebaseConfig.apiKey &&
