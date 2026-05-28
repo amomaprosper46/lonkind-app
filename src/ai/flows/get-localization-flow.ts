@@ -14,10 +14,6 @@ const GetLocalizationInputSchema = z.object({
   jsonContent: z.record(z.string()).describe('A JSON object where keys are IDs and values are the English strings to be translated.'),
   languageCode: z.string().describe('The two-letter ISO 639-1 code for the target language (e.g., "es" for Spanish).'),
 });
-const PromptInputSchema = z.object({
-  jsonString: z.string(),
-  languageCode: z.string(),
-});
 export type GetLocalizationInput = z.infer<typeof GetLocalizationInputSchema>;
 
 // The output will have the same keys as the input, but with translated values.
@@ -30,15 +26,21 @@ export async function getLocalization(input: GetLocalizationInput): Promise<GetL
 
 const prompt = ai.definePrompt({
   name: 'localizationPrompt',
-  input: { schema: PromptInputSchema },
+  input: { schema: GetLocalizationInputSchema },
   output: { schema: GetLocalizationOutputSchema },
   prompt: `You are an expert UI/UX localization specialist.
 Translate the values of the following JSON object from English to the language specified by the language code '{{languageCode}}'.
 Maintain the exact same JSON structure and keys. Only translate the string values. Do not add any extra explanations or text.
 
 JSON to translate:
-{{jsonString}}
+{{{jsonStringify jsonContent}}}
 `,
+});
+
+// Register a helper to stringify JSON for the prompt
+import Handlebars from 'handlebars';
+Handlebars.registerHelper('jsonStringify', function(context) {
+  return JSON.stringify(context);
 });
 
 const getLocalizationFlow = ai.defineFlow(
@@ -53,7 +55,7 @@ const getLocalizationFlow = ai.defineFlow(
       return jsonContent;
     }
 
-    const { output } = await prompt({ jsonString: JSON.stringify(jsonContent), languageCode });
+    const { output } = await prompt({ jsonContent, languageCode });
     return output || jsonContent; // Fallback to original content on error
   }
 );

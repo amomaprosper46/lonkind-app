@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet } from 'lucide-react';
+import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import { Input } from '@/components/ui/input';
 import { db, storage, auth } from '@/lib/firebase';
@@ -27,20 +27,21 @@ import HomeFeed from './home-feed';
 import { searchPosts, type SearchPostsOutput } from '@/ai/flows/search-posts';
 import { Separator } from '../ui/separator';
 import { useSearchParams } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
-const LoadingComponent = () => <div className="col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+const LoadingComponent = () => <div className="col-span-12 md:col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
-const MessagingView = dynamic(() => import('./messaging-view'), { loading: () => <LoadingComponent />, ssr: false });
-const SettingsView = dynamic(() => import('./settings-view'), { loading: () => <LoadingComponent />, ssr: false });
-const VideosView = dynamic(() => import('./videos-view'), { loading: () => <LoadingComponent />, ssr: false });
-const SavedView = dynamic(() => import('./saved-view'), { loading: () => <LoadingComponent />, ssr: false });
-const ExploreView = dynamic(() => import('./explore-view'), { loading: () => <LoadingComponent />, ssr: false });
-const GroupsView = dynamic(() => import('./groups-view'), { loading: () => <LoadingComponent />, ssr: false });
-const SpacesView = dynamic(() => import('./spaces-view'), { loading: () => <LoadingComponent />, ssr: false });
-const NearbyView = dynamic(() => import('./nearby-view'), { loading: () => <LoadingComponent />, ssr: false });
-const CommentSheet = dynamic(() => import('./comment-sheet'), { ssr: false });
-const GroupDetailsView = dynamic(() => import('./group-details-view'), { loading: () => <LoadingComponent />, ssr: false });
-const WalletView = dynamic(() => import('./wallet-view'), { loading: () => <LoadingComponent />, ssr: false });
+const MessagingView = dynamic(() => import('./messaging-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const SettingsView = dynamic(() => import('./settings-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const VideosView = dynamic(() => import('./videos-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const SavedView = dynamic(() => import('./saved-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const ExploreView = dynamic(() => import('./explore-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const GroupsView = dynamic(() => import('./groups-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const SpacesView = dynamic(() => import('./spaces-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const NearbyView = dynamic(() => import('./nearby-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const CommentSheet = dynamic(() => import('./comment-sheet').then(mod => mod.default), { ssr: false });
+const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 
 
 type SocialDashboardProps = {
@@ -48,7 +49,7 @@ type SocialDashboardProps = {
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'monetization' | 'spaces' | 'nearby' | 'group-details' | 'wallet';
+type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile';
 
 export interface SuggestedUser {
     id: string;
@@ -58,6 +59,17 @@ export interface SuggestedUser {
     avatarUrl: string;
     isProfessional?: boolean;
 }
+
+export interface BlockedUser {
+    uid: string;
+    name: string;
+    handle: string;
+}
+
+export interface MutedUser {
+    uid: string;
+}
+
 
 interface SearchResultUser {
     uid: string;
@@ -75,7 +87,7 @@ export interface NotificationFromUser {
 
 export interface Notification {
     id: string;
-    type: 'new_follower' | 'new_reaction' | 'new_comment' | 'friend_request_accepted';
+    type: 'friend_request' | 'friend_request_accepted' | 'new_reaction' | 'new_comment' | 'new_message' | 'group_post' | 'new_follower';
     fromUser: NotificationFromUser;
     postId?: string;
     reactionType?: ReactionType;
@@ -83,6 +95,10 @@ export interface Notification {
     timestamp: any;
     read: boolean;
     postAuthorHandle?: string;
+    conversationId?: string;
+    messageSnippet?: string;
+    groupId?: string;
+    groupName?: string;
 }
 
 export interface CurrentUser {
@@ -106,7 +122,6 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   
   const [userReactions, setUserReactions] = useState<Map<string, ReactionType>>(new Map());
-  const [following, setFollowing] = useState<Set<string>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,6 +134,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   
   const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
+  const [sentFriendRequests, setSentFriendRequests] = useState<Set<string>>(new Set());
+
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [mutedUsers, setMutedUsers] = useState<MutedUser[]>([]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -152,8 +171,6 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 const userData = docSnap.data() as CurrentUser;
                 setCurrentUser(userData);
             } else {
-                 // This case should ideally not be hit if the WelcomeDialog flow completes.
-                 // It's a fallback.
                  setCurrentUser({
                     name: user.displayName || 'Anonymous',
                     avatarUrl: user.photoURL || `https://placehold.co/100x100.png?text=${(user.displayName || 'A').charAt(0)}`,
@@ -164,7 +181,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     bio: '',
                     businessUrl: '',
                     balance: 0,
-                    coins: 100,
+                    coins: 0,
                     diamonds: 0,
                 });
             }
@@ -185,64 +202,51 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         };
     }, []);
     
-    const fetchFollowing = useCallback(async () => {
-        if (!currentUser?.uid) return new Set<string>();
-        const followingRef = collection(db, 'users', currentUser.uid, 'following');
-        const snapshot = await getDocs(followingRef);
-        const followingIds = new Set(snapshot.docs.map(doc => doc.id));
-        setFollowing(followingIds);
-        return followingIds;
-    }, [currentUser?.uid]);
-    
-    const fetchUserReactions = useCallback(async () => {
+    useEffect(() => {
         if (!currentUser?.uid) return;
-        const newReactions = new Map<string, ReactionType>();
-        const reactionsQuery = query(collectionGroup(db, 'reactions'), where('user.uid', '==', currentUser.uid));
-        const reactionSnapshots = await getDocs(reactionsQuery);
-        reactionSnapshots.forEach(doc => {
-            const parentPostId = doc.ref.parent.parent?.id;
-            if (parentPostId) {
-                newReactions.set(parentPostId, doc.data().type);
-            }
-        });
-        setUserReactions(newReactions);
-    }, [currentUser?.uid]);
 
-    const fetchSavedPosts = useCallback(async () => {
-        if (!currentUser?.uid) return;
+        // Fetch user reactions
+        const reactionsQuery = query(collectionGroup(db, 'reactions'), where('user.uid', '==', currentUser.uid));
+        const unsubReactions = onSnapshot(reactionsQuery, (snapshot) => {
+             const newReactions = new Map<string, ReactionType>();
+             snapshot.forEach(doc => {
+                const parentPostId = doc.ref.parent.parent?.id;
+                if(parentPostId) newReactions.set(parentPostId, doc.data().type);
+             });
+             setUserReactions(newReactions);
+        });
+
         const savedPostsRef = collection(db, 'users', currentUser.uid, 'savedPosts');
-        const unsubscribe = onSnapshot(savedPostsRef, (snapshot) => {
+        const unsubSaved = onSnapshot(savedPostsRef, (snapshot) => {
             const postIds = new Set(snapshot.docs.map(doc => doc.id));
             setSavedPostIds(postIds);
         });
-        return unsubscribe;
-    }, [currentUser?.uid]);
-
-    useEffect(() => {
-        if (currentUser) {
-            fetchFollowing();
-            fetchUserReactions();
-            const unsubscribe = fetchSavedPosts();
-            return () => {
-                unsubscribe.then(unsub => unsub && unsub());
-            };
-        }
-    }, [currentUser, fetchFollowing, fetchUserReactions, fetchSavedPosts]);
-
-    useEffect(() => {
-        if (!currentUser?.uid) return;
 
         const notifsRef = collection(db, 'users', currentUser.uid, 'notifications');
         const q = query(notifsRef, orderBy('timestamp', 'desc'), limit(20));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubNotifs = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
             setNotifications(notifs);
-            const unreadCount = notifs.filter(n => !n.read).length;
-            setUnreadNotifications(unreadCount);
+            setUnreadNotifications(notifs.filter(n => !n.read).length);
         });
 
-        return () => unsubscribe();
+        const blockedUsersRef = collection(db, 'users', currentUser.uid, 'blockedUsers');
+        const unsubBlocked = onSnapshot(blockedUsersRef, (snapshot) => {
+            setBlockedUsers(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as BlockedUser)));
+        });
+
+        const mutedUsersRef = collection(db, 'users', currentUser.uid, 'mutedUsers');
+        const unsubMuted = onSnapshot(mutedUsersRef, (snapshot) => {
+            setMutedUsers(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as MutedUser)));
+        });
+        
+        return () => {
+            unsubReactions();
+            unsubSaved();
+            unsubNotifs();
+            unsubBlocked();
+            unsubMuted();
+        };
     }, [currentUser?.uid]);
     
     useEffect(() => {
@@ -256,19 +260,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             setIsSearchLoading(true);
             const usersRef = collection(db, 'users');
             
-            const handleQuery = query(
-                usersRef, 
-                where('handle', '>=', searchQuery.toLowerCase()), 
-                where('handle', '<=', searchQuery.toLowerCase() + '\uf8ff'),
-                limit(3)
-            );
-            
-            const nameQuery = query(
-                usersRef, 
-                where('name', '>=', searchQuery), 
-                where('name', '<=', searchQuery + '\uf8ff'),
-                limit(3)
-            );
+            const handleQuery = query( usersRef, where('handle', '>=', searchQuery.toLowerCase()), where('handle', '<=', searchQuery.toLowerCase() + '\uf8ff'), limit(3));
+            const nameQuery = query( usersRef, where('name', '>=', searchQuery), where('name', '<=', searchQuery + '\uf8ff'), limit(3) );
 
             try {
                 const [handleSnapshot, nameSnapshot, postResults] = await Promise.all([
@@ -303,7 +296,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
         const debounceTimer = setTimeout(() => {
             performSearch();
-        }, 300);
+        }, 3);
 
         return () => clearTimeout(debounceTimer);
     }, [searchQuery]);
@@ -333,8 +326,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 }
 
                 const postData = postDoc.data() as Post;
-                const newReactionsMap = new Map(userReactions);
                 const existingReaction = reactionDoc.exists() ? reactionDoc.data().type : null;
+                const newReactionsMap = new Map(userReactions);
 
                 if (existingReaction === reaction) {
                     transaction.delete(reactionRef);
@@ -356,7 +349,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     transaction.update(postRef, { [`reactions.${reaction}`]: increment(1) });
                     newReactionsMap.set(postId, reaction);
                     
-                    if (!existingReaction) {
+                    if (!existingReaction && authorUid !== currentUser.uid) {
                          const notificationRef = doc(collection(db, 'users', authorUid, 'notifications'));
                          transaction.set(notificationRef, {
                             type: 'new_reaction',
@@ -369,7 +362,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         });
                     }
                 }
-                 setUserReactions(newReactionsMap);
+                
+                // Optimistically update the UI state
+                setUserReactions(newReactionsMap);
             });
         } catch (e) {
             console.error("Transaction failed: ", e);
@@ -427,50 +422,91 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         }
     };
 
-    const handleFollow = async (targetUser: SuggestedUser) => {
+    const handleAddFriend = async (targetUser: SuggestedUser) => {
         if (!currentUser) return;
     
-        const currentUserRef = doc(db, 'users', currentUser.uid);
-        const targetUserRef = doc(db, 'users', targetUser.uid);
-    
-        const followingRef = doc(db, 'users', currentUser.uid, 'following', targetUser.uid);
-        const followerRef = doc(db, 'users', targetUser.uid, 'followers', currentUser.uid);
+        const myId = currentUser.uid;
+        const theirId = targetUser.uid;
+        const myRequestRef = doc(db, 'users', theirId, 'friendRequests', myId);
+        const notificationRef = doc(collection(db, 'users', theirId, 'notifications'));
     
         const batch = writeBatch(db);
     
         try {
-            batch.set(followingRef, {
-                name: targetUser.name,
-                handle: targetUser.handle,
-                avatarUrl: targetUser.avatarUrl,
+            batch.set(myRequestRef, {
+                from: { uid: myId, name: currentUser.name, handle: currentUser.handle, avatarUrl: currentUser.avatarUrl },
                 timestamp: serverTimestamp(),
+                status: 'pending'
             });
-            batch.set(followerRef, {
-                name: currentUser.name,
-                handle: currentUser.handle,
-                avatarUrl: currentUser.avatarUrl,
-                timestamp: serverTimestamp(),
-            });
-            batch.update(currentUserRef, { followingCount: increment(1) });
-            batch.update(targetUserRef, { followersCount: increment(1) });
 
-            const notificationRef = doc(collection(db, 'users', targetUser.uid, 'notifications'));
-            batch.set(notificationRef, {
-                type: 'new_follower',
-                fromUser: { name: currentUser.name, handle: currentUser.handle, avatarUrl: currentUser.avatarUrl, uid: currentUser.uid },
-                timestamp: serverTimestamp(),
-                read: false,
-            });
-    
             await batch.commit();
     
-            setFollowing(prev => new Set(prev).add(targetUser.uid));
-            // Optimistically remove the followed user from suggestions
-            setSuggestedUsers(prev => prev.filter(u => u.uid !== targetUser.uid));
-            toast({ title: `You are now following ${targetUser.name}` });
+            setSentFriendRequests(prev => new Set(prev).add(theirId));
+            toast({ title: `Friend request sent to ${targetUser.name}` });
+
+            // Send notification separately
+            try {
+                const notificationRef = doc(collection(db, 'users', theirId, 'notifications'));
+                await setDoc(notificationRef, {
+                    type: 'friend_request',
+                    fromUser: { name: currentUser.name, handle: currentUser.handle, avatarUrl: currentUser.avatarUrl, uid: myId },
+                    timestamp: serverTimestamp(),
+                    read: false,
+                });
+            } catch (notifError) {
+                console.warn("Could not send friend request notification:", notifError);
+            }
         } catch (error) {
-            console.error("Error following user: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not follow user.' });
+            console.error("Error sending friend request: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not send friend request.' });
+        }
+    };
+    
+    const handleAcceptFriendRequest = async (notif: Notification, e: React.MouseEvent) => {
+        e.preventDefault(); // Prevent link navigation
+        e.stopPropagation();
+        if (!currentUser) return;
+        const senderId = notif.fromUser.uid;
+
+        try {
+            // Write to my own friends list and delete the request
+            const batch = writeBatch(db);
+            const myFriendRef = doc(db, 'users', currentUser.uid, 'friends', senderId);
+            const requestRef = doc(db, 'users', currentUser.uid, 'friendRequests', senderId);
+            
+            batch.set(myFriendRef, { 
+                uid: senderId,
+                name: notif.fromUser.name,
+                handle: notif.fromUser.handle,
+                avatarUrl: notif.fromUser.avatarUrl,
+                timestamp: serverTimestamp() 
+            });
+            batch.delete(requestRef);
+            
+            // Mark notification as read
+            const notifRef = doc(db, 'users', currentUser.uid, 'notifications', notif.id);
+            batch.update(notifRef, { read: true, type: 'friend_request_accepted' });
+
+            await batch.commit();
+
+            // Try to add to their friends list (may fail due to security rules)
+            try {
+                const theirFriendRef = doc(db, 'users', senderId, 'friends', currentUser.uid);
+                await setDoc(theirFriendRef, {
+                    uid: currentUser.uid,
+                    name: currentUser.name,
+                    handle: currentUser.handle,
+                    avatarUrl: currentUser.avatarUrl,
+                    timestamp: serverTimestamp()
+                });
+            } catch (err) {
+                console.warn("Could not write to sender's friend list due to rules", err);
+            }
+
+            toast({ title: `You and ${notif.fromUser.name} are now friends!` });
+        } catch (error) {
+            console.error('Error accepting friend request:', error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not accept friend request.' });
         }
     };
     
@@ -478,19 +514,15 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const handleSavePost = async (postId: string) => {
         if (!currentUser) return;
         const savedPostRef = doc(db, 'users', currentUser.uid, 'savedPosts', postId);
-        const newSavedPostIds = new Set(savedPostIds);
         
         try {
-            if (newSavedPostIds.has(postId)) {
+            if (savedPostIds.has(postId)) {
                 await deleteDoc(savedPostRef);
-                newSavedPostIds.delete(postId);
                 toast({ title: 'Post unsaved' });
             } else {
                 await setDoc(savedPostRef, { timestamp: serverTimestamp() });
-                newSavedPostIds.add(postId);
                 toast({ title: 'Post saved!' });
             }
-            setSavedPostIds(newSavedPostIds);
         } catch (error) {
             console.error('Error saving post:', error);
             toast({ variant: 'destructive', title: 'Error', description: 'Could not update saved post.' });
@@ -503,7 +535,6 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         const postRef = doc(db, 'posts', postId);
 
         try {
-            // Must be author to delete
             const postSnap = await getDoc(postRef);
             if (!postSnap.exists() || postSnap.data().author.uid !== currentUser.uid) {
                 toast({ variant: 'destructive', title: 'Error', description: 'You can only delete your own posts.' });
@@ -512,23 +543,16 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
             const batch = writeBatch(db);
 
-            // Delete all comments in subcollection
             const commentsRef = collection(db, 'posts', postId, 'comments');
             const commentsQuery = query(commentsRef);
             const commentsSnapshot = await getDocs(commentsQuery);
-            commentsSnapshot.forEach((doc) => {
-                batch.delete(doc.ref);
-            });
+            commentsSnapshot.forEach((doc) => batch.delete(doc.ref));
 
-            // Delete all reactions in subcollection
             const reactionsRef = collection(db, 'posts', postId, 'reactions');
             const reactionsQuery = query(reactionsRef);
             const reactionsSnapshot = await getDocs(reactionsQuery);
-            reactionsSnapshot.forEach((doc) => {
-                batch.delete(doc.ref);
-            });
+            reactionsSnapshot.forEach((doc) => batch.delete(doc.ref));
 
-            // Delete the main post
             batch.delete(postRef);
 
             await batch.commit();
@@ -603,26 +627,15 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     
     const handlePasswordReset = async () => {
         if (!currentUser?.email) {
-             toast({
-                variant: 'destructive',
-                title: 'No Email Found',
-                description: 'Cannot send password reset without an email address.',
-            });
+             toast({ variant: 'destructive', title: 'No Email Found', description: 'Cannot send password reset without an email address.' });
             return;
         }
         try {
             await sendPasswordResetEmail(auth, currentUser.email);
-            toast({
-                title: 'Password Reset Email Sent',
-                description: 'Check your inbox for a link to reset your password.',
-            });
+            toast({ title: 'Password Reset Email Sent', description: 'Check your inbox for a link to reset your password.' });
         } catch (error) {
             console.error("Error sending password reset email:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Request Failed',
-                description: 'Could not send password reset email. Please try again later.',
-            });
+            toast({ variant: 'destructive', title: 'Request Failed', description: 'Could not send password reset email. Please try again later.' });
         }
     };
     
@@ -634,18 +647,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             const userDocRef = doc(db, 'users', user.uid);
             await deleteDoc(userDocRef);
             await deleteUser(user);
-            
-            toast({
-                title: 'Account Deleted',
-                description: 'Your account has been permanently deleted.',
-            });
+            toast({ title: 'Account Deleted', description: 'Your account has been permanently deleted.' });
         } catch (error: any) {
             console.error("Error deleting account:", error);
-             toast({
-                variant: 'destructive',
-                title: 'Deletion Failed',
-                description: `Could not delete your account. You may need to sign in again to perform this action. (${error.code})`,
-            });
+             toast({ variant: 'destructive', title: 'Deletion Failed', description: `Could not delete your account. You may need to sign in again to perform this action. (${error.code})` });
         }
     };
 
@@ -656,7 +661,6 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const changeView = (view: View, groupId: string | null = null) => {
         setCurrentView(view);
         setActiveGroupId(groupId);
-        // Also update URL for deep linking
         const url = new URL(window.location.href);
         url.searchParams.set('view', view);
         if (groupId) {
@@ -664,107 +668,94 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         } else {
              url.searchParams.delete('groupId');
         }
+        if (view !== 'messages') {
+            url.searchParams.delete('conversationId');
+        }
         window.history.pushState({}, '', url);
     }
     
+    const handleReportPost = async (postToReport: Post) => {
+        if (!currentUser) return;
+        const report = {
+            reporter: {
+                uid: currentUser.uid,
+                name: currentUser.name,
+                handle: currentUser.handle,
+            },
+            reportedPost: {
+                id: postToReport.id,
+                authorUid: postToReport.author.uid,
+                content: postToReport.content,
+            },
+            timestamp: serverTimestamp(),
+            status: 'pending',
+        };
+
+        try {
+            await addDoc(collection(db, 'reports'), report);
+            toast({
+                title: 'Post Reported',
+                description: 'Thank you for your feedback. Our team will review this post.',
+            });
+        } catch (error) {
+            console.error("Error reporting post:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not submit report.' });
+        }
+    };
+
+    const handleMuteUser = async (userToMute: Post['author']) => {
+        if (!currentUser) return;
+        const muteRef = doc(db, 'users', currentUser.uid, 'mutedUsers', userToMute.uid);
+        try {
+            await setDoc(muteRef, {
+                name: userToMute.name,
+                handle: userToMute.handle,
+                timestamp: serverTimestamp(),
+            });
+            toast({
+                title: 'User Muted',
+                description: `You will no longer see posts from @${userToMute.handle} in your feeds.`,
+            });
+        } catch (error) {
+            console.error("Error muting user:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not mute user.' });
+        }
+    };
+    
+    const handleUnblockUser = async (uidToUnblock: string) => {
+        if (!currentUser) return;
+        const blockRef = doc(db, 'users', currentUser.uid, 'blockedUsers', uidToUnblock);
+        try {
+            await deleteDoc(blockRef);
+            toast({ title: 'User Unblocked' });
+        } catch (error) {
+            console.error("Error unblocking user:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not unblock user.' });
+        }
+    };
+
     const renderMainContent = () => {
-        if (!currentUser) return <main className="col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></main>;
+        if (!currentUser) return <main className="col-span-12 lg:col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></main>;
+
+        const mutedUids = new Set(mutedUsers.map(u => u.uid));
+        const blockedUids = new Set(blockedUsers.map(u => u.uid));
 
         switch (currentView) {
-            case 'home':
-                return (
-                    <HomeFeed 
-                        currentUser={currentUser}
-                        onReact={handleReact}
-                        onComment={handleOpenComments}
-                        onSavePost={handleSavePost}
-                        onDeletePost={handleDeletePost}
-                        userReactions={userReactions}
-                        savedPostIds={savedPostIds}
-                    />
-                );
-             case 'explore':
-                return <ExploreView 
-                            currentUser={currentUser}
-                            onReact={handleReact}
-                            onComment={handleOpenComments}
-                            onSavePost={handleSavePost}
-                            onDeletePost={handleDeletePost}
-                            userReactions={userReactions}
-                            savedPostIds={savedPostIds}
-                        />;
-            case 'groups':
-                return <GroupsView currentUser={currentUser} onGroupSelect={(groupId) => changeView('group-details', groupId)} />;
-            case 'group-details':
-                 return activeGroupId ? <GroupDetailsView 
-                                            groupId={activeGroupId} 
-                                            currentUser={currentUser}
-                                            onReact={handleReact}
-                                            onComment={handleOpenComments}
-                                            onSavePost={handleSavePost}
-                                            onDeletePost={handleDeletePost}
-                                            userReactions={userReactions}
-                                            savedPostIds={savedPostIds}
-                                        /> : <LoadingComponent />;
-            case 'spaces':
-                return <SpacesView currentUser={currentUser} />;
-            case 'nearby':
-                return <NearbyView 
-                            currentUser={currentUser}
-                            onReact={handleReact}
-                            onComment={handleOpenComments}
-                            onSavePost={handleSavePost}
-                            onDeletePost={handleDeletePost}
-                            userReactions={userReactions}
-                            savedPostIds={savedPostIds}
-                        />;
-            case 'messages':
-                return (
-                    <Suspense fallback={<LoadingComponent />}>
-                        <MessagingView initialConversationId={initialConversationId} />
-                    </Suspense>
-                );
-            case 'saved':
-                return <SavedView 
-                            currentUser={currentUser}
-                            onReact={handleReact}
-                            onComment={handleOpenComments}
-                            onSavePost={handleSavePost}
-                            onDeletePost={handleDeletePost}
-                            userReactions={userReactions}
-                            savedPostIds={savedPostIds}
-                        />;
-            case 'videos':
-                return <VideosView 
-                            currentUser={currentUser}
-                            onReact={handleReact}
-                            onComment={handleOpenComments}
-                            onSavePost={handleSavePost}
-                            onDeletePost={handleDeletePost}
-                            userReactions={userReactions}
-                            savedPostIds={savedPostIds}
-                        />;
-            case 'settings':
-                return (
-                    <SettingsView 
-                        user={currentUser}
-                        onSignOut={onSignOut} 
-                        onUpdateProfile={handleUpdateProfile}
-                        onPasswordReset={handlePasswordReset}
-                        onDeleteAccount={handleDeleteAccount}
-                    />
-                );
-            case 'wallet':
-            case 'monetization':
-                 return <WalletView currentUser={currentUser} />;
-            case 'ai-command-center':
-                 return <AICommandCenterView isProfessional={currentUser.isProfessional} />;
-            case 'story-writer':
-                return <main className="col-span-9"><StoryGeneratorView /></main>;
-            case 'personal-ai':
-                 return <main className="col-span-9"><PersonalAiView /></main>;
-            default:
-                return <main className="col-span-9">Select a view</main>;
+            case 'home': return ( <HomeFeed currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} onReportPost={handleReportPost} onMuteUser={handleMuteUser} mutedUids={mutedUids} blockedUids={blockedUids} /> );
+             case 'explore': return <ExploreView currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} onReportPost={handleReportPost} onMuteUser={handleMuteUser} mutedUids={mutedUids} blockedUids={blockedUids} />;
+            case 'groups': return <GroupsView currentUser={currentUser} onGroupSelect={(groupId) => changeView('group-details', groupId)} />;
+            case 'group-details': return activeGroupId ? <GroupDetailsView groupId={activeGroupId} currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} /> : <LoadingComponent />;
+            case 'spaces': return <SpacesView currentUser={currentUser} />;
+            case 'nearby': return <NearbyView currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} />;
+            case 'messages': return ( <Suspense fallback={<LoadingComponent />}><MessagingView currentUser={currentUser} initialConversationId={initialConversationId} /></Suspense> );
+            case 'saved': return <SavedView currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} />;
+            case 'videos': return <VideosView currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} />;
+            case 'settings': return ( <SettingsView user={currentUser} onSignOut={onSignOut} onUpdateProfile={handleUpdateProfile} onPasswordReset={handlePasswordReset} onDeleteAccount={handleDeleteAccount} blockedUsers={blockedUsers} onUnblockUser={handleUnblockUser} /> );
+            case 'wallet': return <WalletView currentUser={currentUser} />;
+            case 'ai-command-center': return <AICommandCenterView isProfessional={currentUser.isProfessional} />;
+            case 'story-writer': return <main className="col-span-12 lg:col-span-9"><StoryGeneratorView /></main>;
+            case 'personal-ai': return <main className="col-span-12 lg:col-span-9"><PersonalAiView /></main>;
+            default: return <main className="col-span-12 lg:col-span-9">Select a view</main>;
         }
     };
     
@@ -773,23 +764,18 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const fetchSuggestedUsers = useCallback(async () => {
         if (!currentUser?.uid) return;
     
-        // Get the list of users the current user is already following
-        const followingRef = collection(db, 'users', currentUser.uid, 'following');
-        const followingSnapshot = await getDocs(followingRef);
-        const followingIds = new Set(followingSnapshot.docs.map(doc => doc.id));
-        followingIds.add(currentUser.uid); // Also exclude the current user
+        const friendsRef = collection(db, 'users', currentUser.uid, 'friends');
+        const friendsSnap = await getDocs(friendsRef);
+        const friendIds = new Set(friendsSnap.docs.map(d => d.id));
+        friendIds.add(currentUser.uid);
     
-        // In a real large-scale app, you would not fetch all users.
-        // You'd use a more sophisticated recommendation engine or a different query structure.
-        // For this app's scale, we fetch a sample of users and filter them.
         const usersRef = collection(db, 'users');
         const q = query(usersRef, limit(20));
         
         const allUsersSnapshot = await getDocs(q);
         const allUsers = allUsersSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as SuggestedUser));
         
-        // Filter out users already followed or the user themselves
-        const suggestions = allUsers.filter(u => !followingIds.has(u.uid));
+        const suggestions = allUsers.filter(u => !friendIds.has(u.uid));
     
         setSuggestedUsers(suggestions.slice(0, 5));
     }, [currentUser?.uid]);
@@ -802,11 +788,17 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
     const getNotificationLink = (notif: Notification) => {
         switch (notif.type) {
+            case 'friend_request':
+            case 'friend_request_accepted':
             case 'new_follower':
                 return `/profile/${notif.fromUser.handle}`;
             case 'new_reaction':
             case 'new_comment':
                 return `/profile/${notif.postAuthorHandle}`; 
+            case 'new_message':
+                return `/?view=messages&conversationId=${notif.conversationId}`;
+            case 'group_post':
+                return `/?view=group-details&groupId=${notif.groupId}`;
             default:
                 return '#';
         }
@@ -815,29 +807,26 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const renderNotificationText = (notif: Notification) => {
         const from = <span className="font-semibold">{notif.fromUser.name}</span>;
         switch (notif.type) {
-            case 'new_follower':
-                return <>{from} started following you.</>;
-            case 'new_reaction':
-                return <>{from} reacted to your post.</>;
-            case 'new_comment':
-                return <>{from} commented on your post.</>;
-            default:
-                return 'New notification';
+            case 'new_reaction': return <>{from} reacted to your post.</>;
+            case 'new_comment': return <>{from} commented on your post.</>;
+            case 'friend_request': return <>{from} sent you a friend request.</>;
+            case 'new_follower': return <>{from} started following you.</>;
+            case 'friend_request_accepted': return <>{from} accepted your friend request.</>;
+            case 'new_message': return <>{from} sent you a message.</>;
+            case 'group_post': return <>{from} posted in <strong>{notif.groupName}</strong>.</>;
+            default: return 'New notification';
         }
     }
 
      const handleMarkNotificationsRead = async () => {
         if (!currentUser || unreadNotifications === 0) return;
-
         const notifsRef = collection(db, 'users', currentUser.uid, 'notifications');
         const unreadQuery = query(notifsRef, where('read', '==', false));
         
         try {
             const snapshot = await getDocs(unreadQuery);
             const batch = writeBatch(db);
-            snapshot.docs.forEach(doc => {
-                batch.update(doc.ref, { read: true });
-            });
+            snapshot.docs.forEach(doc => batch.update(doc.ref, { read: true }));
             await batch.commit();
         } catch (error) {
             console.error("Error marking notifications as read:", error);
@@ -845,17 +834,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     };
     
     if (!currentUser) {
-        return (
-            <div className="flex min-h-screen items-center justify-center bg-background">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-        );
+        return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
     return (
         <TooltipProvider>
-            <div className="min-h-screen bg-secondary/40">
-                <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
+            <div className="min-h-screen bg-secondary">
+                <header className="sticky top-0 z-40 w-full border-b bg-background">
                     <div className="container flex items-center justify-between h-16">
                     <Link href="/" className="flex items-center gap-2" onClick={() => changeView('home')}>
                         <Image src="/logo.png" alt="Lonkind Logo" width={32} height={32} />
@@ -864,21 +849,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <div className="flex-1 max-w-xs sm:max-w-sm md:max-w-md" ref={searchContainerRef}>
                         <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input 
-                            placeholder="Search Lonkind" 
-                            className="pl-10" 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onFocus={() => setIsSearchFocused(true)}
-                        />
+                        <Input placeholder="Search Lonkind" className="pl-10" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setIsSearchFocused(true)} />
                         {isSearchFocused && searchQuery && (
                             <Card className="absolute top-full mt-2 w-full shadow-lg z-50 max-h-[60vh] overflow-y-auto">
                                 <CardContent className="p-2">
-                                    {isSearchLoading ? (
-                                        <div className="flex items-center justify-center p-4">
-                                            <Loader2 className="h-5 w-5 animate-spin" />
-                                        </div>
-                                    ) : (
+                                    {isSearchLoading ? ( <div className="flex items-center justify-center p-4"><Loader2 className="h-5 w-5 animate-spin" /></div> ) : (
                                         <>
                                             {userSearchResults.length > 0 && (
                                                 <div className="space-y-1">
@@ -927,178 +902,97 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         </div>
                     </div>
                     <div className="flex items-center gap-1 sm:gap-2">
-                         <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button 
-                                    variant={currentView === 'home' ? 'secondary' : 'ghost'} 
-                                    size="icon" 
-                                    onClick={() => changeView('home')}
-                                >
-                                    <Home className="h-6 w-6" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Home</p></TooltipContent>
-                        </Tooltip>
-                         <Tooltip>
-                            <TooltipTrigger asChild>
-                                 <Button 
-                                    variant={currentView === 'explore' ? 'secondary' : 'ghost'} 
-                                    size="icon" 
-                                    onClick={() => changeView('explore')}
-                                >
-                                    <Compass className="h-6 w-6" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Explore</p></TooltipContent>
-                        </Tooltip>
-                         <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button 
-                                    variant={currentView === 'messages' ? 'secondary' : 'ghost'} 
-                                    size="icon" 
-                                    onClick={() => changeView('messages')}
-                                >
-                                    <MessageSquare className="h-6 w-6" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Messages</p></TooltipContent>
-                        </Tooltip>
+                         <div className="hidden lg:flex">
+                             <Tooltip><TooltipTrigger asChild><Button variant={currentView === 'home' ? 'secondary' : 'ghost'} size="icon" onClick={() => changeView('home')}><Home className="h-6 w-6" /></Button></TooltipTrigger><TooltipContent><p>Home</p></TooltipContent></Tooltip>
+                             <Tooltip><TooltipTrigger asChild><Button variant={currentView === 'explore' ? 'secondary' : 'ghost'} size="icon" onClick={() => changeView('explore')}><Compass className="h-6 w-6" /></Button></TooltipTrigger><TooltipContent><p>Explore</p></TooltipContent></Tooltip>
+                             <Tooltip><TooltipTrigger asChild><Button variant={currentView === 'messages' ? 'secondary' : 'ghost'} size="icon" onClick={() => changeView('messages')}><MessageSquare className="h-6 w-6" /></Button></TooltipTrigger><TooltipContent><p>Messages</p></TooltipContent></Tooltip>
+                         </div>
                         
                         {isClient && <Popover onOpenChange={(open) => { if(open) handleMarkNotificationsRead() } }>
                             <PopoverTrigger asChild>
                                 <Button variant="ghost" size="icon" className="relative">
                                     <Bell className="h-6 w-6" />
-                                    {unreadNotifications > 0 && (
-                                        <span className="absolute top-0 right-0 h-4 w-4 text-xs font-bold text-white bg-red-500 rounded-full flex items-center justify-center">
-                                            {unreadNotifications}
-                                        </span>
-                                    )}
+                                    {unreadNotifications > 0 && ( <span className="absolute top-0 right-0 h-4 w-4 text-xs font-bold text-white bg-red-500 rounded-full flex items-center justify-center">{unreadNotifications}</span> )}
                                     <span className="sr-only">Notifications</span>
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-80 p-0">
                                <Card>
-                                 <CardHeader>
-                                    <CardTitle>Notifications</CardTitle>
-                                 </CardHeader>
+                                 <CardHeader><CardTitle>Notifications</CardTitle></CardHeader>
                                  <CardContent className="max-h-[400px] overflow-y-auto">
                                    {notifications.length > 0 ? (
                                         notifications.map(notif => (
                                             <Link href={getNotificationLink(notif)} key={notif.id} className="block">
-                                                <div className="flex flex-col gap-2 p-3 border-b last:border-b-0 hover:bg-accent/50">
+                                                <div className={cn("flex flex-col gap-2 p-3 border-b last:border-b-0 hover:bg-accent/50", !notif.read && "bg-blue-500/10")}>
                                                     <div className="flex items-start gap-3">
                                                         <div className="text-primary mt-1">
-                                                            {notif.type === 'new_follower' && <UserPlus className="h-6 w-6" />}
+                                                            {notif.type === 'friend_request' && <UserPlus className="h-6 w-6" />}
+                                                            {notif.type === 'friend_request_accepted' && <UserCheck className="h-6 w-6" />}
+                                                            {notif.type === 'new_follower' && <Heart className="h-6 w-6" />}
                                                             {notif.type === 'new_reaction' && <Heart className="h-6 w-6" />}
                                                             {notif.type === 'new_comment' && <MessageSquare className="h-6 w-6" />}
+                                                            {notif.type === 'new_message' && <MessageSquare className="h-6 w-6" />}
+                                                            {notif.type === 'group_post' && <Users className="h-6 w-6" />}
                                                         </div>
                                                         <div className="flex-1">
-                                                            <Avatar className="inline-block h-8 w-8 mr-2">
-                                                                <AvatarImage src={notif.fromUser.avatarUrl} alt={notif.fromUser.name} data-ai-hint="user avatar" />
-                                                                <AvatarFallback>{notif.fromUser.name.charAt(0)}</AvatarFallback>
-                                                            </Avatar>
+                                                            <Avatar className="inline-block h-8 w-8 mr-2"><AvatarImage src={notif.fromUser.avatarUrl} alt={notif.fromUser.name} data-ai-hint="user avatar" /><AvatarFallback>{notif.fromUser.name.charAt(0)}</AvatarFallback></Avatar>
                                                             {renderNotificationText(notif)}
-                                                            <p className="text-xs text-muted-foreground mt-1">
-                                                                {notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate()) : '...'} ago
-                                                            </p>
+                                                            <p className="text-xs text-muted-foreground mt-1">{notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate()) : '...'} ago</p>
+                                                            {notif.type === 'friend_request' && (
+                                                                <Button size="sm" className="mt-2" onClick={(e) => handleAcceptFriendRequest(notif, e)}>
+                                                                    Accept Request
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </Link>
                                         ))
-                                   ) : (
-                                     <p className="text-center text-muted-foreground p-4">No new notifications.</p>
-                                   )}
+                                   ) : ( <p className="text-center text-muted-foreground p-4">No new notifications.</p> )}
                                  </CardContent>
                                </Card>
                             </PopoverContent>
                         </Popover>}
                         <Popover>
                              <PopoverTrigger asChild>
-                                 <Button variant="ghost" size="icon">
-                                    <Avatar className="h-8 w-8">
-                                        <AvatarImage src={currentUser.avatarUrl} alt={currentUser.name} />
-                                        <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                 </Button>
+                                 <Button variant="ghost" size="icon"><Avatar className="h-8 w-8"><AvatarImage src={currentUser.avatarUrl} alt={currentUser.name} /><AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback></Avatar></Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-56 p-2">
-                                <Link href={`/profile/${currentUser.handle}`}>
-                                  <Button asChild variant='ghost' className="w-full justify-start">
-                                    <span><User className="mr-2 h-4 w-4" />My Profile</span>
-                                  </Button>
-                                </Link>
-                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('wallet')}>
-                                    <Wallet className="mr-2 h-4 w-4" />
-                                    My Wallet
-                                </Button>
-                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('saved')}>
-                                    <Bookmark className="mr-2 h-4 w-4" />
-                                    Saved
-                                </Button>
-                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('settings')}>
-                                    <Cog className="mr-2 h-4 w-4" />
-                                    Settings
-                                </Button>
-                                <Button variant='ghost' className="w-full justify-start" onClick={onSignOut}>
-                                    <LogOut className="mr-2 h-4 w-4" />
-                                    Sign Out
-                                </Button>
+                                <Link href={`/profile/${currentUser.handle}`}><Button asChild variant='ghost' className="w-full justify-start"><span><User className="mr-2 h-4 w-4" />My Profile</span></Button></Link>
+                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('wallet')}><Wallet className="mr-2 h-4 w-4" />My Wallet</Button>
+                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('saved')}><Bookmark className="mr-2 h-4 w-4" />Saved</Button>
+                                <Button variant='ghost' className="w-full justify-start" onClick={() => changeView('settings')}><Cog className="mr-2 h-4 w-4" />Settings</Button>
+                                <Button variant='ghost' className="w-full justify-start" onClick={onSignOut}><LogOut className="mr-2 h-4 w-4" />Sign Out</Button>
                             </PopoverContent>
                         </Popover>
                     </div>
                     </div>
                 </header>
                 
-                <div className="container grid grid-cols-12 gap-8 py-8">
+                <div className="container grid grid-cols-12 gap-8 py-8 pb-24 lg:pb-8">
                     <aside className="hidden lg:block lg:col-span-3">
                          <Card>
                             <CardContent className="p-2">
                                 <nav className="flex flex-col gap-1">
-                                    <Button variant={currentView === 'home' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('home')}>
-                                        <Home className="h-5 w-5" /> Home
-                                    </Button>
-                                    <Button variant={currentView === 'explore' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('explore')}>
-                                        <Compass className="h-5 w-5" /> Explore
-                                    </Button>
-                                    <Button variant={currentView === 'groups' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('groups')}>
-                                        <Users className="h-5 w-5" /> Groups
-                                    </Button>
-                                    <Button variant={currentView === 'spaces' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('spaces')}>
-                                        <Radio className="h-5 w-5" /> Spaces
-                                    </Button>
-                                     <Button variant={currentView === 'videos' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('videos')}>
-                                        <Video className="h-5 w-5" /> Videos
-                                    </Button>
-                                     <Link href={`/profile/${currentUser.handle}`} className="w-full">
-                                        <Button variant='ghost' className="w-full justify-start gap-2">
-                                            <User className="h-5 w-5" /> My Profile
-                                        </Button>
-                                     </Link>
-                                     <Button variant={currentView === 'monetization' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('monetization')} disabled={!currentUser.isProfessional}>
-                                        <DollarSign className="h-5 w-5" /> Monetization
-                                    </Button>
-                                    <Button variant={currentView === 'ai-command-center' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('ai-command-center')}>
-                                        <Sparkles className="h-5 w-5" /> AI Command Center
-                                    </Button>
-                                    <Button variant={currentView === 'personal-ai' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('personal-ai')}>
-                                        <BrainCircuit className="h-5 w-5" /> Personal AI
-                                    </Button>
+                                    <Button variant={currentView === 'home' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('home')}><Home className="h-5 w-5" /> Home</Button>
+                                    <Button variant={currentView === 'explore' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('explore')}><Compass className="h-5 w-5" /> Explore</Button>
+                                    <Button variant={currentView === 'groups' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('groups')}><Users className="h-5 w-5" /> Groups</Button>
+                                    <Button variant={currentView === 'spaces' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('spaces')}><Radio className="h-5 w-5" /> Spaces</Button>
+                                    <Button variant={currentView === 'videos' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('videos')}><Video className="h-5 w-5" /> Videos</Button>
+                                    <Button variant={currentView === 'wallet' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('wallet')}><Wallet className="h-5 w-5" /> Wallet</Button>
+                                    <Link href={`/profile/${currentUser.handle}`} className="w-full"><Button variant='ghost' className="w-full justify-start gap-2"><User className="h-5 w-5" /> My Profile</Button></Link>
+                                    <Button variant={currentView === 'ai-command-center' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('ai-command-center')}><Sparkles className="h-5 w-5" /> AI Command Center</Button>
                                 </nav>
                             </CardContent>
                         </Card>
                     </aside>
         
-                    {isClient ? <Suspense fallback={<LoadingComponent />}>
-                        {renderMainContent()}
-                    </Suspense> : <LoadingComponent />}
+                    {isClient ? <Suspense fallback={<LoadingComponent />}>{renderMainContent()}</Suspense> : <LoadingComponent />}
                     
                     {currentView === 'home' && isClient && (
                         <aside className="hidden md:block md:col-span-4 lg:col-span-3">
                             <Card>
-                                <CardHeader>
-                                    <CardTitle>People to Follow</CardTitle>
-                                </CardHeader>
+                                <CardHeader><CardTitle>Suggested Friends</CardTitle></CardHeader>
                                 <CardContent>
                                 <div className="space-y-4">
                                     {suggestedUsers.length > 0 ? (
@@ -1110,22 +1004,17 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                                         <AvatarFallback>{(suggestedUser.name || 'U').charAt(0)}</AvatarFallback>
                                                     </Avatar>
                                                     <div>
-                                                        <Link href={`/profile/${suggestedUser.handle}`} className="font-semibold hover:underline">{suggestedUser.name || 'User'}</Link>
-                                                        <p className="text-muted-foreground text-sm">@{suggestedUser.handle}</p>
+                                                        <Link href={`/profile/${suggestedUser.handle}`} className="font-semibold hover:underline">{suggestedUser.name || 'Unknown User'}</Link>
+                                                        <p className="text-muted-foreground text-sm">@{suggestedUser.handle || 'unknown'}</p>
                                                     </div>
                                                 </div>
-                                                <Button 
-                                                    size="sm" 
-                                                    variant='outline'
-                                                    onClick={() => handleFollow(suggestedUser)}
-                                                >
-                                                    Follow
+                                                <Button size="sm" variant='outline' onClick={() => handleAddFriend(suggestedUser)} disabled={sentFriendRequests.has(suggestedUser.uid)}>
+                                                    <UserPlus className="mr-2 h-4 w-4" />
+                                                    {sentFriendRequests.has(suggestedUser.uid) ? 'Sent' : 'Add'}
                                                 </Button>
                                             </div>
                                         ))
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground text-center py-4">No new people to follow right now. Check back later!</p>
-                                    )}
+                                    ) : ( <p className="text-sm text-muted-foreground text-center py-4">No new suggestions right now. Check back later!</p> )}
                                 </div>
                                 </CardContent>
                             </Card>
@@ -1133,18 +1022,41 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     )}
                 </div>
                 
-                {isClient && currentUser && <Suspense>
+                 {isClient && currentUser && <Suspense>
                     <CommentSheet 
                         post={selectedPostForComments}
-                        onOpenChange={(isOpen) => {
-                            if (!isOpen) {
-                                setSelectedPostForComments(null);
-                            }
-                        }}
+                        onOpenChange={(isOpen) => { if (!isOpen) setSelectedPostForComments(null); }}
                         onCommentSubmit={(postId, commentText) => handleComment(postId, commentText)}
                         currentUser={currentUser}
                     />
                 </Suspense>}
+                
+                 {isClient && currentUser && (
+                    <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background p-1 lg:hidden">
+                        <div className="grid h-full max-w-lg grid-cols-5 mx-auto">
+                            <Button variant={currentView === 'home' ? 'secondary' : 'ghost'} className="flex h-auto flex-col gap-1 rounded-md p-2" onClick={() => changeView('home')}>
+                                <Home className="h-5 w-5" />
+                                <span className="text-xs">Home</span>
+                            </Button>
+                            <Button variant={currentView === 'explore' ? 'secondary' : 'ghost'} className="flex h-auto flex-col gap-1 rounded-md p-2" onClick={() => changeView('explore')}>
+                                <Compass className="h-5 w-5" />
+                                <span className="text-xs">Explore</span>
+                            </Button>
+                            <Button variant={currentView === 'wallet' ? 'secondary' : 'ghost'} className="flex h-auto flex-col gap-1 rounded-md p-2" onClick={() => changeView('wallet')}>
+                                <Wallet className="h-5 w-5" />
+                                <span className="text-xs">Wallet</span>
+                            </Button>
+                            <Button variant={currentView === 'ai-command-center' ? 'secondary' : 'ghost'} className="flex h-auto flex-col gap-1 rounded-md p-2" onClick={() => changeView('ai-command-center')}>
+                                <Sparkles className="h-5 w-5" />
+                                <span className="text-xs">AI</span>
+                            </Button>
+                            <Link href={`/profile/${currentUser.handle}`} className="flex h-auto flex-col items-center justify-center gap-1 rounded-md p-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground">
+                                <User className="h-5 w-5" />
+                                <span className="text-xs">Profile</span>
+                            </Link>
+                        </div>
+                    </div>
+                )}
             </div>
         </TooltipProvider>
     );
@@ -1157,4 +1069,3 @@ export default function SocialDashboard({ user, onSignOut }: SocialDashboardProp
     </Suspense>
   )
 }
-

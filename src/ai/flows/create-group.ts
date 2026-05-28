@@ -26,7 +26,8 @@ const CreateGroupInputSchema = z.object({
 export type CreateGroupInput = z.infer<typeof CreateGroupInputSchema>;
 
 const CreateGroupOutputSchema = z.object({
-  groupId: z.string(),
+  groupId: z.string().optional(),
+  coverUrl: z.string().optional(),
 });
 export type CreateGroupOutput = z.infer<typeof CreateGroupOutputSchema>;
 
@@ -43,23 +44,15 @@ const createGroupFlow = ai.defineFlow(
     outputSchema: CreateGroupOutputSchema,
   },
   async ({ name, description, creator }) => {
-    // Generate a cover image based on the group name.
-    const imageResult = await generateImage({ 
-        prompt: `A vibrant and abstract background image for a social media group called "${name}". Digital art, header image.` 
-    });
-
-    const groupsCollectionRef = collection(db, 'groups');
-    
-    const newGroupDoc = await addDoc(groupsCollectionRef, {
-        name,
-        description,
-        coverUrl: imageResult.imageUrl,
-        createdAt: serverTimestamp(),
-        createdBy: creator.uid,
-        memberCount: 1,
-        members: [creator.uid],
-    });
-      
-    return { groupId: newGroupDoc.id };
+    let coverUrl = "";
+    try {
+        const imageResult = await generateImage({ 
+            prompt: `A vibrant and abstract background image for a social media group called "${name}". Digital art, header image.` 
+        });
+        coverUrl = imageResult.imageUrl;
+    } catch (e) {
+        console.warn("Failed to generate group cover image. Using fallback.", e);
+    }
+    return { groupId: "", coverUrl };
   }
 );

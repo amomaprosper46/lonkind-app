@@ -15,6 +15,8 @@ import type { CurrentUser } from './social-dashboard';
 import { createGroup } from '@/ai/flows/create-group';
 import { Loader2 } from 'lucide-react';
 import { PulseLoader } from 'react-spinners';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface CreateGroupDialogProps {
     isOpen: boolean;
@@ -41,6 +43,7 @@ export default function CreateGroupDialog({ isOpen, onOpenChange, currentUser }:
     const handleCreateGroup = async (values: z.infer<typeof groupSchema>) => {
         setIsCreating(true);
         try {
+            // First, generate the cover image using AI (Server Action)
             const result = await createGroup({
                 name: values.name,
                 description: values.description,
@@ -50,6 +53,19 @@ export default function CreateGroupDialog({ isOpen, onOpenChange, currentUser }:
                     handle: currentUser.handle,
                 },
             });
+            
+            // Second, save to Firestore from the client using the authenticated user
+            const groupsCollectionRef = collection(db, 'groups');
+            await addDoc(groupsCollectionRef, {
+                name: values.name,
+                description: values.description,
+                coverUrl: result.coverUrl || 'https://placehold.co/800x400?text=New+Group',
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.uid,
+                memberCount: 1,
+                members: [currentUser.uid],
+            });
+
             toast({
                 title: 'Group Created!',
                 description: `Your new group "${values.name}" is now live.`,

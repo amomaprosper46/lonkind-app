@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://unpkg.com/lottie-web@5.7.4/build/player/lottie.min.js"></script>
+
+  <style>
+    body {
+      background: black;
+      overflow: hidden;
+    }
+
+    #gift {
+      width: 300px;
+      height: 300px;
+      margin: auto;
+      position: absolute;
+      top: 30%;
+      left: 35%;
+    }
+
+    #brand {
+      position: absolute;
+      top: 10%;
+      left: 35%;
+      font-size: 28px;
+      color: gold;
+      font-weight: bold;
+      text-shadow: 0 0 10px gold;
+    }
+
+    #userText {
+      position: absolute;
+      top: 70%;
+      left: 30%;
+      font-size: 20px;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="brand">✨ LONKIND ✨</div>
+
+<div id="gift"></div>
+
+<div id="userText">
+  Prosper sent Unicorn Blessing 🦄
+</div>
+
+<script>
+  lottie.loadAnimation({
+    container: document.getElementById('gift'),
+    renderer: 'svg',
+    loop: false,
+    autoplay: true,
+    path: 'unicorn-animation.json'
+  });
+
+  setTimeout(() => {
+    document.getElementById("gift").style.display = "none";
+    document.getElementById("userText").style.display = "none";
+  }, 4000);
+</script>
+
+</body>
+</html>

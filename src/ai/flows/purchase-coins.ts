@@ -39,38 +39,19 @@ const purchaseCoinsFlow = ai.defineFlow(
   },
   async ({ userId, coinAmount }) => {
     try {
-      await runTransaction(db, async (transaction) => {
-        // In a real app, you would process payment with a gateway like Paystack here first.
-        // For this simulation, we assume payment was successful.
-
-        const amountNaira = coinAmount * NAIRA_PER_COIN;
-
-        // 1. Create a transaction record.
-        const txRef = doc(collection(db, 'transactions'));
-        transaction.set(txRef, {
-            userId: userId,
-            amountNaira: amountNaira,
-            coinsAdded: coinAmount,
-            status: "success",
-            time: serverTimestamp(),
-        });
-
-        // 2. Update the user's coin balance.
-        const userRef = doc(db, 'users', userId);
-        transaction.update(userRef, {
-            coins: increment(coinAmount),
-        });
-      });
-
+      // In a real application, you would process payment with a gateway like Paystack or Stripe here.
+      // Since this is a simulation, we assume payment was successful.
+      // The actual database transaction has been moved to the client side to avoid unauthenticated Admin errors.
+      
       return {
         success: true,
         message: `Successfully purchased ${coinAmount} coins.`,
       };
     } catch (error: any) {
-      console.error('Coin purchase transaction failed:', error);
+      console.error('Coin purchase simulation failed:', error);
       return {
         success: false,
-        message: 'An error occurred while purchasing coins.',
+        message: 'An error occurred while simulating coin purchase.',
       };
     }
   }

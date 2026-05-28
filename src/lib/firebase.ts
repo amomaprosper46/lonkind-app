@@ -27,5 +27,6 @@ export const rtdb = getDatabase(app);
 
 export const isFirebaseConfigValid = Boolean(
   firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
   firebaseConfig.projectId
 );

@@ -1,45 +1,28 @@
-import withPWA from "@ducanh2912/next-pwa";
-
-const pwa = withPWA({
-  dest: "public",
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
-});
-
 /** @type {import('next').NextConfig} */
-const nextConfig = pwa({
-  // Next 14 still uses experimental.serverComponentsExternalPackages
-
+const nextConfig = {
   images: {
-    unoptimized: true,
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "picsum.photos",
-        port: "",
-        pathname: "/**",
+        protocol: 'https',
+        hostname: 'picsum.photos',
+        port: '',
+        pathname: '/**',
       },
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-        port: "",
-        pathname: "/**",
-      },
+       {
+        protocol: 'https',
+        hostname: 'placehold.co',
+        port: '',
+        pathname: '/**',
+      }
     ],
   },
-
   typescript: {
+    // This is a workaround for the "JavaScript heap out of memory" error.
+    // It allows the production build to complete by skipping the memory-intensive
+    // type-checking step.
     ignoreBuildErrors: true,
   },
+  outputFileTracing: false,
+};
 
-  // serverActions now lives inside experimental
-  experimental: {
-    serverComponentsExternalPackages: ['firebase-admin', 'genkit', '@genkit-ai/core', '@genkit-ai/google-genai'],
-    serverActions: {
-      bodySizeLimit: "4.5mb",
-    },
-  },
-});
-
-export default nextConfig;
+module.exports = nextConfig;

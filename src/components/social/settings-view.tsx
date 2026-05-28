@@ -18,30 +18,15 @@ import { Textarea } from '../ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { submitSupportTicket } from '@/ai/flows/submit-support-ticket';
 import { toast } from '@/hooks/use-toast';
-import { requestPayout } from '@/ai/flows/request-payout';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { ProfileData } from './edit-profile-dialog';
-import { Badge } from '../ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Switch } from '../ui/switch';
+import WalletView from './wallet-view';
+import type { CurrentUser } from './social-dashboard';
 
-
-interface User {
-    uid: string;
-    name: string;
-    email: string | null;
-    isProfessional?: boolean;
-    balance?: number;
-}
 
 interface SettingsViewProps {
-    user: User;
+    user: CurrentUser;
     onSignOut: () => void;
     onUpdateProfile: (data: ProfileData) => Promise<boolean>;
     onPasswordReset: () => Promise<void>;
@@ -53,21 +38,13 @@ const supportFormSchema = z.object({
   message: z.string().min(20, { message: "Message must be at least 20 characters." }),
 });
 
-const payoutFormSchema = z.object({
-    paymentMethod: z.string({ required_error: "Please select a payment method." }),
-    paymentDetails: z.string().min(5, { message: "Please enter valid payment details." }),
-});
-
 export default function SettingsView({ user, onSignOut, onUpdateProfile, onPasswordReset, onDeleteAccount }: SettingsViewProps) {
     const { theme, setTheme } = useTheme();
     const [displayName, setDisplayName] = useState(user.name);
     const [isSavingName, setIsSavingName] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
-    const [isRequestingPayout, setIsRequestingPayout] = useState(false);
     
-    const currentBalance = user.balance || 0;
-
     // Mocked privacy settings
     const [lastSeenVisible, setLastSeenVisible] = useState(true);
     const [ghostMode, setGhostMode] = useState(false);
@@ -81,11 +58,6 @@ export default function SettingsView({ user, onSignOut, onUpdateProfile, onPassw
         defaultValues: { subject: '', message: '' },
     });
     
-    const payoutForm = useForm<z.infer<typeof payoutFormSchema>>({
-        resolver: zodResolver(payoutFormSchema),
-        defaultValues: { paymentMethod: undefined, paymentDetails: '' },
-    });
-
 
     const handleNameSave = async () => {
         if (displayName === user.name || displayName.trim() === '') return;
@@ -121,30 +93,6 @@ export default function SettingsView({ user, onSignOut, onUpdateProfile, onPassw
             setIsSubmittingTicket(false);
         }
     };
-    
-    const handlePayoutRequest = async (values: z.infer<typeof payoutFormSchema>) => {
-        setIsRequestingPayout(true);
-        try {
-            const result = await requestPayout({
-                userId: user.uid,
-                amount: currentBalance,
-                paymentMethod: values.paymentMethod,
-                paymentDetails: values.paymentDetails,
-            });
-
-            if (result.success) {
-                toast({ title: 'Payout Requested!', description: result.message });
-                payoutForm.reset();
-            } else {
-                 toast({ variant: 'destructive', title: 'Payout Failed', description: result.message });
-            }
-        } catch(e) {
-            console.error(e);
-            toast({ variant: 'destructive', title: 'Payout Failed', description: 'An unexpected error occurred.' });
-        } finally {
-            setIsRequestingPayout(false);
-        }
-    };
 
     const handleUnblockUser = (userId: string) => {
         // This is a mock implementation
@@ -160,11 +108,10 @@ export default function SettingsView({ user, onSignOut, onUpdateProfile, onPassw
             </header>
 
             <Tabs defaultValue="account" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="account"><SettingsIcon className="mr-2 h-4 w-4" />Account</TabsTrigger>
                     <TabsTrigger value="appearance">Appearance</TabsTrigger>
                     <TabsTrigger value="privacy"><Shield className="mr-2 h-4 w-4" />Privacy</TabsTrigger>
-                    {user.isProfessional && <TabsTrigger value="monetization"><DollarSign className="mr-2 h-4 w-4" />Monetization</TabsTrigger>}
                     <TabsTrigger value="support"><HelpCircle className="mr-2 h-4 w-4" />Support</TabsTrigger>
                 </TabsList>
 
@@ -298,69 +245,6 @@ export default function SettingsView({ user, onSignOut, onUpdateProfile, onPassw
                         </CardContent>
                     </Card>
                 </TabsContent>
-                
-                {user.isProfessional && (
-                    <TabsContent value="monetization" className="mt-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Monetization</CardTitle>
-                                <CardDescription>Manage your earnings and payout settings.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                               <div className="p-4 rounded-lg bg-muted flex items-center justify-between mb-6">
-                                   <div>
-                                       <p className="text-sm font-medium text-muted-foreground">Available Balance</p>
-                                       <p className="text-3xl font-bold">${currentBalance.toFixed(2)}</p>
-                                   </div>
-                                   <BadgeCheck className="h-10 w-10 text-primary" />
-                               </div>
-                               <Form {...payoutForm}>
-                                   <form onSubmit={payoutForm.handleSubmit(handlePayoutRequest)} className="space-y-6">
-                                       <FormField
-                                            control={payoutForm.control}
-                                            name="paymentMethod"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                <FormLabel>Payment Method</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                    <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select a payout method" />
-                                                    </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        <SelectItem value="paypal">PayPal</SelectItem>
-                                                        <SelectItem value="payoneer">Payoneer</SelectItem>
-                                                        <SelectItem value="bank">International Bank Transfer</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                         <FormField
-                                            control={payoutForm.control}
-                                            name="paymentDetails"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Payment Details</FormLabel>
-                                                    <FormControl>
-                                                        <Input placeholder="e.g., PayPal email or IBAN/SWIFT" {...field} />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <Button type="submit" className="w-full" disabled={isRequestingPayout || currentBalance <= 0}>
-                                            {isRequestingPayout && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                            Request Payout of ${currentBalance.toFixed(2)}
-                                        </Button>
-                                   </form>
-                               </Form>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                )}
 
                 <TabsContent value="support" className="mt-6">
                     <Card>
@@ -458,3 +342,5 @@ export default function SettingsView({ user, onSignOut, onUpdateProfile, onPassw
         </main>
     );
 }
+
+    

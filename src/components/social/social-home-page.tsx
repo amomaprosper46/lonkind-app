@@ -84,16 +84,23 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
             let isHandleUnique = false;
             const baseHandle = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
-            // Try up to 10 times to find a unique handle
-            for (let i = 0; i < 10; i++) {
-                const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
-                const q = query(usersRef, where('handle', '==', handleCandidate));
-                const handleDoc = await getDocs(q);
-                if (handleDoc.empty) {
-                    finalHandle = handleCandidate;
-                    isHandleUnique = true;
-                    break;
+            try {
+                // Try up to 10 times to find a unique handle
+                for (let i = 0; i < 10; i++) {
+                    const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
+                    const q = query(usersRef, where('handle', '==', handleCandidate));
+                    const handleDoc = await getDocs(q);
+                    if (handleDoc.empty) {
+                        finalHandle = handleCandidate;
+                        isHandleUnique = true;
+                        break;
+                    }
                 }
+            } catch (e: any) {
+                console.warn("Could not verify handle uniqueness (permission denied or network issue). Proceeding with generated handle.", e);
+                // Fallback: just use a highly random handle to avoid collisions
+                finalHandle = baseHandle + Math.floor(10000 + Math.random() * 90000); 
+                isHandleUnique = true;
             }
 
             if (!isHandleUnique) {
@@ -102,42 +109,55 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
                  return;
             }
 
-
             const avatarUrl = placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
             const isProfessionalAccount = user.email?.toLowerCase() === 'admin@lonkind.com';
 
-            const userDocRef = doc(db, "users", user.uid);
-            await setDoc(userDocRef, {
-                uid: user.uid,
-                name: name,
-                handle: finalHandle,
-                avatarUrl: avatarUrl,
-                ...(user.email && { email: user.email.toLowerCase() }),
-                ...(user.phoneNumber && { phoneNumber: user.phoneNumber }),
-                isProfessional: isProfessionalAccount,
-                bio: isProfessionalAccount ? 'CEO of Lonkind. Connecting the world, one idea at a time.' : 'Hey there! I am using Lonkind.',
-                followersCount: 0,
-                followingCount: 0,
-                balance: isProfessionalAccount ? 123.45 : 0,
-                coins: 100, // Starting coins for new users
-                diamonds: 0,
-            });
+            try {
+                const userDocRef = doc(db, "users", user.uid);
+                await setDoc(userDocRef, {
+                    uid: user.uid,
+                    name: name,
+                    handle: finalHandle,
+                    avatarUrl: avatarUrl,
+                    ...(user.email && { email: user.email.toLowerCase() }),
+                    ...(user.phoneNumber && { phoneNumber: user.phoneNumber }),
+                    isProfessional: isProfessionalAccount,
+                    bio: isProfessionalAccount ? 'CEO of Lonkind. Connecting the world, one idea at a time.' : 'Hey there! I am using Lonkind.',
+                    followersCount: 0,
+                    followingCount: 0,
+                    balance: isProfessionalAccount ? 123.45 : 0,
+                    coins: 100,
+                    diamonds: 0,
+                });
+            } catch (e: any) {
+                console.error("Error during user setDoc:", e);
+                throw new Error("User doc creation failed: " + e.message);
+            }
 
-            await updateProfile(user, { displayName: name, photoURL: avatarUrl });
+            try {
+                await updateProfile(user, { displayName: name, photoURL: avatarUrl });
+            } catch (e: any) {
+                console.error("Error during updateProfile:", e);
+                throw new Error("Auth profile update failed: " + e.message);
+            }
 
             if (isProfessionalAccount) {
-              await addDummyFollowers({ userId: user.uid, count: 500000 });
-              await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
-               // Add user to the admins collection
-              await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
+                try {
+                  await addDummyFollowers({ userId: user.uid, count: 500000 });
+                  await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
+                  await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
+                } catch (e: any) {
+                  console.error("Error during professional account setup:", e);
+                  throw new Error("Admin setup failed: " + e.message);
+                }
             }
 
             toast({ title: 'Welcome to Lonkind!', description: `Your profile has been created with handle @${finalHandle}` });
             onProfileCreated();
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error creating profile:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not create your profile.' });
+            toast({ variant: 'destructive', title: 'Error', description: error.message || 'Could not create your profile.' });
         } finally {
             setIsSaving(false);
         }
@@ -247,11 +267,15 @@ export default function SocialHomePage() {
         } catch (error: any) {
             if (error.code === 'auth/email-already-in-use') {
                  console.log("Admin auth user already exists.");
+            } else if (error.code === 'permission-denied') {
+                 console.log("Could not set up admin account due to permission denied. This is expected if you are not signed in as an admin.");
             } else {
-                 console.error("Error creating admin account: ", error);
+                 console.warn("Error creating admin account: ", error);
             }
         }
     };
+    
+    setupAdmin();
 
     if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {

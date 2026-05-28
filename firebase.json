@@ -1,4 +1,3 @@
-
 {
   "firestore": {
     "rules": "firestore.rules",
@@ -8,20 +7,11 @@
     "rules": "database.rules.json"
   },
   "hosting": {
-    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
-    "rewrites": [
-      {
-        "source": "**",
-        "function": "server"
-      }
-    ]
-  },
-  "functions": {
     "source": "."
   }
 }
