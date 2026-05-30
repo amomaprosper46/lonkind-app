@@ -394,17 +394,12 @@ export default function UserProfilePage() {
             const conversationsRef = collection(db, 'conversations');
             const participantUids = [currentUser.uid, profileUser.uid].sort();
 
-            const q = query(conversationsRef, where('participantUids', 'array-contains', currentUser.uid));
+            const q = query(conversationsRef, where('participantUids', '==', participantUids));
             const querySnapshot = await getDocs(q);
 
             let conversationId;
-            const existingDoc = querySnapshot.docs.find(doc => {
-                const uids = doc.data().participantUids || [];
-                return uids.length === participantUids.length && uids.includes(profileUser.uid);
-            });
-
-            if (existingDoc) {
-                conversationId = existingDoc.id;
+            if (!querySnapshot.empty) {
+                conversationId = querySnapshot.docs[0].id;
             } else {
                 const newDoc = await addDoc(conversationsRef, {
                     participantUids,

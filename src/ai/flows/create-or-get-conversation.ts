@@ -48,12 +48,17 @@ const createOrGetConversationFlow = ai.defineFlow(
     const participantUids = [currentUser.uid, targetUser.uid].sort();
 
     // Check if a conversation already exists
-    const q = query(conversationsRef, where('participantUids', '==', participantUids));
+    const q = query(conversationsRef, where('participantUids', 'array-contains', currentUser.uid));
     const querySnapshot = await getDocs(q);
 
-    if (!querySnapshot.empty) {
+    const existingDoc = querySnapshot.docs.find(doc => {
+      const uids = doc.data().participantUids || [];
+      return uids.length === participantUids.length && uids.includes(targetUser.uid);
+    });
+
+    if (existingDoc) {
       // Conversation exists, return its ID
-      return { conversationId: querySnapshot.docs[0].id };
+      return { conversationId: existingDoc.id };
     } else {
       // Conversation does not exist, create a new one
       const newConversationDoc = await addDoc(conversationsRef, {
