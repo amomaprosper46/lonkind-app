@@ -14,13 +14,13 @@ import { requestPayout } from '@/ai/flows/request-payout';
 import { Loader2, Gem, Coins, Sparkles, PlusCircle, ArrowDown, ArrowUp } from 'lucide-react';
 import { type CurrentUser } from './social-dashboard';
 import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, limit, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, onSnapshot, Timestamp, runTransaction, doc, increment, serverTimestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 const DIAMOND_PAYOUT_RATE_NAIRA = 15;
-const MINIMUM_PAYOUT_DIAMONDS = 500;
+const MINIMUM_PAYOUT_DIAMONDS = 350; // Approximately 5,250 Naira
 
 interface WalletViewProps {
     currentUser: CurrentUser;
@@ -42,7 +42,7 @@ const payoutFormSchema = z.object({
     .number()
     .int()
     .positive("Must be a positive number")
-    .min(MINIMUM_PAYOUT_DIAMONDS, { message: `Minimum payout is ${MINIMUM_PAYOUT_DIAMONDS} diamonds.` }),
+    .min(MINIMUM_PAYOUT_DIAMONDS, { message: `Minimum payout is ${MINIMUM_PAYOUT_DIAMONDS} diamonds (₦${MINIMUM_PAYOUT_DIAMONDS * DIAMOND_PAYOUT_RATE_NAIRA}).` }),
   paymentDetails: z.string().min(10, "Please provide valid payment details (e.g., Bank Name & Account Number)."),
 });
 
@@ -90,31 +90,37 @@ export default function WalletView({ currentUser }: WalletViewProps) {
     const handlePurchase = async (coinAmount: number) => {
         setIsPurchasing(coinAmount);
         try {
-            // Simulate payment flow (this would usually redirect to Stripe)
-            const result = await purchaseCoins({ userId: currentUser.uid, coinAmount });
-            if (!result.success) throw new Error(result.message);
-            
-            // Execute the database write locally so it uses the authenticated user's permissions
-            await runTransaction(db, async (transaction) => {
-                const amountNaira = coinAmount * 20; // 20 Naira per coin
-                const txRef = doc(collection(db, 'transactions'));
-                transaction.set(txRef, {
+            const pkg = coinPackages.find(p => p.coins === coinAmount);
+            if (!pkg) throw new Error("Invalid coin package");
+
+            // Make real payment request to our Paystack backend
+            const res = await fetch('/api/paystack/initialize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: currentUser.email || 'user@example.com',
+                    amount: pkg.price,
                     userId: currentUser.uid,
-                    amountNaira: amountNaira,
-                    coinsAdded: coinAmount,
-                    status: "success",
-                    time: serverTimestamp(),
-                });
-                const userRef = doc(db, 'users', currentUser.uid);
-                transaction.update(userRef, {
-                    coins: increment(coinAmount),
-                });
+                    coinAmount: coinAmount,
+                })
             });
 
-            toast({ title: 'Purchase Successful!', description: `Added ${coinAmount} coins to your wallet.` });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to initialize payment');
+
+            // Redirect user to Paystack Checkout URL
+            if (data.authorizationUrl) {
+                window.location.href = data.authorizationUrl;
+            } else {
+                throw new Error("No authorization URL returned from Paystack");
+            }
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Purchase Failed', description: error.message || 'Could not complete the purchase.' });
-        } finally {
+            console.error("Purchase error:", error);
+            toast({
+                title: 'Purchase Failed',
+                description: error.message || 'There was an error initiating the purchase.',
+                variant: 'destructive',
+            });
             setIsPurchasing(null);
         }
     };
