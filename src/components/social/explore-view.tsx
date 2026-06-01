@@ -18,6 +18,10 @@ interface ExploreViewProps {
     onDeletePost: (postId: string) => void;
     userReactions: Map<string, ReactionType>;
     savedPostIds: Set<string>;
+    onReportPost?: (post: any) => void;
+    onMuteUser?: (user: any) => void;
+    mutedUids?: Set<string>;
+    blockedUids?: Set<string>;
 }
 
 export default function ExploreView({ currentUser, onReact, onComment, onSavePost, onDeletePost, userReactions, savedPostIds }: ExploreViewProps) {

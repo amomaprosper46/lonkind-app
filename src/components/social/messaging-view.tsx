@@ -43,6 +43,7 @@ interface UserProfile {
 
 interface MessagingViewProps {
     initialConversationId?: string;
+    currentUser?: any;
 }
 
 export default function MessagingView({ initialConversationId }: MessagingViewProps) {

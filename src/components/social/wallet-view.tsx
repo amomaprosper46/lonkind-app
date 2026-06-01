@@ -285,7 +285,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                     </CardHeader>
                                     <CardContent>
                                         <Form {...form}>
-                                            <form onSubmit={form.handleSubmit(handlePayoutRequest)} className="space-y-4">
+                                            <form onSubmit={form.handleSubmit(onSubmitPayout)} className="space-y-4">
                                                 <FormField control={form.control} name="diamondAmount" render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel>Diamonds to Cash Out</FormLabel>

@@ -266,7 +266,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             try {
                 const [handleSnapshot, nameSnapshot, postResults] = await Promise.all([
                     getDocs(handleQuery), 
-                    getDocs(nameSnapshot),
+                    getDocs(nameQuery),
                     searchPosts({ searchText: searchQuery })
                 ]);
                 
@@ -337,7 +337,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     newReactionsMap.delete(postId);
                 } else { 
                     if (existingReaction) {
-                         if (postData.reactions?.[existingReaction]) {
+                         if (postData.reactions?.[existingReaction as ReactionType]) {
                             transaction.update(postRef, { [`reactions.${existingReaction}`]: increment(-1) });
                         }
                     }

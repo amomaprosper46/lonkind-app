@@ -10,7 +10,6 @@
 import { ai } from '@/ai/genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 import { z } from 'genkit';
-import { MediaPart } from 'genkit/media';
 
 // Define the input schema using Zod
 const AnimateImageInputSchema = z.object({
@@ -31,7 +30,7 @@ export async function animateImage(input: AnimateImageInput): Promise<AnimateIma
 }
 
 
-async function getVideoAsDataUri(video: MediaPart): Promise<string> {
+async function getVideoAsDataUri(video: any): Promise<string> {
     const fetch = (await import('node-fetch')).default;
     // The URL from Veo requires the API key to be appended for download.
     const videoDownloadResponse = await fetch(

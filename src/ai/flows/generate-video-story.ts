@@ -10,7 +10,6 @@
 import { ai } from '@/ai/genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 import { z } from 'genkit';
-import { MediaPart } from 'genkit/media';
 
 // Schemas
 const GenerateVideoStoryInputSchema = z.object({
@@ -30,7 +29,7 @@ export async function generateVideoStory(input: GenerateVideoStoryInput): Promis
 
 
 // Helper: Download a media part and convert to data URI
-async function getMediaAsDataUri(mediaPart: MediaPart, apiKey: string, defaultContentType: string): Promise<string> {
+async function getMediaAsDataUri(mediaPart: any, apiKey: string, defaultContentType: string): Promise<string> {
     const fetch = (await import('node-fetch')).default;
     const url = `${mediaPart.media!.url}&key=${apiKey}`;
     

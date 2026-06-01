@@ -31,6 +31,8 @@ interface SettingsViewProps {
     onUpdateProfile: (data: ProfileData) => Promise<boolean>;
     onPasswordReset: () => Promise<void>;
     onDeleteAccount: () => Promise<void>;
+    blockedUsers?: any[];
+    onUnblockUser?: (uid: string) => Promise<void>;
 }
 
 const supportFormSchema = z.object({

@@ -32,6 +32,10 @@ interface HomeFeedProps {
     onDeletePost: (postId: string) => void;
     userReactions: Map<string, ReactionType>;
     savedPostIds: Set<string>;
+    onReportPost?: (post: any) => void;
+    onMuteUser?: (user: any) => void;
+    mutedUids?: Set<string>;
+    blockedUids?: Set<string>;
 }
 
 const getUserLocation = (): Promise<GeolocationPosition> => {

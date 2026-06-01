@@ -57,8 +57,8 @@ interface PostCardProps {
     onDeletePost: (postId: string) => void;
     userReaction?: ReactionType | null;
     isSaved: boolean;
-    onReportPost: (post: Post) => void;
-    onMuteUser: (user: PostAuthor) => void;
+    onReportPost?: (post: Post) => void;
+    onMuteUser?: (user: PostAuthor) => void;
 }
 
 const reactionIcons: { [key in ReactionType]: React.ElementType } = {
@@ -262,14 +262,14 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => onReportPost(post)} className="bg-destructive hover:bg-destructive/90">
+                                        <AlertDialogAction onClick={() => onReportPost?.(post)} className="bg-destructive hover:bg-destructive/90">
                                             Report
                                         </AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
                             {!isAuthor && (
-                                <DropdownMenuItem onClick={() => onMuteUser(author)}>
+                                <DropdownMenuItem onClick={() => onMuteUser?.(author)}>
                                     <VolumeX className="mr-2 h-4 w-4" />
                                     Mute @{author.handle}
                                 </DropdownMenuItem>

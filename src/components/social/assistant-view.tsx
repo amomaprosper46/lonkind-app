@@ -11,7 +11,7 @@ import { askAssistant, AssistantOutput } from '@/ai/flows/assistant';
 import { generateNewsPost, GenerateNewsPostOutput } from '@/ai/flows/news-reporter';
 import { toast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, query, where, limit, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
@@ -60,8 +60,8 @@ export default function AssistantView() {
         setIsPosting(true);
         try {
             const userDocRef = collection(db, 'users');
-            const adminUser = await db.collection('users').where('email', '==', 'admin@lonkind.com').limit(1).get();
-
+            const adminUserQuery = query(collection(db, 'users'), where('email', '==', 'admin@lonkind.com'), limit(1));
+            const adminUser = await getDocs(adminUserQuery);
             if (adminUser.empty) {
                 toast({ variant: 'destructive', title: 'Error', description: 'Admin user not found.' });
                 return;

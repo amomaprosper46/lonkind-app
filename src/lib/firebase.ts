@@ -34,7 +34,7 @@ if (isFirebaseConfigValid) {
   }
 }
 
-export const db = app ? getFirestore(app) : null;
-export const auth = app ? getAuth(app) : null;
-export const storage = app ? getStorage(app) : null;
-export const rtdb = app ? getDatabase(app) : null;
+export const db = (app ? getFirestore(app) : null) as unknown as ReturnType<typeof getFirestore>;
+export const auth = (app ? getAuth(app) : null) as unknown as ReturnType<typeof getAuth>;
+export const storage = (app ? getStorage(app) : null) as unknown as ReturnType<typeof getStorage>;
+export const rtdb = (app ? getDatabase(app) : null) as unknown as ReturnType<typeof getDatabase>;
