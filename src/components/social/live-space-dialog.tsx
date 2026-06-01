@@ -12,6 +12,75 @@ import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDoc,
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { toast } from '@/hooks/use-toast';
 import { ScrollArea } from '../ui/scroll-area';
+import TipDialog from './tip-dialog';
+import { Gift } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Gift Animation Component to render full-screen premium gift animations
+const GiftAnimationOverlay = ({ gifts }: { gifts: any[] }) => {
+    const [currentGift, setCurrentGift] = useState<any | null>(null);
+
+    useEffect(() => {
+        if (gifts && gifts.length > 0) {
+            const latestGift = gifts[gifts.length - 1];
+            // Only show gifts from the last 10 seconds to avoid old popups
+            if (Date.now() - latestGift.timestamp < 10000) {
+                setCurrentGift(latestGift);
+                const timer = setTimeout(() => setCurrentGift(null), 4000);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [gifts]);
+
+    return (
+        <AnimatePresence>
+            {currentGift && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center overflow-hidden"
+                >
+                    {/* Dark overlay for Universe */}
+                    {currentGift.giftName === 'Universe' && (
+                        <motion.div 
+                            initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black"
+                        />
+                    )}
+
+                    <motion.div
+                        initial={{ scale: 0.1, y: 100, rotate: currentGift.giftName === 'Universe' ? -90 : 0 }}
+                        animate={{ 
+                            scale: currentGift.giftName === 'Lion' ? [1, 1.5, 1.2, 1] : 2,
+                            y: 0,
+                            rotate: currentGift.giftName === 'Universe' ? 360 : 0,
+                            x: currentGift.giftName === 'Lion' ? [-10, 10, -10, 10, 0] : 0 // Shake effect for Lion
+                        }}
+                        transition={{ 
+                            duration: currentGift.giftName === 'Universe' ? 4 : 0.8,
+                            type: currentGift.giftName === 'Universe' ? 'tween' : 'spring'
+                        }}
+                        className="text-[150px] relative z-10"
+                    >
+                        {currentGift.giftEmoji}
+                        {/* Glow effect */}
+                        <div className="absolute inset-0 bg-yellow-500 blur-[100px] opacity-30 -z-10 rounded-full" />
+                    </motion.div>
+                    
+                    <motion.div 
+                        initial={{ y: 50, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-8 bg-black/60 backdrop-blur-md px-8 py-3 rounded-full text-white font-bold text-xl border border-yellow-500/50 shadow-[0_0_20px_rgba(234,179,8,0.3)] z-10"
+                    >
+                        {currentGift.giftName === 'Universe' ? '✨' : '🔥'} {currentGift.senderName} sent a {currentGift.giftName.toUpperCase()}! {currentGift.giftName === 'Universe' ? '✨' : '🔥'}
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
 
 interface LiveSpaceDialogProps {
     space: Space;
@@ -26,6 +95,7 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
     const [isSpeaker, setIsSpeaker] = useState(false);
     const [hasRequested, setHasRequested] = useState(false);
     const [pendingSpeakerProfiles, setPendingSpeakerProfiles] = useState<SpaceParticipant[]>([]);
+    const [isTipDialogOpen, setIsTipDialogOpen] = useState(false);
 
     useEffect(() => {
         const spaceRef = doc(db, 'spaces', space.id);
@@ -179,9 +249,21 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
     };
 
     return (
-        <Dialog open={true} onOpenChange={(open) => !open && handleLeave()}>
-            <DialogContent className="max-w-lg">
-                <DialogHeader>
+        <>
+            {isTipDialogOpen && (
+                <TipDialog
+                    isOpen={isTipDialogOpen}
+                    onOpenChange={setIsTipDialogOpen}
+                    currentUser={currentUser}
+                    recipient={{ uid: liveSpace.host.uid, name: liveSpace.host.name }}
+                    mode="live"
+                    spaceId={liveSpace.id}
+                />
+            )}
+            <Dialog open={true} onOpenChange={(open) => !open && handleLeave()}>
+                <DialogContent className="max-w-lg overflow-hidden relative">
+                    <GiftAnimationOverlay gifts={liveSpace.recentGifts || []} />
+                    <DialogHeader>
                     <DialogTitle className="truncate">{liveSpace.topic}</DialogTitle>
                     <DialogDescription>Hosted by {liveSpace.host.name}</DialogDescription>
                 </DialogHeader>
@@ -259,6 +341,12 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
                         Leave Quietly
                     </Button>
                     <div className="flex items-center gap-2">
+                        {/* Only show gift button for non-hosts */}
+                        {!isHost && (
+                            <Button variant="ghost" size="icon" className="text-yellow-500 hover:text-yellow-600 hover:bg-yellow-500/10" onClick={() => setIsTipDialogOpen(true)}>
+                                <Gift className="h-5 w-5" />
+                            </Button>
+                        )}
                         {isSpeaker ? (
                              <Button size="icon" variant={isMuted ? 'secondary' : 'default'} onClick={() => setIsMuted(!isMuted)}>
                                 {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
@@ -273,5 +361,6 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        </>
     );
 }

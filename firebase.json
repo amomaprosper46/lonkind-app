@@ -12,6 +12,9 @@
       "**/.*",
       "**/node_modules/**"
     ],
-    "source": "."
+    "source": ".",
+    "frameworksBackend": {
+      "memory": "1GiB"
+    }
   }
 }

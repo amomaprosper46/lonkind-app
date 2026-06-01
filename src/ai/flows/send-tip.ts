@@ -21,6 +21,7 @@ const SendTipInputSchema = z.object({
   coinAmount: z.number().int().positive().describe('The number of coins to tip.'),
   giftName: z.string().describe('The name of the gift being sent.'),
   giftEmoji: z.string().describe('The emoji representing the gift.'),
+  spaceId: z.string().optional().describe('Optional space ID if tipping in a live space.'),
 });
 export type SendTipInput = z.infer<typeof SendTipInputSchema>;
 
@@ -40,7 +41,7 @@ const sendTipFlow = ai.defineFlow(
     inputSchema: SendTipInputSchema,
     outputSchema: SendTipOutputSchema,
   },
-  async ({ fromUserId, toUserId, coinAmount, giftName, giftEmoji }) => {
+  async ({ fromUserId, toUserId, coinAmount, giftName, giftEmoji, spaceId }) => {
     try {
       await runTransaction(db, async (transaction) => {
         const senderRef = doc(db, 'users', fromUserId);
@@ -79,6 +80,27 @@ const sendTipFlow = ai.defineFlow(
 
         // 4. Atomically add diamonds to receiver.
         transaction.update(receiverRef, { diamonds: increment(diamondValue) });
+
+        // 5. If tipping in a space, add to recentGifts for animation overlay
+        if (spaceId) {
+            const spaceRef = doc(db, 'spaces', spaceId);
+            const spaceDoc = await transaction.get(spaceRef);
+            if (spaceDoc.exists()) {
+                const newGift = {
+                    senderName: senderDoc.data().name || 'Someone',
+                    giftName,
+                    giftEmoji,
+                    timestamp: new Date().getTime(),
+                    id: Math.random().toString(36).substring(7),
+                };
+                
+                // Keep only the last 10 gifts to avoid unbounded array growth
+                const currentGifts = spaceDoc.data().recentGifts || [];
+                const updatedGifts = [...currentGifts, newGift].slice(-10);
+                
+                transaction.update(spaceRef, { recentGifts: updatedGifts });
+            }
+        }
       });
 
       return {

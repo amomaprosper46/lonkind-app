@@ -28,6 +28,7 @@ export interface Space {
     listeners: SpaceParticipant[];
     pendingSpeakers: string[]; // UIDs of users requesting to speak
     listenerCount: number;
+    recentGifts?: any[]; // Store recent gifts for animation overlay
     createdAt: any;
 }
 

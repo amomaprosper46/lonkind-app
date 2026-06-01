@@ -17,9 +17,11 @@ interface TipDialogProps {
         uid: string;
         name: string;
     };
+    mode?: 'post' | 'live';
+    spaceId?: string;
 }
 
-const tipOptions = [
+export const baseTipOptions = [
     { coins: 10, diamonds: 10, label: 'Rose', emoji: '🌹' },
     { coins: 50, diamonds: 50, label: 'Coffee', emoji: '☕' },
     { coins: 100, diamonds: 100, label: 'Diamond', emoji: '💎' },
@@ -27,8 +29,15 @@ const tipOptions = [
     { coins: 1000, diamonds: 1000, label: 'Crown', emoji: '👑' },
 ];
 
-export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient }: TipDialogProps) {
+export const premiumTipOptions = [
+    { coins: 10000, diamonds: 10000, label: 'Lion', emoji: '🦁', isPremium: true },
+    { coins: 50000, diamonds: 50000, label: 'Universe', emoji: '🌌', isPremium: true },
+];
+
+export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient, mode = 'post', spaceId }: TipDialogProps) {
     const [isTipping, setIsTipping] = useState(false);
+    
+    const tipOptions = mode === 'live' ? [...baseTipOptions, ...premiumTipOptions] : baseTipOptions;
     const [selectedAmount, setSelectedAmount] = useState(tipOptions[1].coins);
     
     const userCoins = currentUser.coins || 0;
@@ -54,6 +63,7 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 coinAmount: tip.coins,
                 giftName: tip.label,
                 giftEmoji: tip.emoji,
+                spaceId: spaceId,
             });
             
             if (result.success) {
@@ -125,18 +135,22 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                         </CardContent>
                     </Card>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        {tipOptions.map(option => (
+                    <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto p-1">
+                        {tipOptions.map((option: any) => (
                             <Button
                                 key={option.coins}
                                 variant={selectedAmount === option.coins ? 'default' : 'outline'}
-                                className="h-auto p-3 flex flex-col items-center gap-1"
+                                className={`h-auto p-3 flex flex-col items-center gap-1 ${
+                                    option.isPremium 
+                                        ? 'border-2 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)] animate-pulse' 
+                                        : ''
+                                }`}
                                 onClick={() => setSelectedAmount(option.coins)}
                             >
                                 <div className="text-3xl mb-1">{option.emoji}</div>
                                 <div className="flex items-center gap-2">
                                      <Coins className="h-4 w-4 text-yellow-500" />
-                                    <span className="font-bold">{option.coins}</span>
+                                    <span className="font-bold">{option.coins.toLocaleString()}</span>
                                 </div>
                                 <p className="text-sm font-semibold mt-1">{option.label}</p>
                             </Button>
