@@ -18,7 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPhoneNumber, ConfirmationResult, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from "firebase/firestore"; 
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -75,27 +75,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       defaultValues: { code: '' },
   });
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-      toast({
-        title: 'Signed Up!',
-        description: "Welcome to Lonkind!",
-      });
-      onSignUp();
-    } catch (error: any) {
-      console.error("Google Sign-In Error:", error);
-      toast({
-        variant: "destructive",
-        title: "Google Sign-In Failed",
-        description: error.message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   const createEmailAccount = async (data: z.infer<typeof emailFormSchema>) => {
     setIsLoading(true);
@@ -198,18 +178,6 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   return (
     <>
-        <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isLoading}>
-            {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-                <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 126 21.2 174 55.9L381.2 150.2c-22.9-21.5-55-34.4-93.2-34.4-69.6 0-126.3 56.7-126.3 126.3s56.7 126.3 126.3 126.3c81.5 0 115.7-60.2 120.7-91.8H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path></svg>
-            )}
-            Sign up with Google
-        </Button>
-        <div className="relative my-4">
-            <Separator />
-            <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-card px-2 text-xs text-muted-foreground">OR</span>
-        </div>
         <Tabs defaultValue="email" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="email">Email</TabsTrigger>
@@ -383,9 +351,8 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                                 )}
                             />
 
-                            <Button type="submit" className="w-full" disabled={isLoading}>
-                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Send Code
+                            <Button type="submit" className="w-full" disabled={true}>
+                                Coming Soon (Currently Locked)
                             </Button>
                         </form>
                     </Form>

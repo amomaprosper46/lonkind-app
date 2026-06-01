@@ -34,7 +34,7 @@ const coinPackages = [
 ];
 
 interface PurchaseTransaction { id: string; coinsAdded: number; amountNaira: number; status: string; time: Timestamp; }
-interface EarningTransaction { id: string; fromUserName: string; coins: number; diamonds: number; time: Timestamp; }
+interface EarningTransaction { id: string; fromUserName: string; coins: number; diamonds: number; time: Timestamp; giftName?: string; giftEmoji?: string; }
 interface PayoutTransaction { id: string; diamondAmount: number; amountNaira: number; status: string; time: Timestamp; }
 
 const payoutFormSchema = z.object({
@@ -67,15 +67,13 @@ export default function WalletView({ currentUser }: WalletViewProps) {
         let unsubEarnings: () => void = () => {};
         let unsubPayouts: () => void = () => {};
         
-        if (currentUser.isProfessional) {
-            const earningsRef = collection(db, 'gifts');
-            const earningsQuery = query(earningsRef, where('toUserId', '==', currentUser.uid), orderBy('time', 'desc'), limit(5));
-            unsubEarnings = onSnapshot(earningsQuery, snap => setEarningTxs(snap.docs.map(d => ({id: d.id, ...d.data()} as EarningTransaction))));
-            
-            const payoutsRef = collection(db, 'payouts');
-            const payoutsQuery = query(payoutsRef, where('userId', '==', currentUser.uid), orderBy('time', 'desc'), limit(5));
-            unsubPayouts = onSnapshot(payoutsQuery, snap => setPayoutTxs(snap.docs.map(d => ({id: d.id, ...d.data()} as PayoutTransaction))));
-        }
+        const earningsRef = collection(db, 'gifts');
+        const earningsQuery = query(earningsRef, where('toUserId', '==', currentUser.uid), orderBy('time', 'desc'), limit(5));
+        unsubEarnings = onSnapshot(earningsQuery, snap => setEarningTxs(snap.docs.map(d => ({id: d.id, ...d.data()} as EarningTransaction))));
+        
+        const payoutsRef = collection(db, 'payouts');
+        const payoutsQuery = query(payoutsRef, where('userId', '==', currentUser.uid), orderBy('time', 'desc'), limit(5));
+        unsubPayouts = onSnapshot(payoutsQuery, snap => setPayoutTxs(snap.docs.map(d => ({id: d.id, ...d.data()} as PayoutTransaction))));
 
         setIsLoading(false);
 
@@ -172,7 +170,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
             <Tabs defaultValue="wallet" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="wallet">My Wallet</TabsTrigger>
-                    {currentUser.isProfessional && <TabsTrigger value="creator">Creator Dashboard</TabsTrigger>}
+                    <TabsTrigger value="creator">Earnings Dashboard</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="wallet" className="mt-4 space-y-6">
@@ -262,8 +260,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                     </Card>
                 </TabsContent>
                 
-                {currentUser.isProfessional && (
-                    <TabsContent value="creator" className="mt-4 space-y-6">
+                <TabsContent value="creator" className="mt-4 space-y-6">
                         <Card>
                             <CardHeader>
                                 <CardTitle>Creator Earnings</CardTitle>
@@ -325,7 +322,11 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-pink-100 dark:bg-pink-900/50 rounded-full"><ArrowDown className="h-5 w-5 text-pink-600 dark:text-pink-400" /></div>
                                                         <div>
-                                                            <p className="font-semibold">Tip from {tx.fromUserName}</p>
+                                                            <p className="font-semibold">
+                                                                {tx.giftName && tx.giftEmoji 
+                                                                    ? `Received ${tx.giftName} ${tx.giftEmoji} from ${tx.fromUserName}`
+                                                                    : `Tip from ${tx.fromUserName}`}
+                                                            </p>
                                                             <p className="text-sm text-muted-foreground">{tx.time ? format(tx.time.toDate(), 'PPP p') : ''}</p>
                                                         </div>
                                                     </div>
@@ -362,8 +363,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                             </Card>
                         </div>
 
-                    </TabsContent>
-                )}
+                </TabsContent>
             </Tabs>
         </main>
     );

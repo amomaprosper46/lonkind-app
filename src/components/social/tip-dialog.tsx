@@ -20,10 +20,11 @@ interface TipDialogProps {
 }
 
 const tipOptions = [
-    { coins: 10, diamonds: 10, label: 'Small Thanks' },
-    { coins: 50, diamonds: 50, label: 'Nice Job!' },
-    { coins: 100, diamonds: 100, label: 'Super Fan!' },
-    { coins: 500, diamonds: 500, label: 'Amazing!' },
+    { coins: 10, diamonds: 10, label: 'Rose', emoji: '🌹' },
+    { coins: 50, diamonds: 50, label: 'Coffee', emoji: '☕' },
+    { coins: 100, diamonds: 100, label: 'Diamond', emoji: '💎' },
+    { coins: 500, diamonds: 500, label: 'Heart', emoji: '💖' },
+    { coins: 1000, diamonds: 1000, label: 'Crown', emoji: '👑' },
 ];
 
 export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient }: TipDialogProps) {
@@ -51,6 +52,8 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 fromUserId: currentUser.uid,
                 toUserId: recipient.uid,
                 coinAmount: tip.coins,
+                giftName: tip.label,
+                giftEmoji: tip.emoji,
             });
             
             if (result.success) {
@@ -70,6 +73,33 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 description: error.message || 'Could not send the tip. Please try again.',
             });
         } finally {
+            setIsTipping(false);
+        }
+    };
+
+    const handlePurchaseCoins = async () => {
+        setIsTipping(true);
+        try {
+            const amountInNaira = selectedAmount * 15;
+            const response = await fetch('/api/paystack/initialize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: currentUser.email || 'user@lonkind.com',
+                    amountNaira: amountInNaira,
+                    coinsToCredit: selectedAmount,
+                    userId: currentUser.uid,
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Payment initialization failed');
+            if (data.authorization_url) {
+                window.location.href = data.authorization_url;
+            } else {
+                throw new Error('No authorization URL returned');
+            }
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Payment Failed', description: error.message });
             setIsTipping(false);
         }
     };
@@ -103,13 +133,10 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                                 className="h-auto p-3 flex flex-col items-center gap-1"
                                 onClick={() => setSelectedAmount(option.coins)}
                             >
+                                <div className="text-3xl mb-1">{option.emoji}</div>
                                 <div className="flex items-center gap-2">
-                                     <Coins className="h-5 w-5 text-yellow-500" />
-                                    <span className="text-lg font-bold">{option.coins}</span>
-                                </div>
-                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                    <Gem className="h-3 w-3 text-blue-400" />
-                                    <span>Gives {option.diamonds}</span>
+                                     <Coins className="h-4 w-4 text-yellow-500" />
+                                    <span className="font-bold">{option.coins}</span>
                                 </div>
                                 <p className="text-sm font-semibold mt-1">{option.label}</p>
                             </Button>
@@ -118,14 +145,21 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 </div>
 
                 <DialogFooter>
-                    <Button onClick={handleSendTip} disabled={isTipping || userCoins < selectedAmount} className="w-full">
-                        {isTipping ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                           <Sparkles className="mr-2 h-4 w-4" />
-                        )}
-                        Send Tip
-                    </Button>
+                    {userCoins < selectedAmount ? (
+                        <Button onClick={handlePurchaseCoins} disabled={isTipping} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white">
+                            {isTipping ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Coins className="mr-2 h-4 w-4" />}
+                            Buy {selectedAmount} Coins (₦{(selectedAmount * 15).toLocaleString()}) to Send
+                        </Button>
+                    ) : (
+                        <Button onClick={handleSendTip} disabled={isTipping} className="w-full">
+                            {isTipping ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                               <Sparkles className="mr-2 h-4 w-4" />
+                            )}
+                            Send Tip
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

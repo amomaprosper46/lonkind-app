@@ -402,7 +402,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                     </Button>
                 </div>
                  <div className="flex items-center gap-1">
-                    {!isAuthor && post.author.isProfessional && (
+                    {!isAuthor && (
                          <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary" onClick={() => setIsTipOpen(true)}>
                             <Coins className="h-5 w-5" />
                             <span>Tip</span>

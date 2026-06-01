@@ -19,6 +19,8 @@ const SendTipInputSchema = z.object({
   fromUserId: z.string().describe('The UID of the user sending the tip.'),
   toUserId: z.string().describe('The UID of the user receiving the tip.'),
   coinAmount: z.number().int().positive().describe('The number of coins to tip.'),
+  giftName: z.string().describe('The name of the gift being sent.'),
+  giftEmoji: z.string().describe('The emoji representing the gift.'),
 });
 export type SendTipInput = z.infer<typeof SendTipInputSchema>;
 
@@ -38,7 +40,7 @@ const sendTipFlow = ai.defineFlow(
     inputSchema: SendTipInputSchema,
     outputSchema: SendTipOutputSchema,
   },
-  async ({ fromUserId, toUserId, coinAmount }) => {
+  async ({ fromUserId, toUserId, coinAmount, giftName, giftEmoji }) => {
     try {
       await runTransaction(db, async (transaction) => {
         const senderRef = doc(db, 'users', fromUserId);
@@ -50,10 +52,9 @@ const sendTipFlow = ai.defineFlow(
           throw new Error('Insufficient coins or sender not found.');
         }
         
-        // Also ensure the receiver is a professional account
         const receiverDoc = await transaction.get(receiverRef);
-        if (!receiverDoc.exists() || !receiverDoc.data().isProfessional) {
-            throw new Error('You can only send tips to Professional accounts.');
+        if (!receiverDoc.exists()) {
+            throw new Error('Receiver not found.');
         }
 
         const diamondValue = Math.floor(coinAmount * COIN_TO_DIAMOND_CONVERSION_RATE);
@@ -68,6 +69,8 @@ const sendTipFlow = ai.defineFlow(
             toUserName: receiverDoc.data().name,
             coins: coinAmount,
             diamonds: diamondValue,
+            giftName: giftName,
+            giftEmoji: giftEmoji,
             time: serverTimestamp(),
         });
 

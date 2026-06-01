@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send, BadgeCheck, Languages } from 'lucide-react';
+import { Loader2, Send, BadgeCheck, Languages, Coins } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
@@ -15,6 +15,7 @@ import type { Post } from './post-card';
 import Link from 'next/link';
 import { translateText } from '@/ai/flows/translate-text';
 import { toast } from '@/hooks/use-toast';
+import TipDialog from './tip-dialog';
 
 interface Comment {
     id: string;
@@ -53,6 +54,7 @@ export default function CommentSheet({ post, onOpenChange, onCommentSubmit, curr
     const [translatedComments, setTranslatedComments] = useState<Map<string, string>>(new Map());
     const [translatingCommentId, setTranslatingCommentId] = useState<string | null>(null);
     const [showOriginalComment, setShowOriginalComment] = useState<Set<string>>(new Set());
+    const [tipRecipient, setTipRecipient] = useState<Comment['author'] | null>(null);
 
     useEffect(() => {
         if (post) {
@@ -131,6 +133,14 @@ export default function CommentSheet({ post, onOpenChange, onCommentSubmit, curr
             <SheetContent className="flex flex-col p-0" side="right">
                 {post ? (
                     <>
+                        {tipRecipient && (
+                            <TipDialog 
+                                isOpen={!!tipRecipient} 
+                                onOpenChange={(open) => !open && setTipRecipient(null)} 
+                                currentUser={currentUser} 
+                                recipient={tipRecipient} 
+                            />
+                        )}
                         <SheetHeader className="p-6 pb-4 border-b">
                             <SheetTitle>Comments on {post.author.name}'s post</SheetTitle>
                             <SheetDescription>
@@ -175,6 +185,12 @@ export default function CommentSheet({ post, onOpenChange, onCommentSubmit, curr
                                                             <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => handleTranslateComment(comment)}>
                                                                 <Languages className="mr-1 h-3 w-3" />
                                                                 {translatedComments.has(comment.id) ? (showOriginalComment.has(comment.id) ? 'Show translation' : 'Show original') : 'Translate'}
+                                                            </Button>
+                                                        )}
+                                                        {comment.author.uid !== currentUser.uid && (
+                                                            <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-4 text-muted-foreground hover:text-primary" onClick={() => setTipRecipient(comment.author)}>
+                                                                <Coins className="mr-1 h-3 w-3" />
+                                                                Tip
                                                             </Button>
                                                         )}
                                                     </div>
