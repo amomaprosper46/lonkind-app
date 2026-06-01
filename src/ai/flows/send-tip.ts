@@ -11,7 +11,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { db as clientDb, app as clientApp } from '@/lib/firebase';
+import { db as clientDb } from '@/lib/firebase';
 import { runTransaction as clientRunTransaction, doc, increment, collection, serverTimestamp } from 'firebase/firestore';
 
 function getAdminDb() {
@@ -117,6 +117,33 @@ export async function sendTip({ fromUserId, toUserId, coinAmount, giftName, gift
         const senderRef = adminDb.collection('users').doc(fromUserId);
         const receiverRef = adminDb.collection('users').doc(toUserId);
 
+        // 1. Verify sender has enough coins.
+        const senderDoc = await transaction.get(senderRef);
+        if (!senderDoc.exists || (senderDoc.data()?.coins || 0) < coinAmount) {
+          throw new Error('Insufficient coins or sender not found.');
+        }
+        
+        const receiverDoc = await transaction.get(receiverRef);
+        if (!receiverDoc.exists) {
+            throw new Error('Receiver not found.');
+        }
+
+        const diamondValue = Math.floor(coinAmount * COIN_TO_DIAMOND_CONVERSION_RATE);
+
+        // 2. Create a record in the 'gifts' collection for auditing.
+        const giftRef = adminDb.collection('gifts').doc();
+        transaction.set(giftRef, {
+            fromUserId: fromUserId,
+            fromUserName: senderDoc.data()?.name || 'Unknown User',
+            toUserId: toUserId,
+            toUserName: receiverDoc.data()?.name || 'Unknown User',
+            coins: coinAmount,
+            diamonds: diamondValue,
+            giftName: giftName,
+            giftEmoji: giftEmoji,
+            time: FieldValue.serverTimestamp(),
+        });
+
         // 3. Atomically deduct coins from sender.
         transaction.update(senderRef, { coins: FieldValue.increment(-coinAmount) });
 
@@ -125,7 +152,7 @@ export async function sendTip({ fromUserId, toUserId, coinAmount, giftName, gift
 
         // 5. If tipping in a space, add to recentGifts for animation overlay
         if (spaceId) {
-            const spaceRef = db.collection('spaces').doc(spaceId);
+            const spaceRef = adminDb.collection('spaces').doc(spaceId);
             const spaceDoc = await transaction.get(spaceRef);
             if (spaceDoc.exists) {
                 const newGift = {
