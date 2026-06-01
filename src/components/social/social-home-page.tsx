@@ -215,68 +215,6 @@ export default function SocialHomePage() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    const setupAdmin = async () => {
-        const adminEmail = 'admin@lonkind.com';
-        const adminPassword = 'password123';
-        try {
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('email', '==', adminEmail));
-            const snapshot = await getDocs(q);
-
-            if (snapshot.empty) {
-                console.log("Admin account not found, creating...");
-                const currentAuthUser = auth.currentUser;
-                
-                const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
-                const user = userCredential.user;
-                const avatarUrl = placeholderImages.avatar.url.replace('<seed>', 'A');
-                
-                await updateProfile(user, { displayName: 'Alex Taylor', photoURL: avatarUrl });
-                await setDoc(doc(db, "users", user.uid), {
-                    uid: user.uid,
-                    name: 'Alex Taylor',
-                    handle: 'admin',
-                    avatarUrl: avatarUrl,
-                    email: adminEmail,
-                    isProfessional: true,
-                    bio: 'CEO of Lonkind. Connecting the world, one idea at a time.',
-                    followersCount: 0,
-                    followingCount: 0,
-                    balance: 123.45,
-                    coins: 1000000,
-                    diamonds: 1000000,
-                });
-                // Add user to the admins collection
-                await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
-
-                await addDummyFollowers({ userId: user.uid, count: 500000 });
-                console.log("Admin account for Alex Taylor created successfully.");
-
-                if (currentAuthUser) {
-                    await signOut(auth);
-                }
-            } else {
-                 // Ensure admin doc exists if user doc exists
-                const adminDoc = snapshot.docs[0];
-                const adminRef = doc(db, 'admins', adminDoc.id);
-                const adminSnap = await getDoc(adminRef);
-                if (!adminSnap.exists()) {
-                    await setDoc(adminRef, { addedAt: new Date() });
-                }
-            }
-        } catch (error: any) {
-            if (error.code === 'auth/email-already-in-use') {
-                 console.log("Admin auth user already exists.");
-            } else if (error.code === 'permission-denied') {
-                 console.log("Could not set up admin account due to permission denied. This is expected if you are not signed in as an admin.");
-            } else {
-                 console.warn("Error creating admin account: ", error);
-            }
-        }
-    };
-    
-    setupAdmin();
-
     if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
             'size': 'invisible',

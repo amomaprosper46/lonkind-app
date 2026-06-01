@@ -9,8 +9,27 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { db } from '@/lib/firebase';
-import { runTransaction, doc, increment, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+
+function getAdminDb() {
+  if (!getApps().length) {
+    try {
+      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
+        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
+        : undefined;
+      if (sa) {
+        initializeApp({ credential: cert(sa) });
+      } else {
+        initializeApp();
+      }
+    } catch (e) {
+      console.error("Firebase Admin initialization error:", e);
+      if (!getApps().length) initializeApp();
+    }
+  }
+  return getFirestore();
+}
 
 // The conversion rate from coins (spent) to diamonds (earned).
 const COIN_TO_DIAMOND_CONVERSION_RATE = 1;
@@ -43,18 +62,19 @@ const sendTipFlow = ai.defineFlow(
   },
   async ({ fromUserId, toUserId, coinAmount, giftName, giftEmoji, spaceId }) => {
     try {
-      await runTransaction(db, async (transaction) => {
-        const senderRef = doc(db, 'users', fromUserId);
-        const receiverRef = doc(db, 'users', toUserId);
+      const db = getAdminDb();
+      await db.runTransaction(async (transaction) => {
+        const senderRef = db.collection('users').doc(fromUserId);
+        const receiverRef = db.collection('users').doc(toUserId);
 
         // 1. Verify sender has enough coins.
         const senderDoc = await transaction.get(senderRef);
-        if (!senderDoc.exists() || (senderDoc.data().coins || 0) < coinAmount) {
+        if (!senderDoc.exists || (senderDoc.data()?.coins || 0) < coinAmount) {
           throw new Error('Insufficient coins or sender not found.');
         }
         
         const receiverDoc = await transaction.get(receiverRef);
-        if (!receiverDoc.exists()) {
+        if (!receiverDoc.exists) {
             throw new Error('Receiver not found.');
         }
 
@@ -62,32 +82,32 @@ const sendTipFlow = ai.defineFlow(
 
         // 2. Create a record in the 'gifts' collection for auditing.
         // This collection will now be used for "earnings" history.
-        const giftRef = doc(collection(db, 'gifts'));
+        const giftRef = db.collection('gifts').doc();
         transaction.set(giftRef, {
             fromUserId: fromUserId,
-            fromUserName: senderDoc.data().name,
+            fromUserName: senderDoc.data()?.name || 'Unknown User',
             toUserId: toUserId,
-            toUserName: receiverDoc.data().name,
+            toUserName: receiverDoc.data()?.name || 'Unknown User',
             coins: coinAmount,
             diamonds: diamondValue,
             giftName: giftName,
             giftEmoji: giftEmoji,
-            time: serverTimestamp(),
+            time: FieldValue.serverTimestamp(),
         });
 
         // 3. Atomically deduct coins from sender.
-        transaction.update(senderRef, { coins: increment(-coinAmount) });
+        transaction.update(senderRef, { coins: FieldValue.increment(-coinAmount) });
 
         // 4. Atomically add diamonds to receiver.
-        transaction.update(receiverRef, { diamonds: increment(diamondValue) });
+        transaction.update(receiverRef, { diamonds: FieldValue.increment(diamondValue) });
 
         // 5. If tipping in a space, add to recentGifts for animation overlay
         if (spaceId) {
-            const spaceRef = doc(db, 'spaces', spaceId);
+            const spaceRef = db.collection('spaces').doc(spaceId);
             const spaceDoc = await transaction.get(spaceRef);
-            if (spaceDoc.exists()) {
+            if (spaceDoc.exists) {
                 const newGift = {
-                    senderName: senderDoc.data().name || 'Someone',
+                    senderName: senderDoc.data()?.name || 'Someone',
                     giftName,
                     giftEmoji,
                     timestamp: new Date().getTime(),
@@ -95,7 +115,7 @@ const sendTipFlow = ai.defineFlow(
                 };
                 
                 // Keep only the last 10 gifts to avoid unbounded array growth
-                const currentGifts = spaceDoc.data().recentGifts || [];
+                const currentGifts = spaceDoc.data()?.recentGifts || [];
                 const updatedGifts = [...currentGifts, newGift].slice(-10);
                 
                 transaction.update(spaceRef, { recentGifts: updatedGifts });
