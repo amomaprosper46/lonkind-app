@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useParams, notFound, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, query, where, orderBy, updateDoc, increment, serverTimestamp, addDoc, onSnapshot, runTransaction, writeBatch, deleteDoc, setDoc, collectionGroup } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
@@ -434,7 +434,11 @@ export default function UserProfilePage() {
     }
     
     if (!loggedInUser) {
-        return <SocialHomePage />;
+        return (
+            <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
+                <SocialHomePage />
+            </Suspense>
+        );
     }
 
     if (!profileUser && !isLoading) {
@@ -461,6 +465,7 @@ export default function UserProfilePage() {
 
 
     return (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
         <div className="min-h-screen bg-secondary">
              <header className="sticky top-0 z-40 w-full border-b bg-background">
                 <div className="container flex items-center justify-between h-16">
@@ -506,13 +511,19 @@ export default function UserProfilePage() {
                     currentUser={currentUser}
                 />
             )}
-            {callState.active && profileUser && (
+            {callState.active && (
                 <CallView 
-                    callTargetUser={profileUser}
+                    callTargetUser={{
+                        uid: profileUser.uid,
+                        name: profileUser.name,
+                        handle: profileUser.handle,
+                        avatarUrl: profileUser.avatarUrl
+                    }}
                     callType={callState.type}
                     onEndCall={handleEndCall}
                 />
             )}
         </div>
+        </Suspense>
     );
 }
