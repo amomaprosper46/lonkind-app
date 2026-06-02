@@ -37,7 +37,7 @@ export type FollowStatus = 'not_following' | 'following';
 export default function UserProfilePage() {
     const params = useParams();
     const router = useRouter();
-    const handle = params.handle as string;
+    const handle = params?.handle as string | undefined;
     const [loggedInUser, loadingAuth] = useAuthState(auth);
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
     const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
