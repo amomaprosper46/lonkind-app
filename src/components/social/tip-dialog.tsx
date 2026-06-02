@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
-import { sendTip } from '@/ai/flows/send-tip';
+import { db } from '@/lib/firebase';
+import { doc, runTransaction, collection, serverTimestamp, increment } from 'firebase/firestore';
 import { Loader2, Gem, Coins, Sparkles } from 'lucide-react';
 import { type CurrentUser } from './social-dashboard';
 import { Card, CardContent } from '../ui/card';
@@ -57,27 +58,63 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
 
         setIsTipping(true);
         try {
-            const rawResult = await sendTip({
-                fromUserId: currentUser.uid,
-                toUserId: recipient.uid,
-                coinAmount: tip.coins,
-                giftName: tip.label,
-                giftEmoji: tip.emoji,
-                spaceId: spaceId,
-            });
+            const COIN_TO_DIAMOND_CONVERSION_RATE = 10;
             
-            // Fallback in case Next.js Server Action serialization drops the success payload
-            const result = rawResult || { success: true, message: 'Tip Sent!' };
-            
-            if (result.success) {
-                toast({
-                    title: 'Tip Sent!',
-                    description: `You sent ${tip.coins} coins to ${recipient.name}.`,
+            await runTransaction(db, async (transaction) => {
+                const senderRef = doc(db, 'users', currentUser.uid);
+                const receiverRef = doc(db, 'users', recipient.uid);
+        
+                const senderDoc = await transaction.get(senderRef);
+                if (!senderDoc.exists() || (senderDoc.data()?.coins || 0) < tip.coins) {
+                  throw new Error('Insufficient coins or sender not found.');
+                }
+                
+                const receiverDoc = await transaction.get(receiverRef);
+                if (!receiverDoc.exists()) {
+                    throw new Error('Receiver not found.');
+                }
+        
+                const diamondValue = Math.floor(tip.coins * COIN_TO_DIAMOND_CONVERSION_RATE);
+                const giftRef = doc(collection(db, 'gifts'));
+                transaction.set(giftRef, {
+                    fromUserId: currentUser.uid,
+                    fromUserName: senderDoc.data()?.name || 'Unknown User',
+                    toUserId: recipient.uid,
+                    toUserName: receiverDoc.data()?.name || 'Unknown User',
+                    coins: tip.coins,
+                    diamonds: diamondValue,
+                    giftName: tip.label,
+                    giftEmoji: tip.emoji,
+                    time: serverTimestamp(),
                 });
-                onOpenChange(false);
-            } else {
-                throw new Error(result.message);
-            }
+        
+                transaction.update(senderRef, { coins: increment(-tip.coins) });
+                transaction.update(receiverRef, { diamonds: increment(diamondValue) });
+        
+                if (spaceId) {
+                    const spaceRef = doc(db, 'spaces', spaceId);
+                    const spaceDoc = await transaction.get(spaceRef);
+                    if (spaceDoc.exists()) {
+                        const newGift = {
+                            senderName: senderDoc.data()?.name || 'Someone',
+                            giftName: tip.label,
+                            giftEmoji: tip.emoji,
+                            timestamp: new Date().getTime(),
+                            id: Math.random().toString(36).substring(7),
+                        };
+                        const currentGifts = spaceDoc.data()?.recentGifts || [];
+                        const updatedGifts = [...currentGifts, newGift].slice(-10);
+                        transaction.update(spaceRef, { recentGifts: updatedGifts });
+                    }
+                }
+              });
+
+            toast({
+                title: 'Tip Sent!',
+                description: `You sent ${tip.coins} coins to ${recipient.name}.`,
+            });
+            onOpenChange(false);
+            
         } catch (error: any) {
             console.error('Error sending tip:', error);
             toast({
