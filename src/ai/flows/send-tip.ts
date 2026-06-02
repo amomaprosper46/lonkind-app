@@ -10,8 +10,6 @@
 import { z } from 'zod';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { db as clientDb } from '@/lib/firebase';
-import { runTransaction as clientRunTransaction, doc, increment, collection, serverTimestamp } from 'firebase/firestore';
 
 function getAdminDb() {
   if (!getApps().length) {
@@ -55,66 +53,10 @@ export async function sendTip({ fromUserId, toUserId, coinAmount, giftName, gift
     try {
       const adminDb = getAdminDb();
       
-      // If we don't have Admin SDK configured properly, fallback to the Client SDK!
-      // (This guarantees it works even if FIREBASE_ADMIN_SERVICE_ACCOUNT is missing in Vercel)
       if (!adminDb) {
-          console.log("Using Firebase Client SDK fallback for gifting transaction...");
-          if (!clientDb) {
-              return { success: false, message: 'CRITICAL ERROR: Both Firebase Admin and Client SDKs failed to initialize on the server. Please check your Vercel Environment Variables.' };
-          }
-          await clientRunTransaction(clientDb, async (transaction) => {
-            const senderRef = doc(clientDb, 'users', fromUserId);
-            const receiverRef = doc(clientDb, 'users', toUserId);
-    
-            const senderDoc = await transaction.get(senderRef);
-            if (!senderDoc.exists() || (senderDoc.data()?.coins || 0) < coinAmount) {
-              throw new Error('Insufficient coins or sender not found.');
-            }
-            
-            const receiverDoc = await transaction.get(receiverRef);
-            if (!receiverDoc.exists()) {
-                throw new Error('Receiver not found.');
-            }
-    
-            const diamondValue = Math.floor(coinAmount * COIN_TO_DIAMOND_CONVERSION_RATE);
-            const giftRef = doc(collection(clientDb, 'gifts'));
-            transaction.set(giftRef, {
-                fromUserId: fromUserId,
-                fromUserName: senderDoc.data()?.name || 'Unknown User',
-                toUserId: toUserId,
-                toUserName: receiverDoc.data()?.name || 'Unknown User',
-                coins: coinAmount,
-                diamonds: diamondValue,
-                giftName: giftName,
-                giftEmoji: giftEmoji,
-                time: serverTimestamp(),
-            });
-    
-            transaction.update(senderRef, { coins: increment(-coinAmount) });
-            transaction.update(receiverRef, { diamonds: increment(diamondValue) });
-    
-            if (spaceId) {
-                const spaceRef = doc(clientDb, 'spaces', spaceId);
-                const spaceDoc = await transaction.get(spaceRef);
-                if (spaceDoc.exists()) {
-                    const newGift = {
-                        senderName: senderDoc.data()?.name || 'Someone',
-                        giftName,
-                        giftEmoji,
-                        timestamp: new Date().getTime(),
-                        id: Math.random().toString(36).substring(7),
-                    };
-                    const currentGifts = spaceDoc.data()?.recentGifts || [];
-                    const updatedGifts = [...currentGifts, newGift].slice(-10);
-                    transaction.update(spaceRef, { recentGifts: updatedGifts });
-                }
-            }
-          });
-          
-          return { success: true, message: `Successfully sent a tip of ${coinAmount} coins!` };
+          return { success: false, message: 'Firebase Admin SDK is not configured properly on the server.' };
       }
 
-      // If we do have Admin SDK, use it!
       await adminDb.runTransaction(async (transaction) => {
         const senderRef = adminDb.collection('users').doc(fromUserId);
         const receiverRef = adminDb.collection('users').doc(toUserId);
