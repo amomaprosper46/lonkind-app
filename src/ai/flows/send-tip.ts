@@ -20,10 +20,17 @@ function getAdminDb() {
       const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
         ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
         : undefined;
+      // 2. If the service account JSON exists, initialize with it (for Vercel)
       if (sa) {
         initializeApp({ credential: cert(sa) });
       } else {
-        return null; // Don't crash, fallback to client DB
+        // 3. Fallback to default initialization (works natively inside Firebase Hosting/Functions)
+        try {
+            initializeApp();
+        } catch(fallbackError) {
+             console.log("No Service Account found and default initializeApp failed.");
+             return null;
+        }
       }
     } catch (e) {
       console.error("Firebase Admin initialization error:", e);
