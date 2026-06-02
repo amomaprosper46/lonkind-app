@@ -14,7 +14,7 @@
     ],
     "source": ".",
     "frameworksBackend": {
-      "memory": "1GiB"
+      "memory": "4GiB"
     }
   }
 }
