@@ -7,8 +7,7 @@
  * - SendTipOutput - The return type for the function.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { db as clientDb } from '@/lib/firebase';
@@ -60,6 +59,9 @@ export async function sendTip({ fromUserId, toUserId, coinAmount, giftName, gift
       // (This guarantees it works even if FIREBASE_ADMIN_SERVICE_ACCOUNT is missing in Vercel)
       if (!adminDb) {
           console.log("Using Firebase Client SDK fallback for gifting transaction...");
+          if (!clientDb) {
+              return { success: false, message: 'CRITICAL ERROR: Both Firebase Admin and Client SDKs failed to initialize on the server. Please check your Vercel Environment Variables.' };
+          }
           await clientRunTransaction(clientDb, async (transaction) => {
             const senderRef = doc(clientDb, 'users', fromUserId);
             const receiverRef = doc(clientDb, 'users', toUserId);
