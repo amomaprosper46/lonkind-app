@@ -57,7 +57,7 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
 
         setIsTipping(true);
         try {
-            const result = await sendTip({
+            const rawResult = await sendTip({
                 fromUserId: currentUser.uid,
                 toUserId: recipient.uid,
                 coinAmount: tip.coins,
@@ -65,6 +65,9 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 giftEmoji: tip.emoji,
                 spaceId: spaceId,
             });
+            
+            // Fallback in case Next.js Server Action serialization fails or returns empty
+            const result = rawResult || { success: false, message: 'Server action returned undefined payload due to cache mismatch.' };
             
             if (result.success) {
                 toast({
