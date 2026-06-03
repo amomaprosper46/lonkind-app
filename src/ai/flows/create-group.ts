@@ -12,7 +12,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { generateImage } from './generate-image';
 
 const CreateGroupInputSchema = z.object({
   name: z.string().describe('The name of the group.'),
@@ -44,15 +43,6 @@ const createGroupFlow = ai.defineFlow(
     outputSchema: CreateGroupOutputSchema,
   },
   async ({ name, description, creator }) => {
-    let coverUrl = "";
-    try {
-        const imageResult = await generateImage({ 
-            prompt: `A vibrant and abstract background image for a social media group called "${name}". Digital art, header image.` 
-        });
-        coverUrl = imageResult.imageUrl;
-    } catch (e) {
-        console.warn("Failed to generate group cover image. Using fallback.", e);
-    }
-    return { groupId: "", coverUrl };
+    return { groupId: "", coverUrl: "" };
   }
 );

@@ -4,17 +4,12 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bot, Lightbulb, Mic, Wand2, BarChart3, Lock, Users, Image as ImageIcon, Film } from 'lucide-react';
+import { Bot, Lightbulb, Mic, Wand2, BarChart3, Lock, Image as ImageIcon, Film } from 'lucide-react';
 import AssistantView from './assistant-view';
 import IdeasView from './ideas-view';
 import StoryGeneratorView from './story-generator-view';
-import VoiceNotesView from './voice-notes-view';
 import AppStatisticsView from './app-statistics-view';
-import MatchmakingView from './matchmaking-view';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import ImageGeneratorView from './image-generator-view';
-import VideoStoryCreatorView from './video-story-creator-view';
-import RemixImageView from './remix-image-view';
 
 // A helper to wrap disabled tabs with a tooltip
 const ProFeatureTab = ({ value, children, isProfessional }: { value: string, children: React.ReactNode, isProfessional: boolean }) => {
@@ -39,7 +34,7 @@ const ProFeatureTab = ({ value, children, isProfessional }: { value: string, chi
 };
 
 
-export default function AICommandCenterView({ isProfessional }: { isProfessional?: boolean }) {
+export default function AICommandCenterView({ isProfessional, currentUser }: { isProfessional?: boolean, currentUser?: any }) {
     return (
         <main className="col-span-9 space-y-8">
             <header>
@@ -55,10 +50,6 @@ export default function AICommandCenterView({ isProfessional }: { isProfessional
                             <Bot className="mr-2 h-4 w-4" />
                             Assistant
                         </TabsTrigger>
-                         <ProFeatureTab value="matchmaking" isProfessional={!!isProfessional}>
-                            <Users className="mr-2 h-4 w-4" />
-                            Matchmaking
-                        </ProFeatureTab>
                         <ProFeatureTab value="ideas" isProfessional={!!isProfessional}>
                             <Lightbulb className="mr-2 h-4 w-4" />
                             Ideas
@@ -66,22 +57,6 @@ export default function AICommandCenterView({ isProfessional }: { isProfessional
                          <ProFeatureTab value="story" isProfessional={!!isProfessional}>
                             <Wand2 className="mr-2 h-4 w-4" />
                             Story
-                        </ProFeatureTab>
-                        <ProFeatureTab value="image-gen" isProfessional={!!isProfessional}>
-                            <ImageIcon className="mr-2 h-4 w-4" />
-                            Image
-                        </ProFeatureTab>
-                         <ProFeatureTab value="remix" isProfessional={!!isProfessional}>
-                            <Wand2 className="mr-2 h-4 w-4" />
-                            Remix
-                        </ProFeatureTab>
-                         <ProFeatureTab value="video-story" isProfessional={!!isProfessional}>
-                            <Film className="mr-2 h-4 w-4" />
-                            Video
-                        </ProFeatureTab>
-                         <ProFeatureTab value="voice" isProfessional={!!isProfessional}>
-                            <Mic className="mr-2 h-4 w-4" />
-                            Voice
                         </ProFeatureTab>
                          <ProFeatureTab value="stats" isProfessional={!!isProfessional}>
                             <BarChart3 className="mr-2 h-4 w-4" />
@@ -91,9 +66,6 @@ export default function AICommandCenterView({ isProfessional }: { isProfessional
 
                     <TabsContent value="assistant" className="mt-4">
                         <AssistantView />
-                    </TabsContent>
-                     <TabsContent value="matchmaking" className="mt-4">
-                        <MatchmakingView />
                     </TabsContent>
                     <TabsContent value="ideas" className="mt-4">
                         <Card>
@@ -108,18 +80,6 @@ export default function AICommandCenterView({ isProfessional }: { isProfessional
                     </TabsContent>
                     <TabsContent value="story" className="mt-4">
                         <StoryGeneratorView />
-                    </TabsContent>
-                     <TabsContent value="image-gen" className="mt-4">
-                        <ImageGeneratorView />
-                    </TabsContent>
-                     <TabsContent value="remix" className="mt-4">
-                        <RemixImageView />
-                    </TabsContent>
-                    <TabsContent value="video-story" className="mt-4">
-                        <VideoStoryCreatorView />
-                    </TabsContent>
-                    <TabsContent value="voice" className="mt-4">
-                        <VoiceNotesView />
                     </TabsContent>
                     <TabsContent value="stats" className="mt-4">
                         <AppStatisticsView />

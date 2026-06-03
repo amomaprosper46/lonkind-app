@@ -26,7 +26,6 @@ const nextConfig = {
 
   // serverActions now lives inside experimental
   experimental: {
-    serverComponentsExternalPackages: ['firebase-admin', 'genkit', '@genkit-ai/core', '@genkit-ai/google-genai'],
     serverActions: {
       bodySizeLimit: "4.5mb",
     },

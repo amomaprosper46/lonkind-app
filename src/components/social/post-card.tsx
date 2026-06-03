@@ -16,8 +16,6 @@ import ReactionListDialog from './reaction-list-dialog';
 import { toast } from '@/hooks/use-toast';
 import { translateText } from '@/ai/flows/translate-text';
 import { translateImageText } from '@/ai/flows/translate-image-text';
-import { animateImage } from '@/ai/flows/animate-image';
-import { remixImage } from '@/ai/flows/remix-image';
 import { PulseLoader } from 'react-spinners';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog';
@@ -97,12 +95,6 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
     const [isTranslatingImage, setIsTranslatingImage] = useState(false);
     const [showImageTranslation, setShowImageTranslation] = useState(false);
 
-    const [animatedVideoUrl, setAnimatedVideoUrl] = useState<string | null>(null);
-    const [isAnimating, setIsAnimating] = useState(false);
-
-    const [remixedImageUrl, setRemixedImageUrl] = useState<string | null>(null);
-    const [isRemixing, setIsRemixing] = useState(false);
-
     const [activeAiTask, setActiveAiTask] = useState<string | null>(null);
     const [isTipOpen, setIsTipOpen] = useState(false);
 
@@ -173,47 +165,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
         }
     };
 
-    const handleAnimateImage = async () => {
-        if (!imageUrl) return;
-        setIsAnimating(true);
-        setActiveAiTask('Animating image...');
-        try {
-            const result = await animateImage({ imageUrl });
-            setAnimatedVideoUrl(result.videoUrl);
-        } catch (error) {
-            console.error("Image animation error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Animation Failed',
-                description: 'Could not animate the image. This can happen with high demand. Please try again later.'
-            });
-        } finally {
-            setIsAnimating(false);
-            setActiveAiTask(null);
-        }
-    };
-    
-    const handleRemixImage = async () => {
-        if (!imageUrl) return;
-        setIsRemixing(true);
-        setActiveAiTask('Remixing image...');
-        try {
-            const result = await remixImage({ imageUrl, prompt: 'Turn this into a vibrant anime scene, keeping the main subject.' });
-            setRemixedImageUrl(result.remixedImageUrl);
-        } catch (error) {
-            console.error("Image remix error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Remix Failed',
-                description: 'Could not remix the image. This feature is experimental. Please try again later.'
-            });
-        } finally {
-            setIsRemixing(false);
-            setActiveAiTask(null);
-        }
-    };
-    
-    const isAiBusy = isAnimating || isTranslating || isTranslatingImage || isRemixing;
+    const isAiBusy = isTranslating || isTranslatingImage;
 
 
     return (
@@ -332,10 +284,6 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                 <p className="mt-6 text-muted-foreground font-semibold">{activeAiTask}</p>
                                 <p className="text-sm text-muted-foreground">This can take up to a minute. Please be patient.</p>
                             </div>
-                        ) : animatedVideoUrl ? (
-                            <video src={animatedVideoUrl} controls autoPlay loop className="w-full h-auto" data-ai-hint="animated social media post video" />
-                        ) : remixedImageUrl ? (
-                            <img src={remixedImageUrl} alt="Remixed post content" className="w-full h-auto" data-ai-hint="remixed social media post image" />
                         ) : imageUrl ? (
                             <>
                                 <img src={imageUrl} alt="Post content" className="w-full h-auto" data-ai-hint="social media post image" />
@@ -423,20 +371,10 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                 </DropdownMenuItem>
                             )}
                              {imageUrl && (
-                                <>
                                     <DropdownMenuItem onClick={handleTranslateImage} disabled={isAiBusy}>
                                         <Image className="mr-2 h-4 w-4" />
                                         <span>{showImageTranslation ? 'Hide Image Text' : 'Translate Image Text'}</span>
                                     </DropdownMenuItem>
-                                     <DropdownMenuItem onClick={handleAnimateImage} disabled={isAiBusy || !!animatedVideoUrl}>
-                                        <Film className="mr-2 h-4 w-4" />
-                                        <span>Animate Image</span>
-                                    </DropdownMenuItem>
-                                     <DropdownMenuItem onClick={handleRemixImage} disabled={isAiBusy || !!remixedImageUrl}>
-                                        <Wand2 className="mr-2 h-4 w-4" />
-                                        <span>Remix Image</span>
-                                    </DropdownMenuItem>
-                                </>
                             )}
                         </DropdownMenuContent>
                      </DropdownMenu>
