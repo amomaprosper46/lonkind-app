@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Share2, MoreHorizontal, UserPlus, Check, MessageSquare, Video, Phone, BadgeCheck, UserCheck, Clock, Link as LinkIcon, MessageSquareText } from 'lucide-react';
+import { Share2, MoreHorizontal, UserPlus, Check, MessageSquare, Video, Phone, BadgeCheck, UserCheck, Clock, Link as LinkIcon, MessageSquareText, Star, Heart, Medal } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import PostCard from './post-card';
 import { FollowStatus } from '@/app/profile/[handle]/page';
@@ -27,6 +27,7 @@ interface UserProfile {
     followersCount?: number;
     followingCount?: number;
     businessUrl?: string;
+    badges?: string[];
 }
 
 interface ProfileViewProps {
@@ -113,6 +114,9 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, on
                         <div className="flex items-center justify-center md:justify-start gap-2">
                            <CardTitle className="text-3xl font-bold">{user.name}</CardTitle>
                            {user.isProfessional && <BadgeCheck className="h-8 w-8 text-primary" />}
+                           {user.badges?.includes('Top Creator') && <Star className="h-8 w-8 fill-yellow-500 text-yellow-500" title="Top Creator" />}
+                           {user.badges?.includes('Top Supporter') && <Heart className="h-8 w-8 fill-pink-500 text-pink-500" title="Top Supporter" />}
+                           {user.badges?.includes('Whale') && <Medal className="h-8 w-8 fill-amber-600 text-amber-600" title="Whale" />}
                         </div>
                         <p className="text-muted-foreground text-lg">@{user.handle}</p>
                         <p className="mt-2 text-sm max-w-prose">{user.bio || 'No bio available.'}</p>

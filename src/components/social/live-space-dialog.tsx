@@ -15,6 +15,17 @@ import { ScrollArea } from '../ui/scroll-area';
 import TipDialog from './tip-dialog';
 import { Gift } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import AgoraRTC, {
+  AgoraRTCProvider,
+  useRTCClient,
+  useLocalMicrophoneTrack,
+  useJoin,
+  usePublish,
+  useRemoteUsers,
+  useRemoteAudioTracks,
+} from "agora-rtc-react";
+
+const agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
 // Gift Animation Component to render full-screen premium gift animations
 const GiftAnimationOverlay = ({ gifts }: { gifts: any[] }) => {
@@ -88,7 +99,15 @@ interface LiveSpaceDialogProps {
     onLeave: () => void;
 }
 
-export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpaceDialogProps) {
+export default function LiveSpaceDialogWrapper(props: LiveSpaceDialogProps) {
+    return (
+        <AgoraRTCProvider client={agoraClient}>
+            <LiveSpaceDialog {...props} />
+        </AgoraRTCProvider>
+    );
+}
+
+function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpaceDialogProps) {
     const [liveSpace, setLiveSpace] = useState<Space>(space);
     const [isMuted, setIsMuted] = useState(true);
     const [isHost, setIsHost] = useState(false);
@@ -96,6 +115,26 @@ export default function LiveSpaceDialog({ space, currentUser, onLeave }: LiveSpa
     const [hasRequested, setHasRequested] = useState(false);
     const [pendingSpeakerProfiles, setPendingSpeakerProfiles] = useState<SpaceParticipant[]>([]);
     const [isTipDialogOpen, setIsTipDialogOpen] = useState(false);
+
+    // Agora Integration
+    const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID || "";
+    
+    useJoin({
+        appid: appId,
+        channel: space.id,
+        token: null, // Replace with token server in production
+        uid: currentUser.uid,
+    }, appId !== ""); // Only join if appId is provided
+
+    const { localMicrophoneTrack } = useLocalMicrophoneTrack(isSpeaker);
+    usePublish([isSpeaker && !isMuted ? localMicrophoneTrack : null]);
+
+    const remoteUsers = useRemoteUsers();
+    const { audioTracks } = useRemoteAudioTracks(remoteUsers);
+    
+    useEffect(() => {
+        audioTracks.map((track) => track.play());
+    }, [audioTracks]);
 
     useEffect(() => {
         const spaceRef = doc(db, 'spaces', space.id);

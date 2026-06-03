@@ -88,8 +88,39 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                     time: serverTimestamp(),
                 });
         
-                transaction.update(senderRef, { coins: increment(-tip.coins) });
-                transaction.update(receiverRef, { diamonds: increment(diamondValue) });
+                const senderUpdate: any = { coins: increment(-tip.coins), lifetimeTipsGiven: increment(tip.coins) };
+                const newLifetimeTipsGiven = (senderDoc.data()?.lifetimeTipsGiven || 0) + tip.coins;
+                let senderBadges = senderDoc.data()?.badges || [];
+                let addedSenderBadge = false;
+                if (newLifetimeTipsGiven >= 1000 && !senderBadges.includes('Top Supporter')) {
+                    senderBadges.push('Top Supporter');
+                    addedSenderBadge = true;
+                }
+                if (newLifetimeTipsGiven >= 10000 && !senderBadges.includes('Whale')) {
+                    senderBadges.push('Whale');
+                    addedSenderBadge = true;
+                }
+                if (addedSenderBadge) {
+                    senderUpdate.badges = senderBadges;
+                }
+                transaction.update(senderRef, senderUpdate);
+
+                const receiverUpdate: any = { diamonds: increment(diamondValue), lifetimeTipsReceived: increment(tip.coins) };
+                const newLifetimeTipsReceived = (receiverDoc.data()?.lifetimeTipsReceived || 0) + tip.coins;
+                let receiverBadges = receiverDoc.data()?.badges || [];
+                let addedReceiverBadge = false;
+                if (newLifetimeTipsReceived >= 1000 && !receiverBadges.includes('Rising Star')) {
+                    receiverBadges.push('Rising Star');
+                    addedReceiverBadge = true;
+                }
+                if (newLifetimeTipsReceived >= 10000 && !receiverBadges.includes('Top Creator')) {
+                    receiverBadges.push('Top Creator');
+                    addedReceiverBadge = true;
+                }
+                if (addedReceiverBadge) {
+                    receiverUpdate.badges = receiverBadges;
+                }
+                transaction.update(receiverRef, receiverUpdate);
         
                 if (spaceId) {
                     const spaceRef = doc(db, 'spaces', spaceId);

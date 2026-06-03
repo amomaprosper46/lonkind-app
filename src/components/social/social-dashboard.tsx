@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck } from 'lucide-react';
+import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import { Input } from '@/components/ui/input';
 import { db, storage, auth } from '@/lib/firebase';
@@ -42,6 +42,7 @@ const NearbyView = dynamic(() => import('./nearby-view').then(mod => mod.default
 const CommentSheet = dynamic(() => import('./comment-sheet').then(mod => mod.default), { ssr: false });
 const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const LeaderboardView = dynamic(() => import('./leaderboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 
 
 type SocialDashboardProps = {
@@ -49,7 +50,7 @@ type SocialDashboardProps = {
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile';
+type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard';
 
 export interface SuggestedUser {
     id: string;
@@ -752,6 +753,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             case 'videos': return <VideosView currentUser={currentUser} onReact={handleReact} onComment={handleOpenComments} onSavePost={handleSavePost} onDeletePost={handleDeletePost} userReactions={userReactions} savedPostIds={savedPostIds} />;
             case 'settings': return ( <SettingsView user={currentUser} onSignOut={onSignOut} onUpdateProfile={handleUpdateProfile} onPasswordReset={handlePasswordReset} onDeleteAccount={handleDeleteAccount} blockedUsers={blockedUsers} onUnblockUser={handleUnblockUser} /> );
             case 'wallet': return <WalletView currentUser={currentUser} />;
+            case 'leaderboard': return <LeaderboardView />;
             case 'ai-command-center': return <AICommandCenterView isProfessional={currentUser.isProfessional} />;
             case 'story-writer': return <main className="col-span-12 lg:col-span-9"><StoryGeneratorView /></main>;
             case 'personal-ai': return <main className="col-span-12 lg:col-span-9"><PersonalAiView /></main>;
@@ -979,6 +981,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                     <Button variant={currentView === 'groups' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('groups')}><Users className="h-5 w-5" /> Groups</Button>
                                     <Button variant={currentView === 'spaces' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('spaces')}><Radio className="h-5 w-5" /> Spaces</Button>
                                     <Button variant={currentView === 'videos' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('videos')}><Video className="h-5 w-5" /> Videos</Button>
+                                    <Button variant={currentView === 'leaderboard' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('leaderboard')}><Trophy className="h-5 w-5" /> Leaderboard</Button>
                                     <Button variant={currentView === 'wallet' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('wallet')}><Wallet className="h-5 w-5" /> Wallet</Button>
                                     <Link href={`/profile/${currentUser.handle}`} className="w-full"><Button variant='ghost' className="w-full justify-start gap-2"><User className="h-5 w-5" /> My Profile</Button></Link>
                                     <Button variant={currentView === 'ai-command-center' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('ai-command-center')}><Sparkles className="h-5 w-5" /> AI Command Center</Button>
