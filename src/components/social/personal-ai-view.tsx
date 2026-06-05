@@ -5,12 +5,12 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, BrainCircuit } from 'lucide-react';
+import { Loader2, BrainCircuit, Sparkles } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { askPersonalAi, PersonalAiOutput } from '@/ai/flows/personal-ai';
 
 export default function PersonalAiView() {
-    const [question, setQuestion] = useState('What is the purpose of the social-dashboard.tsx component?');
+    const [question, setQuestion] = useState('How do I buy coins to tip creators?');
     const [answer, setAnswer] = useState<PersonalAiOutput | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     
@@ -32,13 +32,13 @@ export default function PersonalAiView() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Personal Project AI</CardTitle>
-                <CardDescription>Ask your specialized AI assistant questions about the Lonkind project.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Sparkles className="h-6 w-6 text-primary" /> Ask Lonki</CardTitle>
+                <CardDescription>Your friendly AI guide for everything Lonkind.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                  <div className="flex gap-2">
                     <Input 
-                        placeholder="e.g., How does the friend model work?"
+                        placeholder="e.g., How do I start an audio room?"
                         value={question}
                         onChange={(e) => setQuestion(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && handleAsk()}

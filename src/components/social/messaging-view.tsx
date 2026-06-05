@@ -16,6 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
+import { sendPushNotification } from '@/app/actions/sendNotification';
 
 export interface Conversation {
     id: string;
@@ -142,6 +143,17 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                 timestamp: serverTimestamp(),
             });
             setNewMessage('');
+            
+            // Push Notification
+            const recipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
+            if (recipientUid) {
+                 sendPushNotification(
+                     recipientUid,
+                     `${user.displayName || 'Someone'} sent you a message`,
+                     newMessage.length > 50 ? newMessage.substring(0, 50) + '...' : newMessage
+                 ).catch(err => console.error("Push Notification error:", err));
+            }
+            
         } catch(e) {
             console.error("Error sending message: ", e);
         } finally {
@@ -165,6 +177,17 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
             });
 
             setAudioBlob(null);
+
+            // Push Notification
+            const recipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
+            if (recipientUid) {
+                 sendPushNotification(
+                     recipientUid,
+                     `${user.displayName || 'Someone'} sent you a voice message`,
+                     '🎤 New voice message received.'
+                 ).catch(err => console.error("Push Notification error:", err));
+            }
+
         } catch (e) {
             console.error("Error sending audio message:", e);
             toast({ variant: 'destructive', title: 'Send Failed', description: 'Could not send voice message.' });

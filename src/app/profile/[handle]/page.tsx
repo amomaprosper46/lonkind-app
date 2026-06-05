@@ -368,7 +368,7 @@ export default function UserProfilePage() {
 
             toast({ title: "Success", description: "Profile updated!" });
 
-            if (data.handle && data.handle.toLowerCase() !== handle.toLowerCase()) {
+            if (data.handle && handle && data.handle.toLowerCase() !== handle.toLowerCase()) {
                 router.push(`/profile/${data.handle.toLowerCase()}`);
             }
             return true;

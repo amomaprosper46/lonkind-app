@@ -1,9 +1,10 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database";
+import { getMessaging, isSupported } from "firebase/messaging";
 
 // Your web app's Firebase configuration
 // These values are read from environment variables for deployment.
@@ -25,7 +26,7 @@ export const isFirebaseConfigValid = Boolean(
 );
 
 // Initialize Firebase Safely (Vercel SSR compatible)
-let app;
+let app: FirebaseApp | undefined;
 if (isFirebaseConfigValid) {
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);
@@ -38,3 +39,13 @@ export const db = (app ? getFirestore(app) : null) as unknown as ReturnType<type
 export const auth = (app ? getAuth(app) : null) as unknown as ReturnType<typeof getAuth>;
 export const storage = (app ? getStorage(app) : null) as unknown as ReturnType<typeof getStorage>;
 export const rtdb = (app ? getDatabase(app) : null) as unknown as ReturnType<typeof getDatabase>;
+
+let messagingInstance: any = null;
+if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+    isSupported().then((supported) => {
+        if (supported && app) {
+            messagingInstance = getMessaging(app);
+        }
+    });
+}
+export const messaging = messagingInstance;

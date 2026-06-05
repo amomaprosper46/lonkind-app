@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy } from 'lucide-react';
+import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy, ShieldAlert } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import { Input } from '@/components/ui/input';
 import { db, storage, auth } from '@/lib/firebase';
@@ -13,6 +13,8 @@ import { collection, addDoc, getDocs, doc, updateDoc, increment, serverTimestamp
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { type User as FirebaseUser, updateProfile, sendPasswordResetEmail, deleteUser } from 'firebase/auth';
 import Link from 'next/link';
+import { requestNotificationPermission, setupForegroundMessageListener } from '@/lib/fcm';
+import { sendPushNotification } from '@/app/actions/sendNotification';
 import Image from 'next/image';
 import { toast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -40,6 +42,7 @@ const GroupsView = dynamic(() => import('./groups-view').then(mod => mod.default
 const SpacesView = dynamic(() => import('./spaces-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const NearbyView = dynamic(() => import('./nearby-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const CommentSheet = dynamic(() => import('./comment-sheet').then(mod => mod.default), { ssr: false });
+const AdminDashboardView = dynamic(() => import('./admin-dashboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const LeaderboardView = dynamic(() => import('./leaderboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
@@ -50,7 +53,7 @@ type SocialDashboardProps = {
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard';
+type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin';
 
 export interface SuggestedUser {
     id: string;
@@ -205,6 +208,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     
     useEffect(() => {
         if (!currentUser?.uid) return;
+
+        // Initialize Push Notifications
+        requestNotificationPermission(currentUser.uid);
+        setupForegroundMessageListener();
 
         // Fetch user reactions
         const reactionsQuery = query(collectionGroup(db, 'reactions'), where('user.uid', '==', currentUser.uid));
@@ -361,6 +368,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                             timestamp: serverTimestamp(),
                             read: false,
                         });
+                        
+                        // Push Notification
+                        sendPushNotification(
+                             authorUid,
+                             'New Reaction!',
+                             `${currentUser.name} reacted to your post.`
+                        ).catch(err => console.error("Push Notification error:", err));
                     }
                 }
                 
@@ -412,6 +426,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     timestamp: serverTimestamp(),
                     read: false,
                 });
+                
+                // Push Notification
+                sendPushNotification(
+                    authorUid,
+                    `${currentUser.name} commented on your post`,
+                    commentText.length > 50 ? commentText.substring(0, 50) + '...' : commentText
+                ).catch(err => console.error("Push Notification error:", err));
             }
             
             await batch.commit();
@@ -754,6 +775,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             case 'settings': return ( <SettingsView user={currentUser} onSignOut={onSignOut} onUpdateProfile={handleUpdateProfile} onPasswordReset={handlePasswordReset} onDeleteAccount={handleDeleteAccount} blockedUsers={blockedUsers} onUnblockUser={handleUnblockUser} /> );
             case 'wallet': return <WalletView currentUser={currentUser} />;
             case 'leaderboard': return <LeaderboardView />;
+            case 'admin': return currentUser.email === 'amomaprosper46@gmail.com' ? <AdminDashboardView /> : <main className="col-span-12 lg:col-span-9 p-8 text-center text-destructive font-bold">Unauthorized</main>;
             case 'ai-command-center': return <AICommandCenterView isProfessional={currentUser.isProfessional} />;
             case 'story-writer': return <main className="col-span-12 lg:col-span-9"><StoryGeneratorView /></main>;
             case 'personal-ai': return <main className="col-span-12 lg:col-span-9"><PersonalAiView /></main>;
@@ -985,6 +1007,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                     <Button variant={currentView === 'wallet' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('wallet')}><Wallet className="h-5 w-5" /> Wallet</Button>
                                     <Link href={`/profile/${currentUser.handle}`} className="w-full"><Button variant='ghost' className="w-full justify-start gap-2"><User className="h-5 w-5" /> My Profile</Button></Link>
                                     <Button variant={currentView === 'ai-command-center' ? 'secondary' : 'ghost'} className="justify-start gap-2" onClick={() => changeView('ai-command-center')}><Sparkles className="h-5 w-5" /> AI Command Center</Button>
+                                    {currentUser.email === 'amomaprosper46@gmail.com' && (
+                                        <Button variant={currentView === 'admin' ? 'secondary' : 'ghost'} className="justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => changeView('admin')}>
+                                            <ShieldAlert className="h-5 w-5" /> Admin Panel
+                                        </Button>
+                                    )}
                                 </nav>
                             </CardContent>
                         </Card>

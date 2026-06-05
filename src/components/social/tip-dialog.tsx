@@ -9,6 +9,7 @@ import { doc, runTransaction, collection, serverTimestamp, increment } from 'fir
 import { Loader2, Gem, Coins, Sparkles } from 'lucide-react';
 import { type CurrentUser } from './social-dashboard';
 import { Card, CardContent } from '../ui/card';
+import { sendPushNotification } from '@/app/actions/sendNotification';
 
 interface TipDialogProps {
     isOpen: boolean;
@@ -145,6 +146,13 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 description: `You sent ${tip.coins} coins to ${recipient.name}.`,
             });
             onOpenChange(false);
+            
+            // Fire push notification in the background
+            sendPushNotification(
+                recipient.uid,
+                'New Tip Received! 🎁',
+                `${currentUser.name} just tipped you ${tip.coins} coins (${tip.label} ${tip.emoji})!`
+            ).catch(err => console.error('Failed to send push notification:', err));
             
         } catch (error: any) {
             console.error('Error sending tip:', error);

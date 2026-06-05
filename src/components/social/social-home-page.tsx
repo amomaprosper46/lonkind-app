@@ -233,6 +233,13 @@ export default function SocialHomePage() {
       if (user) {
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists() && userDoc.data()?.isBanned) {
+            toast({ variant: 'destructive', title: 'Account Banned', description: 'Your account has been permanently suspended.' });
+            await signOut(auth);
+            return;
+        }
+        
         setIsNewUser(!userDoc.exists());
       } else {
         setIsNewUser(false);

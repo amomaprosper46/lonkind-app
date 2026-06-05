@@ -114,9 +114,9 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, on
                         <div className="flex items-center justify-center md:justify-start gap-2">
                            <CardTitle className="text-3xl font-bold">{user.name}</CardTitle>
                            {user.isProfessional && <BadgeCheck className="h-8 w-8 text-primary" />}
-                           {user.badges?.includes('Top Creator') && <Star className="h-8 w-8 fill-yellow-500 text-yellow-500" title="Top Creator" />}
-                           {user.badges?.includes('Top Supporter') && <Heart className="h-8 w-8 fill-pink-500 text-pink-500" title="Top Supporter" />}
-                           {user.badges?.includes('Whale') && <Medal className="h-8 w-8 fill-amber-600 text-amber-600" title="Whale" />}
+                           {user.badges?.includes('Top Creator') && <span title="Top Creator"><Star className="h-8 w-8 fill-yellow-500 text-yellow-500" /></span>}
+                           {user.badges?.includes('Top Supporter') && <span title="Top Supporter"><Heart className="h-8 w-8 fill-pink-500 text-pink-500" /></span>}
+                           {user.badges?.includes('Whale') && <span title="Whale"><Medal className="h-8 w-8 fill-amber-600 text-amber-600" /></span>}
                         </div>
                         <p className="text-muted-foreground text-lg">@{user.handle}</p>
                         <p className="mt-2 text-sm max-w-prose">{user.bio || 'No bio available.'}</p>
