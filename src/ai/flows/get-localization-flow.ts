@@ -26,21 +26,15 @@ export async function getLocalization(input: GetLocalizationInput): Promise<GetL
 
 const prompt = ai.definePrompt({
   name: 'localizationPrompt',
-  input: { schema: GetLocalizationInputSchema },
+  input: { schema: z.object({ jsonString: z.string(), languageCode: z.string() }) },
   output: { schema: GetLocalizationOutputSchema },
   prompt: `You are an expert UI/UX localization specialist.
 Translate the values of the following JSON object from English to the language specified by the language code '{{languageCode}}'.
 Maintain the exact same JSON structure and keys. Only translate the string values. Do not add any extra explanations or text.
 
 JSON to translate:
-{{{jsonStringify jsonContent}}}
+{{{jsonString}}}
 `,
-});
-
-// Register a helper to stringify JSON for the prompt
-import Handlebars from 'handlebars';
-Handlebars.registerHelper('jsonStringify', function(context) {
-  return JSON.stringify(context);
 });
 
 const getLocalizationFlow = ai.defineFlow(
@@ -55,7 +49,8 @@ const getLocalizationFlow = ai.defineFlow(
       return jsonContent;
     }
 
-    const { output } = await prompt({ jsonContent, languageCode });
+    const jsonString = JSON.stringify(jsonContent);
+    const { output } = await prompt({ jsonString, languageCode });
     return output || jsonContent; // Fallback to original content on error
   }
 );
