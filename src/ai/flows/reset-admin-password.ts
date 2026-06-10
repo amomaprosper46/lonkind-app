@@ -7,9 +7,28 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import * as admin from 'firebase-admin';
 
-// Initialize Firebase Admin SDK if not already initialized
-if (admin.apps.length === 0) {
-  admin.initializeApp();
+function getAdminApp() {
+    if (!admin.apps.length) {
+        try {
+            const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
+                ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
+                : undefined;
+                
+            if (sa) {
+                admin.initializeApp({
+                    credential: admin.credential.cert(sa),
+                    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+                });
+            } else {
+                admin.initializeApp({
+                    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+                });
+            }
+        } catch (error) {
+            console.error('Failed to initialize Firebase Admin in resetAdminPassword:', error);
+        }
+    }
+    return admin.apps[0];
 }
 
 const ResetAdminPasswordOutputSchema = z.object({
@@ -28,6 +47,7 @@ const resetAdminPasswordFlow = ai.defineFlow(
     outputSchema: ResetAdminPasswordOutputSchema,
   },
   async () => {
+    getAdminApp();
     const adminEmail = 'admin@lonkind.com';
     const defaultPassword = 'password123';
 
