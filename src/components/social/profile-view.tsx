@@ -13,6 +13,7 @@ import { FollowStatus } from '@/app/profile/[handle]/page';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EditProfileDialog, { type ProfileData } from './edit-profile-dialog';
 import ProfileRoast from './profile-roast';
+import AvatarGenerator from './avatar-generator';
 import Link from 'next/link';
 import LikesView from './likes-view';
 import type { CurrentUser } from './social-dashboard';
@@ -174,7 +175,7 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, on
                     <TabsTrigger value="replies">Replies</TabsTrigger>
                     <TabsTrigger value="media">Media</TabsTrigger>
                     <TabsTrigger value="likes">Likes</TabsTrigger>
-                    <TabsTrigger value="roast" className="text-orange-500 font-bold">🔥 Roast</TabsTrigger>
+                    <TabsTrigger value="ai" className="text-orange-500 font-bold">✨ AI</TabsTrigger>
                 </TabsList>
                 <TabsContent value="posts" className="space-y-4 mt-4">
                     {posts.length > 0 ? (
@@ -223,12 +224,27 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, on
                         savedPostIds={savedPostIds}
                     />
                 </TabsContent>
-                <TabsContent value="roast" className="space-y-4 mt-4">
-                    <ProfileRoast
-                        user={user}
-                        postCount={posts.length}
-                        isCurrentUser={isCurrentUser}
-                    />
+                <TabsContent value="ai" className="space-y-6 mt-4">
+                    <Card>
+                        <CardContent className="p-6">
+                            <h2 className="text-xl font-bold mb-1 flex items-center gap-2">🔥 Profile Roast</h2>
+                            <p className="text-sm text-muted-foreground mb-4">Let AI roast {isCurrentUser ? 'your' : `@${user.handle}'s`} profile. Screenshot and share!</p>
+                            <ProfileRoast
+                                user={user}
+                                postCount={posts.length}
+                                isCurrentUser={isCurrentUser}
+                            />
+                        </CardContent>
+                    </Card>
+                    {isCurrentUser && (
+                        <Card>
+                            <CardContent className="p-6">
+                                <h2 className="text-xl font-bold mb-1 flex items-center gap-2">🎨 AI Avatar Creator</h2>
+                                <p className="text-sm text-muted-foreground mb-4">Generate unique avatar concepts in any art style. Screenshot and flex!</p>
+                                <AvatarGenerator user={user} />
+                            </CardContent>
+                        </Card>
+                    )}
                 </TabsContent>
             </Tabs>
         </div>
