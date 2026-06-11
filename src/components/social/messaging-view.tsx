@@ -79,36 +79,79 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
         const conversationsRef = collection(db, 'conversations');
         const q = query(conversationsRef, where('participantUids', 'array-contains', user.uid));
 
-        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-            const convos: Conversation[] = await Promise.all(
-                querySnapshot.docs.map(async (doc) => {
-                    const data = doc.data();
-                    const lastMessageQuery = query(collection(db, 'conversations', doc.id, 'messages'), orderBy('timestamp', 'desc'), limit(1));
-                    const lastMessageSnapshot = await getDocs(lastMessageQuery);
-                    const lastMessage = lastMessageSnapshot.empty ? null : lastMessageSnapshot.docs[0].data();
+        let messageUnsubscribes: (() => void)[] = [];
 
-                    return {
-                        id: doc.id,
-                        participants: data.participants,
-                        participantUids: data.participantUids,
-                        lastMessage: lastMessage ? { text: lastMessage.text, type: lastMessage.type || 'text', timestamp: lastMessage.timestamp } : { text: 'No messages yet', type: 'text', timestamp: null },
-                    } as Conversation;
-                })
-            );
-            setConversations(convos);
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            // Clean up previous message listeners
+            messageUnsubscribes.forEach(unsub => unsub());
+            messageUnsubscribes = [];
 
-             // If there's an initialConversationId, select it
-            if (initialConversationId) {
-                const convoToSelect = convos.find(c => c.id === initialConversationId);
-                if (convoToSelect) {
-                    setSelectedConversation(convoToSelect);
-                }
+            if (querySnapshot.empty) {
+                setConversations([]);
+                setIsLoading(false);
+                return;
             }
 
-            setIsLoading(false);
+            const convosMap = new Map<string, Conversation>();
+            let pendingUpdates = querySnapshot.docs.length;
+
+            querySnapshot.docs.forEach((docSnap) => {
+                const data = docSnap.data();
+                const convoBase: Conversation = {
+                    id: docSnap.id,
+                    participants: data.participants,
+                    participantUids: data.participantUids,
+                    lastMessage: null,
+                };
+                convosMap.set(docSnap.id, convoBase);
+
+                const lastMessageQuery = query(collection(db, 'conversations', docSnap.id, 'messages'), orderBy('timestamp', 'desc'), limit(1));
+                
+                const unsubMsg = onSnapshot(lastMessageQuery, (lastMessageSnapshot) => {
+                    const lastMessage = lastMessageSnapshot.empty ? null : lastMessageSnapshot.docs[0].data();
+                    
+                    const updatedConvo: Conversation = {
+                        ...convosMap.get(docSnap.id)!,
+                        lastMessage: lastMessage ? { 
+                            text: lastMessage.text, 
+                            type: lastMessage.type || 'text', 
+                            timestamp: lastMessage.timestamp 
+                        } : { text: 'No messages yet', type: 'text', timestamp: null },
+                    };
+                    
+                    convosMap.set(docSnap.id, updatedConvo);
+                    
+                    const newConversationsList = Array.from(convosMap.values()).sort((a, b) => {
+                        const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
+                        const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
+                        return timeB - timeA;
+                    });
+                    
+                    setConversations(newConversationsList);
+
+                    if (pendingUpdates > 0) {
+                        pendingUpdates--;
+                        if (pendingUpdates === 0) {
+                            // If there's an initialConversationId, select it once loaded
+                            if (initialConversationId) {
+                                const convoToSelect = newConversationsList.find(c => c.id === initialConversationId);
+                                if (convoToSelect) {
+                                    setSelectedConversation(convoToSelect);
+                                }
+                            }
+                            setIsLoading(false);
+                        }
+                    }
+                });
+
+                messageUnsubscribes.push(unsubMsg);
+            });
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            messageUnsubscribes.forEach(unsub => unsub());
+        };
     }, [user, initialConversationId]);
 
     useEffect(() => {
