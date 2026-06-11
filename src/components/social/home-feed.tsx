@@ -17,6 +17,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import Link from 'next/link';
 import ngeohash from 'ngeohash';
+import { compressImage } from '@/lib/image-compression';
 
 interface NewPostMedia {
     file: File;
@@ -151,8 +152,9 @@ export default function HomeFeed({
             }
 
             if (newPostMedia) {
-                const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${newPostMedia.file.name}`);
-                const snapshot = await uploadBytes(storageRef, newPostMedia.file);
+                const fileToUpload = await compressImage(newPostMedia.file);
+                const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+                const snapshot = await uploadBytes(storageRef, fileToUpload);
                 mediaUrl = await getDownloadURL(snapshot.ref);
                 mediaType = newPostMedia.type;
             }

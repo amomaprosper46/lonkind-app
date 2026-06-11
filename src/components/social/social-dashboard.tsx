@@ -30,6 +30,7 @@ import { searchPosts, type SearchPostsOutput } from '@/ai/flows/search-posts';
 import { Separator } from '../ui/separator';
 import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { compressImage } from '@/lib/image-compression';
 
 const LoadingComponent = () => <div className="col-span-12 md:col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
@@ -620,8 +621,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             }
             
             if (data.avatarFile) {
-                const storageRef = ref(storage, `avatars/${authUser.uid}/${data.avatarFile.name}`);
-                const snapshot = await uploadBytes(storageRef, data.avatarFile);
+                const fileToUpload = await compressImage(data.avatarFile);
+                const storageRef = ref(storage, `avatars/${authUser.uid}/${fileToUpload.name}`);
+                const snapshot = await uploadBytes(storageRef, fileToUpload);
                 newAvatarUrl = await getDownloadURL(snapshot.ref);
                 updates.avatarUrl = newAvatarUrl;
             }

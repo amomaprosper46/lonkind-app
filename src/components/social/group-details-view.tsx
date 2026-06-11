@@ -15,6 +15,7 @@ import type { Post, ReactionType } from './post-card';
 import type { CurrentUser } from './social-dashboard';
 import type { Group } from './groups-view';
 import ngeohash from 'ngeohash';
+import { compressImage } from '@/lib/image-compression';
 
 interface NewPostMedia {
     file: File;
@@ -107,8 +108,9 @@ export default function GroupDetailsView({
             }
 
             if (newPostMedia) {
-                const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${newPostMedia.file.name}`);
-                const snapshot = await uploadBytes(storageRef, newPostMedia.file);
+                const fileToUpload = await compressImage(newPostMedia.file);
+                const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+                const snapshot = await uploadBytes(storageRef, fileToUpload);
                 mediaUrl = await getDownloadURL(snapshot.ref);
                 mediaType = newPostMedia.type;
             }

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import type { CurrentUser } from './social-dashboard';
+import { compressImage } from '@/lib/image-compression';
 
 export interface Story {
     id: string;
@@ -174,8 +175,9 @@ function CreateStoryDialog({ currentUser, onClose }: { currentUser: CurrentUser,
         if (!file) return;
         setIsUploading(true);
         try {
-            const storageRef = ref(storage, `stories/${currentUser.uid}/${Date.now()}_${file.name}`);
-            const uploadTask = await uploadBytesResumable(storageRef, file);
+            const fileToUpload = await compressImage(file);
+            const storageRef = ref(storage, `stories/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+            const uploadTask = await uploadBytesResumable(storageRef, fileToUpload);
             const downloadUrl = await getDownloadURL(uploadTask.ref);
 
             const now = new Date();
