@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2 } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
-import { collection, query, where, getDocs, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
@@ -81,7 +81,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
 
         let messageUnsubscribes: (() => void)[] = [];
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
             // Clean up previous message listeners
             messageUnsubscribes.forEach(unsub => unsub());
             messageUnsubscribes = [];
@@ -95,11 +95,34 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
             const convosMap = new Map<string, Conversation>();
             let pendingUpdates = querySnapshot.docs.length;
 
-            querySnapshot.docs.forEach((docSnap) => {
+            for (const docSnap of querySnapshot.docs) {
                 const data = docSnap.data();
+                
+                let participants = data.participants || [];
+                if (participants.length === 0 && data.participantUids) {
+                    // Dynamically fetch participants to keep conversation doc lightweight
+                    for (const uid of data.participantUids) {
+                        if (uid === user.uid) {
+                            participants.push({ uid, name: user.displayName || 'You', avatarUrl: user.photoURL || '' });
+                        } else {
+                            try {
+                                const userDoc = await getDoc(doc(db, 'users', uid));
+                                if (userDoc.exists()) {
+                                    const ud = userDoc.data();
+                                    participants.push({ uid, name: ud.name, avatarUrl: ud.avatarUrl });
+                                } else {
+                                    participants.push({ uid, name: 'Unknown', avatarUrl: '' });
+                                }
+                            } catch (e) {
+                                console.error('Error fetching participant profile', e);
+                            }
+                        }
+                    }
+                }
+
                 const convoBase: Conversation = {
                     id: docSnap.id,
-                    participants: data.participants,
+                    participants,
                     participantUids: data.participantUids,
                     lastMessage: null,
                 };
@@ -145,7 +168,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                 });
 
                 messageUnsubscribes.push(unsubMsg);
-            });
+            }
         });
 
         return () => {

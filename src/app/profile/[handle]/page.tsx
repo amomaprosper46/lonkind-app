@@ -408,10 +408,6 @@ export default function UserProfilePage() {
             } else {
                 const newDoc = await addDoc(conversationsRef, {
                     participantUids,
-                    participants: [
-                        { uid: currentUser.uid, name: currentUser.name, avatarUrl: currentUser.avatarUrl },
-                        { uid: profileUser.uid, name: profileUser.name, avatarUrl: profileUser.avatarUrl },
-                    ],
                     createdAt: serverTimestamp(),
                 });
                 conversationId = newDoc.id;

@@ -63,10 +63,6 @@ const createOrGetConversationFlow = ai.defineFlow(
       // Conversation does not exist, create a new one
       const newConversationDoc = await addDoc(conversationsRef, {
         participantUids,
-        participants: [
-          { uid: currentUser.uid, name: currentUser.name, avatarUrl: currentUser.avatarUrl },
-          { uid: targetUser.uid, name: targetUser.name, avatarUrl: targetUser.avatarUrl },
-        ],
         createdAt: serverTimestamp(),
       });
       return { conversationId: newConversationDoc.id };
