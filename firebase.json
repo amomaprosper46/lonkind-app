@@ -19,5 +19,8 @@
     "frameworksBackend": {
       "memory": "4GiB"
     }
+  },
+  "functions": {
+    "source": "functions"
   }
 }
