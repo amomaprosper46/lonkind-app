@@ -35,92 +35,7 @@ interface FraudCheck {
   reasons: string[];
 }
 
-async function runFraudChecks(
-  db: FirebaseFirestore.Firestore,
-  userId: string,
-  amountNaira: number,
-  userData: FirebaseFirestore.DocumentData,
-): Promise<FraudCheck> {
-  const reasons: string[] = [];
-
-  // 1. Account age check
-  const createdAt: Timestamp | undefined = userData.createdAt;
-  const accountAgeMs = createdAt
-    ? Date.now() - createdAt.toMillis()
-    : Date.now(); // treat unknown as just created
-  const accountAgeDays = accountAgeMs / (1000 * 60 * 60 * 24);
-
-  if (accountAgeDays < ACCOUNT_AGE_DAYS_REQUIRED) {
-    reasons.push(`Account is only ${Math.floor(accountAgeDays)} days old (minimum ${ACCOUNT_AGE_DAYS_REQUIRED} days).`);
-  }
-
-  // 2. Fast earnings — young account with large earnings
-  if (accountAgeDays < FAST_EARNINGS_DAYS && amountNaira >= 5_000) {
-    reasons.push(`Large withdrawal (₦${amountNaira.toLocaleString()}) on account only ${Math.floor(accountAgeDays)} days old.`);
-  }
-
-  // 3. Large amount — always flag above threshold
-  if (amountNaira >= ALWAYS_REVIEW_ABOVE_NAIRA) {
-    reasons.push(`High-value withdrawal of ₦${amountNaira.toLocaleString()} requires manual review.`);
-  }
-
-  // 4. Minimum posts check
-  let postCount = 0;
-  try {
-    const postsQuery = db.collection('posts').where('author.uid', '==', userId).limit(MIN_POSTS_FOR_PAYOUT + 1);
-    const postsSnap = await postsQuery.get();
-    postCount = postsSnap.size;
-  } catch (_) {}
-
-  if (postCount < MIN_POSTS_FOR_PAYOUT) {
-    reasons.push(`Account has only ${postCount} post(s) — must have at least ${MIN_POSTS_FOR_PAYOUT} to withdraw.`);
-  }
-
-  // 5. Check if first-ever payout
-  const prevPayouts = await db.collection('payoutRequests')
-    .where('userId', '==', userId)
-    .where('status', 'in', ['approved', 'completed'])
-    .limit(1)
-    .get();
-
-  const isFirstPayout = prevPayouts.empty;
-  if (isFirstPayout && amountNaira >= LARGE_FIRST_PAYOUT_NAIRA) {
-    reasons.push(`First-ever payout is ₦${amountNaira.toLocaleString()} — flagged for review.`);
-  }
-
-  // 6. Single-sender concentration check (self-gifting detection)
-  try {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const giftsSnap = await db.collection('gifts')
-      .where('toUser', '==', userId)
-      .where('time', '>=', Timestamp.fromDate(thirtyDaysAgo))
-      .get();
-
-    if (giftsSnap.size > 0) {
-      // Count total naira and per-sender naira
-      const senderTotals = new Map<string, number>();
-      let totalNaira = 0;
-
-      giftsSnap.docs.forEach((doc) => {
-        const data = doc.data();
-        const sender = data.fromUser as string;
-        const value = data.nairaValue as number || 0;
-        senderTotals.set(sender, (senderTotals.get(sender) || 0) + value);
-        totalNaira += value;
-      });
-
-      if (totalNaira > 0) {
-        const topSenderNaira = Math.max(...senderTotals.values());
-        const topSenderPercent = (topSenderNaira / totalNaira) * 100;
-        if (topSenderPercent >= SUSPICIOUS_SINGLE_SENDER_PERCENT) {
-          reasons.push(`${Math.round(topSenderPercent)}% of recent earnings came from a single user — possible self-gifting.`);
-        }
-      }
-    }
-  } catch (_) {}
-
-  return { flagged: reasons.length > 0, reasons };
-}
+// (Fraud checks removed because all payouts now require manual review)
 
 // ─── POST: Request Payout ────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -173,114 +88,35 @@ export async function POST(req: NextRequest) {
       }, { status: 429 });
     }
 
-    // ── Run anti-fraud checks ──
-    const fraudCheck = await runFraudChecks(db, userId, amountNaira, userData);
+    // ── All payouts require manual review ──
     const reference = `payout_${userId}_${Date.now()}`;
 
-    if (fraudCheck.flagged) {
-      // Store for manual review — do NOT transfer yet
-      await db.collection('payoutRequests').doc(reference).set({
-        userId,
-        amountNaira,
-        bankCode,
-        accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'), // mask
-        accountName,
-        reference,
-        status: 'pending_review',
-        flagReasons: fraudCheck.reasons,
-        createdAt: FieldValue.serverTimestamp(),
-        reviewedAt: null,
-        reviewedBy: null,
-      });
-
-      // Hold the earnings (deduct from balance, add to held)
-      await userRef.update({
-        earningsNaira: FieldValue.increment(-amountNaira),
-        heldEarningsNaira: FieldValue.increment(amountNaira),
-      });
-
-      return NextResponse.json({
-        success: true,
-        status: 'pending_review',
-        message: `Your payout request of ₦${amountNaira.toLocaleString()} has been submitted for manual review. Our team will process it within 1–3 business days.`,
-        flagReasons: fraudCheck.reasons,
-      });
-    }
-
-    // ── Clean account: auto-process via Paystack ──
-    // Step 1: Create transfer recipient
-    const recipientRes = await fetch('https://api.paystack.co/transferrecipient', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'nuban',
-        name: accountName,
-        account_number: accountNumber,
-        bank_code: bankCode,
-        currency: 'NGN',
-      }),
+    // Store for manual review
+    await db.collection('payoutRequests').doc(reference).set({
+      userId,
+      amountNaira,
+      bankCode,
+      accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'), // mask
+      accountName,
+      reference,
+      status: 'pending_review',
+      createdAt: FieldValue.serverTimestamp(),
+      reviewedAt: null,
+      reviewedBy: null,
+      // We must store the raw recipient details so the admin API can create the recipient
+      rawAccountNumber: accountNumber, // Store securely for admin to execute
     });
 
-    const recipientData = await recipientRes.json();
-    if (!recipientData.status) {
-      return NextResponse.json({ error: recipientData.message || 'Failed to create transfer recipient.' }, { status: 400 });
-    }
-
-    const recipientCode = recipientData.data.recipient_code;
-
-    // Step 2: Initiate transfer
-    const transferRes = await fetch('https://api.paystack.co/transfer', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source: 'balance',
-        amount: amountNaira * 100, // kobo
-        recipient: recipientCode,
-        reason: `Lonkind earnings payout for ${accountName}`,
-        currency: 'NGN',
-        reference,
-      }),
-    });
-
-    const transferData = await transferRes.json();
-    if (!transferData.status) {
-      return NextResponse.json({ error: transferData.message || 'Transfer initiation failed.' }, { status: 400 });
-    }
-
-    // Step 3: Atomically deduct earnings and log the payout
-    await db.runTransaction(async (transaction) => {
-      transaction.update(userRef, {
-        earningsNaira: FieldValue.increment(-amountNaira),
-      });
-
-      transaction.set(db.collection('payoutRequests').doc(reference), {
-        userId,
-        amountNaira,
-        bankCode,
-        accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'),
-        accountName,
-        recipientCode,
-        paystackReference: reference,
-        paystackStatus: transferData.data.status,
-        status: transferData.data.status === 'success' ? 'completed' : 'pending',
-        flagReasons: [],
-        createdAt: FieldValue.serverTimestamp(),
-        reviewedAt: null,
-        reviewedBy: null,
-      });
+    // Hold the earnings (deduct from balance, add to held)
+    await userRef.update({
+      earningsNaira: FieldValue.increment(-amountNaira),
+      heldEarningsNaira: FieldValue.increment(amountNaira),
     });
 
     return NextResponse.json({
       success: true,
-      status: 'processing',
-      message: `✅ Payout of ₦${amountNaira.toLocaleString()} is being processed. It will arrive in your bank account within 1–3 business days.`,
-      reference,
+      status: 'pending_review',
+      message: `Your payout request of ₦${amountNaira.toLocaleString()} has been submitted for manual review. Our team will process it soon.`,
     });
 
   } catch (error: any) {

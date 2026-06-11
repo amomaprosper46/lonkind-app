@@ -12,6 +12,7 @@ import PostCard from './post-card';
 import { FollowStatus } from '@/app/profile/[handle]/page';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EditProfileDialog, { type ProfileData } from './edit-profile-dialog';
+import ProfileRoast from './profile-roast';
 import Link from 'next/link';
 import LikesView from './likes-view';
 import type { CurrentUser } from './social-dashboard';
@@ -168,11 +169,12 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, on
             </Card>
 
             <Tabs defaultValue="posts" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="posts">Posts</TabsTrigger>
                     <TabsTrigger value="replies">Replies</TabsTrigger>
                     <TabsTrigger value="media">Media</TabsTrigger>
                     <TabsTrigger value="likes">Likes</TabsTrigger>
+                    <TabsTrigger value="roast" className="text-orange-500 font-bold">🔥 Roast</TabsTrigger>
                 </TabsList>
                 <TabsContent value="posts" className="space-y-4 mt-4">
                     {posts.length > 0 ? (
@@ -219,6 +221,13 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, followStatus, on
                         onDeletePost={onDeletePost}
                         userReactions={userReactions}
                         savedPostIds={savedPostIds}
+                    />
+                </TabsContent>
+                <TabsContent value="roast" className="space-y-4 mt-4">
+                    <ProfileRoast
+                        user={user}
+                        postCount={posts.length}
+                        isCurrentUser={isCurrentUser}
                     />
                 </TabsContent>
             </Tabs>
