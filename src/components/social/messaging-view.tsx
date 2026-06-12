@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -10,12 +9,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2 } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
-import { collection, query, where, getDocs, getDoc, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { useSearchParams } from 'next/navigation';
 import { sendPushNotification } from '@/app/actions/sendNotification';
 
 export interface Conversation {
@@ -33,13 +31,6 @@ interface Message {
     audioUrl?: string;
     type: 'text' | 'audio';
     timestamp: any;
-}
-
-interface UserProfile {
-    uid: string;
-    name: string;
-    handle: string;
-    avatarUrl: string;
 }
 
 interface MessagingViewProps {
@@ -71,7 +62,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
         scrollToBottom();
     }, [messages]);
 
-
     useEffect(() => {
         if (!user) return;
 
@@ -82,7 +72,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
         let messageUnsubscribes: (() => void)[] = [];
 
         const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-            // Clean up previous message listeners
             messageUnsubscribes.forEach(unsub => unsub());
             messageUnsubscribes = [];
 
@@ -100,7 +89,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                 
                 let participants = data.participants || [];
                 if (participants.length === 0 && data.participantUids) {
-                    // Dynamically fetch participants to keep conversation doc lightweight
                     for (const uid of data.participantUids) {
                         if (uid === user.uid) {
                             participants.push({ uid, name: user.displayName || 'You', avatarUrl: user.photoURL || '' });
@@ -109,7 +97,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                 const userDoc = await getDoc(doc(db, 'users', uid));
                                 if (userDoc.exists()) {
                                     const ud = userDoc.data();
-                                    participants.push({ uid, name: ud.name, avatarUrl: ud.avatarUrl });
+                                    participants.push({ uid, name: ud.name || 'Unknown', avatarUrl: ud.avatarUrl || '' });
                                 } else {
                                     participants.push({ uid, name: 'Unknown', avatarUrl: '' });
                                 }
@@ -155,7 +143,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                     if (pendingUpdates > 0) {
                         pendingUpdates--;
                         if (pendingUpdates === 0) {
-                            // If there's an initialConversationId, select it once loaded
                             if (initialConversationId) {
                                 const convoToSelect = newConversationsList.find(c => c.id === initialConversationId);
                                 if (convoToSelect) {
@@ -191,7 +178,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
         return () => unsubscribe();
     }, [selectedConversation]);
 
-
     const handleSelectConversation = (conversation: Conversation) => {
         setSelectedConversation(conversation);
     };
@@ -210,7 +196,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
             });
             setNewMessage('');
             
-            // Push Notification
             const recipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
             if (recipientUid) {
                  sendPushNotification(
@@ -244,7 +229,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
 
             setAudioBlob(null);
 
-            // Push Notification
             const recipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
             if (recipientUid) {
                  sendPushNotification(
@@ -265,7 +249,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
      const handleCopyMessage = (text: string, messageId: string) => {
         navigator.clipboard.writeText(text).then(() => {
             setCopiedMessageId(messageId);
-            setTimeout(() => setCopiedMessageId(null), 2000); // Reset after 2 seconds
+            setTimeout(() => setCopiedMessageId(null), 2000);
         }).catch(err => {
             console.error('Failed to copy text: ', err);
             toast({ variant: 'destructive', title: 'Copy Failed', description: 'Could not copy message to clipboard.' });
@@ -285,7 +269,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
             mediaRecorderRef.current.onstop = () => {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 setAudioBlob(audioBlob);
-                // Stop all tracks on the stream
                  stream.getTracks().forEach(track => track.stop());
             };
 
@@ -319,7 +302,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
     const lastMessageText = (convo: Conversation) => {
         if (!convo.lastMessage) return "No messages yet";
         if (convo.lastMessage.type === 'audio') return "Sent a voice message";
-        return convo.lastMessage.text;
+        return convo.lastMessage.text || "";
     }
 
     return (
@@ -362,12 +345,13 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                     className={`flex items-center p-4 cursor-pointer hover:bg-accent/50 ${selectedConversation?.id === convo.id ? 'bg-accent' : ''}`}
                                     onClick={() => handleSelectConversation(convo)}>
                                     <Avatar className="h-12 w-12">
-                                        <AvatarImage src={otherUser.avatarUrl} alt={otherUser.name} data-ai-hint="user avatar" />
-                                        <AvatarFallback>{otherUser.name.charAt(0)}</AvatarFallback>
+                                        <AvatarImage src={otherUser.avatarUrl} alt={otherUser.name || 'User'} />
+                                        {/* Added optional chaining and fallback character */}
+                                        <AvatarFallback>{otherUser.name?.charAt(0) || '?'}</AvatarFallback>
                                     </Avatar>
                                     <div className="ml-4 flex-1 overflow-hidden">
                                         <div className="flex justify-between items-center">
-                                            <p className="font-semibold truncate">{otherUser.name}</p>
+                                            <p className="font-semibold truncate">{otherUser.name || 'Unknown'}</p>
                                             {convo.lastMessage?.timestamp && (
                                                  <p className="text-xs text-muted-foreground whitespace-nowrap">
                                                     {formatDistanceToNow(convo.lastMessage.timestamp.toDate(), { addSuffix: true })}
@@ -376,7 +360,6 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                         </div>
                                         <div className="flex justify-between items-center">
                                             <p className="text-sm text-muted-foreground truncate">{lastMessageText(convo)}</p>
-                                            {/* Unread count logic would go here */}
                                         </div>
                                     </div>
                                 </div>
@@ -391,10 +374,11 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                         <>
                             <CardHeader className="p-4 border-b flex-row items-center gap-4 bg-background">
                                 <Avatar>
-                                    <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name} data-ai-hint="user avatar" />
-                                    <AvatarFallback>{getOtherParticipant(selectedConversation)?.name.charAt(0)}</AvatarFallback>
+                                    <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
+                                    {/* Added optional chaining and fallback character */}
+                                    <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
                                 </Avatar>
-                                 <h2 className="text-xl font-bold">{getOtherParticipant(selectedConversation)?.name}</h2>
+                                 <h2 className="text-xl font-bold">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
                             </CardHeader>
                             <ScrollArea className="flex-1 p-4">
                                 <div className="space-y-2">
@@ -485,5 +469,3 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
         </main>
     );
 }
-
-    
