@@ -1,51 +1,110 @@
-'use server';
-/**
- * @fileOverview A Genkit flow for generating a news post.
- *
- * - generateNewsPost - A function that takes a topic and returns a social media post.
- * - GenerateNewsPostInput - The input type for the generateNewsPost function.
- * - GenerateNewsPostOutput - The return type for the generateNewsPost function.
- */
+"use server"; // 👈 This line completely blocks Next.js from bundling this file into the browser client!
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { genkit } from 'genkit';
+import { googleAI } from '@genkit-ai/google-genai';
+import * as admin from 'firebase-admin';
 
-const GenerateNewsPostInputSchema = z.object({
-  topic: z.string().describe('The topic for the news post (e.g., "World News", "Technology").'),
+// 1. Initialize Firebase Admin SDK safely
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
+
+// 2. Initialize Production Genkit Instance
+const ai = genkit({
+  plugins: [googleAI()],
 });
-export type GenerateNewsPostInput = z.infer<typeof GenerateNewsPostInputSchema>;
 
-const GenerateNewsPostOutputSchema = z.object({
-  postContent: z.string().describe('The generated content for the social media post, written in an engaging and informative tone. Should be about 2-3 sentences.'),
-});
-export type GenerateNewsPostOutput = z.infer<typeof GenerateNewsPostOutputSchema>;
-
-export async function generateNewsPost(input: GenerateNewsPostInput): Promise<GenerateNewsPostOutput> {
-  return newsReporterFlow(input);
+interface SerperNewsArticle {
+  title: string;
+  snippet: string;
 }
 
-const prompt = ai.definePrompt({
-  name: 'newsReporterPrompt',
-  input: {schema: GenerateNewsPostInputSchema},
-  output: {schema: GenerateNewsPostOutputSchema},
-  prompt: `You are an expert news reporter and social media manager for the Lonkind app. 
-  
-Your task is to find a very recent, interesting, and globally relevant news story based on the provided topic.
+/**
+ * CORE HELPER: News Aggregator Fetcher
+ * Hits a low-cost/free search API to grab live contextual news updates.
+ */
+async function fetchLatestNews(query: string): Promise<string> {
+  try {
+    const response = await fetch('https://google.serper.dev/news', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': process.env.SERPER_API_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        q: query, 
+        gl: 'ng', // Focuses search results on Nigerian/West African ecosystems
+        num: 3    // Keeps the input payload tight and cheap
+      }), 
+    });
+    
+    const data = await response.json() as { news?: SerperNewsArticle[] };
+    
+    if (!data.news || data.news.length === 0) {
+      console.warn('Serper API returned zero news entries.');
+      return '';
+    }
 
-Write a short, engaging, and neutral social media post (2-3 sentences) summarizing the news. The post should be informative and easy to understand for a general audience. Start the post with an appropriate emoji.
+    return data.news.map((n) => `${n.title}: ${n.snippet}`).join('\n');
+  } catch (error: any) {
+    console.error('Failed to fetch web news context:', error.message);
+    return '';
+  }
+}
 
-Topic: {{{topic}}}
-`,
-});
-
-const newsReporterFlow = ai.defineFlow(
+/**
+ * GENKIT FLOW: Autonomous News Reporter
+ * Takes zero inputs, aggregates data itself, and posts directly to the timeline database.
+ */
+export const autonomousNewsReporter = ai.defineFlow(
   {
-    name: 'newsReporterFlow',
-    inputSchema: GenerateNewsPostInputSchema,
-    outputSchema: GenerateNewsPostOutputSchema,
+    name: 'autonomousNewsReporter',
   },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+  async () => {
+    // A. Gather raw live tech data from the web
+    const newsContext = await fetchLatestNews('tech startup innovation investment Nigeria');
+    
+    if (!newsContext) {
+      throw new Error('Aborting flow: No news context could be gathered.');
+    }
+
+    // B. Pass context to Gemini 1.5 Flash using production naming syntax
+    const llmResponse = await ai.generate({
+      model: googleAI.model('gemini-1.5-flash'),
+      prompt: `
+        You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
+        Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.
+        
+        Strict Guidelines:
+        - Do not use hashtags under any circumstances.
+        - Keep the content punchy, direct, and under 280 characters.
+        - Focus purely on genuine factual data; do not introduce editorial bias.
+        
+        Raw News Data:
+        ${newsContext}
+      `,
+    });
+
+    const postContent = llmResponse.text;
+
+    if (!postContent) {
+      throw new Error('Gemini failed to yield text output content.');
+    }
+
+    // C. Write directly to Firestore under a fixed system profile token identifier
+    const SYSTEM_BOT_UID = 'system-news-reporter';
+    const newPostRef = db.collection('posts').doc();
+
+    await newPostRef.set({
+      content: postContent.trim(),
+      userId: SYSTEM_BOT_UID,
+      isAutomated: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      likesCount: 0,
+      commentsCount: 0,
+    });
+
+    return { success: true, postId: newPostRef.id };
   }
 );

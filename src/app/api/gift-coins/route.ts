@@ -1,80 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import * as admin from 'firebase-admin';
 import { z } from 'zod';
 
-// ─── Economy Constants ───────────────────────────────────────────
-const NAIRA_PER_COIN = 20;     // ₦20 per coin (10 coins = ₦200 at test price)
-const PLATFORM_FEE = 0;        // 0% — creator gets 100% of gift value
+const NAIRA_PER_COIN = 20;     // ₦20 per coin
+const PLATFORM_FEE = 0;        // 0% platform split fee config
 
 function getAdminDb() {
-  if (!getApps().length) {
+  if (!admin.apps.length) {
     try {
       const serviceAccount = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
         ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
         : undefined;
       if (serviceAccount) {
-        initializeApp({ credential: cert(serviceAccount) });
+        admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
       } else {
-        initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+        admin.initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
       }
     } catch (e) {
-      initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+      console.error("Firebase Admin initialization fallback error:", e);
     }
   }
-  return getFirestore();
+  return admin.firestore();
 }
 
+// 1. Removed fromUserId from schema to completely eliminate client-side parameter injection vectors
 const InputSchema = z.object({
-  fromUserId: z.string().min(1),
-  toUserId: z.string().min(1),
-  coinAmount: z.number().int().positive(),
-  // diamondValue kept for backward compat but ignored now
-  diamondValue: z.number().int().positive().optional(),
+  toUserId: z.string().trim().min(1, 'Recipient target UID required.'),
+  coinAmount: z.number().int().positive('Gift quantity must be a positive integer.'),
 });
 
+/**
+ * POST: Authenticated, High-Security Ledger Gifting Engine
+ */
 export async function POST(req: NextRequest) {
   try {
+    const db = getAdminDb();
+
+    // 2. Enforce Decryption of the Firebase Authentication ID Token
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthenticated. Security token signature missing.' }, { status: 401 });
+    }
+
+    const idToken = authHeader.split('Bearer ')[1];
+    let verifiedSenderUid: string;
+
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
+      verifiedSenderUid = decodedToken.uid; // Securely lock identity using cryptographically extracted server token data
+    } catch (authError) {
+      return NextResponse.json({ error: 'Unauthorized credentials verification rejected.' }, { status: 403 });
+    }
+
     const body = await req.json();
     const parsed = InputSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid payload compilation.', details: parsed.error.issues }, { status: 400 });
     }
 
-    const { fromUserId, toUserId, coinAmount } = parsed.data;
+    const { toUserId, coinAmount } = parsed.data;
 
-    if (fromUserId === toUserId) {
-      return NextResponse.json({ error: 'You cannot gift yourself.' }, { status: 400 });
+    // Prevent Self-Gifting Loops
+    if (verifiedSenderUid === toUserId) {
+      return NextResponse.json({ error: 'Transaction aborted. You cannot gift yourself.' }, { status: 400 });
     }
 
-    // Calculate naira value — creator gets 100%
+    // Economy Ledger Mapping calculations
     const rawNairaValue = coinAmount * NAIRA_PER_COIN;
     const platformCut = Math.floor(rawNairaValue * PLATFORM_FEE);
-    const creatorEarnings = rawNairaValue - platformCut; // ₦ added to creator's earnings
+    const creatorEarnings = rawNairaValue - platformCut;
 
-    const db = getAdminDb();
-    const senderRef = db.collection('users').doc(fromUserId);
+    const senderRef = db.collection('users').doc(verifiedSenderUid);
     const receiverRef = db.collection('users').doc(toUserId);
 
+    /**
+     * 3. ACID Transaction Settlement Thread
+     * Validates balance constraints and processes state transformations atomically.
+     */
     await db.runTransaction(async (transaction) => {
       const [senderDoc, receiverDoc] = await Promise.all([
         transaction.get(senderRef),
         transaction.get(receiverRef),
       ]);
 
-      if (!senderDoc.exists) throw new Error('Sender account not found.');
-      if (!receiverDoc.exists) throw new Error('Recipient account not found.');
+      if (!senderDoc.exists) throw new Error('SENDER_NOT_FOUND');
+      if (!receiverDoc.exists) throw new Error('RECIPIENT_NOT_FOUND');
 
       const senderCoins = senderDoc.data()?.coins || 0;
       if (senderCoins < coinAmount) {
-        throw new Error(`Insufficient coins. You have ${senderCoins} coins but need ${coinAmount}.`);
+        throw new Error(`INSUFFICIENT_SOLVENCY_${senderCoins}`);
       }
 
-      // Record the gift with full audit trail
+      // A. Register Audit Ledger Document Entry
       const giftRef = db.collection('gifts').doc();
       transaction.set(giftRef, {
-        fromUser: fromUserId,
+        fromUser: verifiedSenderUid,
         toUser: toUserId,
         coinAmount,
         nairaValue: rawNairaValue,
@@ -83,21 +106,23 @@ export async function POST(req: NextRequest) {
         time: FieldValue.serverTimestamp(),
       });
 
-      // Deduct coins from sender
+      // B. Deduct virtual currencies from verified source identity profile
       transaction.update(senderRef, {
         coins: FieldValue.increment(-coinAmount),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // Add real naira earnings to receiver (NOT diamonds — real money)
+      // C. Credits hard-currency fiat value balances into creator withdrawal accounts
       transaction.update(receiverRef, {
         earningsNaira: FieldValue.increment(creatorEarnings),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // Notification for recipient with the naira amount
-      const notifRef = db.collection('users').doc(toUserId).collection('notifications').doc();
+      // D. Issue Real-Time Transaction Alert Records
+      const notifRef = receiverRef.collection('notifications').doc();
       transaction.set(notifRef, {
         type: 'new_gift',
-        fromUser: { uid: fromUserId },
+        fromUser: { uid: verifiedSenderUid },
         coinAmount,
         nairaEarned: creatorEarnings,
         timestamp: FieldValue.serverTimestamp(),
@@ -112,7 +137,19 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Gift coins error:', error);
-    return NextResponse.json({ error: error.message || 'Gifting failed.' }, { status: 500 });
+    console.error('Critical currency processing exception:', error);
+
+    if (error.message === 'SENDER_NOT_FOUND') {
+      return NextResponse.json({ error: 'Origin profile context validation failed.' }, { status: 404 });
+    }
+    if (error.message === 'RECIPIENT_NOT_FOUND') {
+      return NextResponse.json({ error: 'Recipient location mapping failed.' }, { status: 404 });
+    }
+    if (error.message.startsWith('INSUFFICIENT_SOLVENCY')) {
+      const balance = error.message.split('_')[2];
+      return NextResponse.json({ error: `Insufficient coins. Your wallet balance is currently ${balance} units.` }, { status: 400 });
+    }
+
+    return NextResponse.json({ error: 'An unexpected internal ledger exception occurred.' }, { status: 500 });
   }
 }

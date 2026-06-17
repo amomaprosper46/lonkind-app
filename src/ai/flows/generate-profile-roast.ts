@@ -1,14 +1,30 @@
 'use server';
 /**
- * @fileOverview AI-powered profile roast bio generator.
+ * @fileOverview AI-powered profile roast bio generator with integrated coin economy.
  * Generates funny, shareable roast bios based on a user's profile data.
- * Designed to create viral content users will screenshot and share on social media.
+ * Charges 1 coin per generation to protect server resources.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import admin from 'firebase-admin';
 
+// Initialize Firebase Admin SDK securely on the server
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
+const adminDb = admin.firestore();
+
+// 1. Added userId to the schema to track coin deduction
 const RoastInputSchema = z.object({
+  userId: z.string().describe('The UID of the user requesting the roast.'),
   name: z.string().describe('The display name of the user being roasted.'),
   handle: z.string().describe('The username/handle of the user.'),
   bio: z.string().optional().describe('The current bio of the user, if any.'),
@@ -19,13 +35,18 @@ const RoastInputSchema = z.object({
   badges: z.array(z.string()).optional().describe('Any badges the user has earned.'),
   style: z.enum(['savage', 'playful', 'wholesome-roast']).default('playful').describe('The roast style.'),
 });
+export type RoastInput = z.infer<typeof RoastInputSchema>;
 
+// 2. Adjusted output schema to communicate success/failure state to the UI
 const RoastOutputSchema = z.object({
-  roastBio: z.string().describe('The generated roast bio. Max 160 characters, punchy and hilarious.'),
-  roastTitle: z.string().describe('A short, catchy title for the roast (e.g. "The Verdict Is In 🔥").'),
-  savageryLevel: z.number().min(1).max(10).describe('How savage the roast is on a scale of 1-10.'),
-  emoji: z.string().describe('A single emoji that best represents this roast.'),
+  success: z.boolean(),
+  message: z.string(),
+  roastBio: z.string().optional().describe('The generated roast bio. Max 160 characters, punchy and hilarious.'),
+  roastTitle: z.string().optional().describe('A short, catchy title for the roast (e.g. "The Verdict Is In 🔥").'),
+  savageryLevel: z.number().optional().min(1).max(10).describe('How savage the roast is on a scale of 1-10.'),
+  emoji: z.string().optional().describe('A single emoji that best represents this roast.'),
 });
+export type RoastOutput = z.infer<typeof RoastOutputSchema>;
 
 export const generateProfileRoast = ai.defineFlow(
   {
@@ -34,23 +55,58 @@ export const generateProfileRoast = ai.defineFlow(
     outputSchema: RoastOutputSchema,
   },
   async (input) => {
-    const statsContext = [
-      input.postCount !== undefined ? `They have ${input.postCount} posts.` : '',
-      input.followersCount !== undefined ? `They have ${input.followersCount} followers.` : '',
-      input.followingCount !== undefined ? `They follow ${input.followingCount} people.` : '',
-      input.isProfessional ? 'They have a verified/professional badge.' : '',
-      input.badges?.length ? `Their badges: ${input.badges.join(', ')}.` : '',
-      input.bio ? `Their current bio says: "${input.bio}"` : 'They have no bio set.',
-    ].filter(Boolean).join(' ');
+    const userRef = adminDb.collection('users').doc(input.userId);
 
-    const styleGuide = {
-      'savage': 'Be brutally funny. Think comedy roast level humor. No mercy but keep it clever, not mean-spirited. Use wordplay and unexpected twists.',
-      'playful': 'Be lighthearted and fun. Think friendly teasing between best friends. Witty observations, gentle ribbing.',
-      'wholesome-roast': 'Roast them but in a way that is secretly a compliment. Backhanded compliments that make them laugh and feel good.',
-    };
+    try {
+      let balanceSufficient = false;
 
-    const { output } = await ai.generate({
-      prompt: `You are the funniest bio writer on the internet. Your roast bios go viral on Twitter and TikTok because they are hilariously accurate and quotable.
+      // 3. Atomically check and deduct 1 coin before hitting the LLM API
+      await adminDb.runTransaction(async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        
+        if (!userDoc.exists) {
+          throw new Error('User profile not found.');
+        }
+
+        const currentCoins = userDoc.data()?.coins || 0;
+
+        if (currentCoins < 1) {
+          balanceSufficient = false;
+          return;
+        }
+
+        balanceSufficient = true;
+        transaction.update(userRef, {
+          coins: admin.firestore.FieldValue.increment(-1)
+        });
+      });
+
+      if (!balanceSufficient) {
+        return {
+          success: false,
+          message: 'Insufficient coins. Please buy more coins to generate a profile roast.',
+        };
+      }
+
+      // 4. Gather the stats context for the AI prompt
+      const statsContext = [
+        input.postCount !== undefined ? `They have ${input.postCount} posts.` : '',
+        input.followersCount !== undefined ? `They have ${input.followersCount} followers.` : '',
+        input.followingCount !== undefined ? `They follow ${input.followingCount} people.` : '',
+        input.isProfessional ? 'They have a verified/professional badge.' : '',
+        input.badges?.length ? `Their badges: ${input.badges.join(', ')}.` : '',
+        input.bio ? `Their current bio says: "${input.bio}"` : 'They have no bio set.',
+      ].filter(Boolean).join(' ');
+
+      const styleGuide = {
+        'savage': 'Be brutally funny. Think comedy roast level humor. No mercy but keep it clever, not mean-spirited. Use wordplay and unexpected twists.',
+        'playful': 'Be lighthearted and fun. Think friendly teasing between best friends. Witty observations, gentle ribbing.',
+        'wholesome-roast': 'Roast them but in a way that is secretly a compliment. Backhanded compliments that make them laugh and feel good.',
+      };
+
+      // 5. Fire Genkit generation
+      const { output } = await ai.generate({
+        prompt: `You are the funniest bio writer on the internet. Your roast bios go viral on Twitter and TikTok because they are hilariously accurate and quotable.
 
 Generate a ROAST BIO for this user's social media profile:
 
@@ -74,15 +130,35 @@ DO NOT:
 - Reference sensitive topics (race, religion, sexuality, disability)
 - Use profanity
 - Be generic — make it specific to THIS user's stats and profile`,
-      output: {
-        schema: RoastOutputSchema,
-      },
-    });
+        output: {
+          schema: z.object({
+            roastBio: z.string(),
+            roastTitle: z.string(),
+            savageryLevel: z.number().min(1).max(10),
+            emoji: z.string(),
+          }),
+        },
+      });
 
-    if (!output) {
-      throw new Error('AI failed to generate a roast. Even the AI is speechless.');
+      if (!output) {
+        throw new Error('AI failed to generate a roast. Even the AI is speechless.');
+      }
+
+      return {
+        success: true,
+        message: 'Profile roasted successfully! 1 coin deducted.',
+        roastBio: output.roastBio,
+        roastTitle: output.roastTitle,
+        savageryLevel: output.savageryLevel,
+        emoji: output.emoji,
+      };
+
+    } catch (error: any) {
+      console.error('Profile roast generation failed:', error);
+      return {
+        success: false,
+        message: error.message || 'An error occurred while generating the profile roast.',
+      };
     }
-
-    return output;
   }
 );

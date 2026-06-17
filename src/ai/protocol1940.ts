@@ -1,27 +1,41 @@
-
 import { config } from 'dotenv';
 config();
 
-// This file imports all Genkit flows and is used as the entry point
-// for the 'protocol1940' CLI command.
+/**
+ * @fileOverview Core Genkit Flow Registry & Subsystem Entry Point.
+ * Centralizes system configurations and triggers sequential runtime initialization hooks
+ * for premium AI actions, social discovery indices, and billing transaction flows.
+ */
 
-import '@/ai/flows/generate-ideas.ts';
-import '@/ai/flows/assistant.ts';
-import '@/ai/flows/generate-story.ts';
-import '@/ai/flows/news-reporter.ts';
-import '@/ai/flows/add-dummy-followers.ts';
-import '@/ai/flows/personal-ai.ts';
-import '@/ai/flows/submit-support-ticket.ts';
-import '@/ai/flows/request-payout.ts';
-import '@/ai/flows/search-posts.ts';
-import '@/ai/flows/create-or-get-conversation.ts';
-import '@/ai/flows/translate-text.ts';
-import '@/ai/flows/get-localization-flow.ts';
-import '@/ai/flows/create-group.ts';
-import '@/ai/flows/translate-image-text.ts';
-import '@/ai/flows/create-video-post.ts';
-import '@/ai/flows/search-nearby-posts.ts';
-import '@/ai/flows/send-tip.ts';
-import '@/ai/flows/purchase-coins.ts';
-import '@/ai/flows/reset-admin-password.ts';
+// --- Premium AI Command Center Elements ---
+import '@/ai/flows/generate-ideas';
+import '@/ai/flows/generate-story';
+import '@/ai/flows/news-reporter';      // Monetized (2 Coins)
+import '@/ai/flows/translate-image-text'; // Monetized (3 Coins)
+import '@/ai/flows/assistant';
+import '@/ai/flows/personal-ai';         // Secure platform assistant ("Lonki")
 
+// --- Global Utilities & Localization Systems ---
+import '@/ai/flows/translate-text';       // Free user content translation
+import '@/ai/flows/get-localization-flow'; // Free frontend UI localization
+
+// --- Financial Ledgers & Transaction Pipelines ---
+import '@/ai/flows/purchase-coins';       // Paystack international checkout
+import '@/ai/flows/send-tip';             // Atomic server-side coin gifting transaction
+import '@/ai/flows/request-payout';       // Creator Diamond liquidation matrix with 24h locks
+
+// --- Feeds, Search, & Discovery Graph Matrices ---
+import '@/ai/flows/search-posts';          // Tokenized keyword search
+import '@/ai/flows/search-nearby-posts';   // High-precision geohash radial neighborhood discovery
+
+// --- Group, Messaging, & Operational Pipelines ---
+import '@/ai/flows/create-or-get-conversation';
+import '@/ai/flows/create-group';
+import '@/ai/flows/create-video-post';
+import '@/ai/flows/submit-support-ticket';
+
+// --- Diagnostic & Administrative Script Engines ---
+import '@/ai/flows/add-dummy-followers';
+import '@/ai/flows/reset-admin-password';  // Shielded backdoor credential initialization master utility
+
+console.log('🚀 Lonkind Genkit Subsystem Core: All system flows registered successfully.');

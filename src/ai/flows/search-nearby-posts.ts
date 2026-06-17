@@ -1,42 +1,38 @@
 'use server';
 /**
- * @fileOverview A Genkit flow for searching posts by geohash.
- *
- * - searchNearbyPosts - A function that takes a geohash and returns matching posts.
- * - SearchNearbyPostsInput - The input type for the function.
- * - SearchNearbyPostsOutput - The return type for the function.
+ * @fileOverview Secure, high-precision geo-fencing lookup engine for Lonkind feeds.
+ * Resolves Firestore range evaluation restrictions by handling neighborhood cluster 
+ * aggregation and real-time chronological sorting on the server layer.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { collection, query, where, limit, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import type { Post } from '@/components/social/post-card';
+import { adminDb } from '@/lib/firebase-admin'; // Use server-side admin instance
 import ngeohash from 'ngeohash';
 
 const SearchNearbyPostsInputSchema = z.object({
-  geohash: z.string().describe('The geohash string to search around.'),
+  geohash: z.string().trim().describe('The primary geohash string tracking the active user\'s coordinate locus.'),
 });
 export type SearchNearbyPostsInput = z.infer<typeof SearchNearbyPostsInputSchema>;
 
 const PostSchema = z.object({
-    id: z.string(),
-    content: z.string(),
-    author: z.object({
-        name: z.string(),
-        handle: z.string(),
-        avatarUrl: z.string(),
-        uid: z.string(),
-        isProfessional: z.boolean().optional(),
-    }),
-    imageUrl: z.string().optional(),
-    videoUrl: z.string().optional(),
-    geohash: z.string().optional(),
-    // We can't easily include a typed timestamp here from Firestore server values
+  id: z.string(),
+  content: z.string(),
+  author: z.object({
+    name: z.string(),
+    handle: z.string(),
+    avatarUrl: z.string(),
+    uid: z.string(),
+    isProfessional: z.boolean().optional(),
+  }),
+  imageUrl: z.string().optional(),
+  videoUrl: z.string().optional(),
+  geohash: z.string().optional(),
+  createdAt: z.string().describe('ISO string representation of the post timestamp.'),
 });
 
 const SearchNearbyPostsOutputSchema = z.object({
-  posts: z.array(PostSchema).describe('A list of posts that are nearby.'),
+  posts: z.array(PostSchema).describe('A chronologically sorted list of adjacent geographic timeline events.'),
 });
 export type SearchNearbyPostsOutput = z.infer<typeof SearchNearbyPostsOutputSchema>;
 
@@ -51,42 +47,78 @@ const searchNearbyPostsFlow = ai.defineFlow(
     outputSchema: SearchNearbyPostsOutputSchema,
   },
   async ({ geohash }) => {
-    if (!geohash.trim()) {
-        return { posts: [] };
+    if (!geohash) {
+      return { posts: [] };
     }
-    
-    // Query for posts with the same geohash prefix (e.g., first 5 chars)
-    // This gives us a square-shaped area around the user.
-    const searchGeohash = geohash.substring(0, 5);
 
-    const postsRef = collection(db, 'posts');
-    const q = query(
-      postsRef,
-      where('geohash', '>=', searchGeohash),
-      where('geohash', '<=', searchGeohash + '\uf8ff'),
-      orderBy('geohash'),
-      orderBy('timestamp', 'desc'),
-      limit(25)
-    );
+    try {
+      /**
+       * 1. Resolve Geographic Grid Boundaries
+       * Truncating a geohash to 5 characters creates an operational boundary grid area 
+       * of approximately 4.9km x 4.9km. To stop posts on the immediate other side of 
+       * a grid edge from disappearing, we calculate the current block plus its 8 neighboring grids.
+       */
+      const coreGrid = geohash.substring(0, 5);
+      const targetNeighbors = ngeohash.neighbors(coreGrid);
+      const processingGrids = [coreGrid, ...targetNeighbors];
 
-    const querySnapshot = await getDocs(q);
-    
-    const posts = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        // Ensure content is a string and other fields exist
-        return { 
-            id: doc.id,
-            content: data.content || '',
-            author: data.author,
-            imageUrl: data.imageUrl,
-            videoUrl: data.videoUrl,
-            reactions: data.reactions,
-            comments: data.comments,
-            timestamp: data.timestamp,
-            geohash: data.geohash,
-        } as Post;
-    });
-    
-    return { posts };
+      const postsCollectionRef = adminDb.collection('posts');
+      
+      /**
+       * 2. Parallel Query Dispatch
+       * Because Firestore limits single-field string range comparisons, we map over 
+       * our localized geographic clusters in parallel to pool match collections efficiently.
+       */
+      const queryPromises = processingGrids.map((gridCell) => {
+        return postsCollectionRef
+          .where('geohash', '>=', gridCell)
+          .where('geohash', '<=', gridCell + '\uf8ff')
+          .limit(15) // Limit pool collection density per localized cell
+          .get();
+      });
+
+      const snapshots = await Promise.all(queryPromises);
+      const consolidatedPosts: any[] = [];
+
+      // 3. Process data packets into unified structures
+      snapshots.forEach((snapshot) => {
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          // Deduplicate if any posts cross grid line calculations
+          if (!consolidatedPosts.some(p => p.id === doc.id)) {
+            // Safe conversion of Firestore server Timestamps to serializable string signatures
+            const timestampValue = data.timestamp?.toDate 
+              ? data.timestamp.toDate().toISOString() 
+              : new Date().toISOString();
+
+            consolidatedPosts.push({
+              id: doc.id,
+              content: data.content || '',
+              author: data.author || { name: 'Anonymous', handle: 'anonymous', avatarUrl: '', uid: '' },
+              imageUrl: data.imageUrl,
+              videoUrl: data.videoUrl,
+              geohash: data.geohash,
+              createdAt: timestampValue,
+            });
+          }
+        });
+      });
+
+      /**
+       * 4. Multi-Index Memory Sorting Block
+       * Overcomes Firestore's index range restriction by running lightning-fast 
+       * chronological array comparisons directly inside your node server execution environment.
+       */
+      const chronologicallySortedPosts = consolidatedPosts
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 25); // Return the top 25 newest hyper-local feed records
+
+      return { posts: chronologicallySortedPosts };
+
+    } catch (error) {
+      console.error('Hyper-local timeline geo-query compilation execution failed:', error);
+      return { posts: [] };
+    }
   }
 );

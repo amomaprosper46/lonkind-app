@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import * as admin from 'firebase-admin';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
-
-import * as admin from 'firebase-admin';
 
 function getAdminDb() {
   if (!admin.apps.length) {
@@ -22,98 +21,114 @@ function getAdminDb() {
   return admin.firestore();
 }
 
-// Verify the requesting user is an admin
-async function isAdmin(db: FirebaseFirestore.Firestore, adminUid: string): Promise<boolean> {
-  const adminDoc = await db.collection('admins').doc(adminUid).get();
-  return adminDoc.exists;
+/**
+ * Authenticates the requesting user via asymmetric token decryption 
+ * and verifies their permission state inside the system admin registry.
+ */
+async function authenticateAdmin(req: NextRequest, db: FirebaseFirestore.Firestore): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+
+    const idToken = authHeader.split('Bearer ')[1];
+    // Decrypt the ID token cryptographically via the core Firebase authentication engine
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+
+    const adminDoc = await db.collection('admins').doc(uid).get();
+    return adminDoc.exists ? uid : null;
+  } catch (err) {
+    console.error('Admin bearer authorization token verification exception:', err);
+    return null;
+  }
 }
 
+/**
+ * POST: Securely Processes Admin Payout Decisions (Approve / Reject)
+ */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { payoutId, action, adminUid, rejectReason } = body;
+    const db = getAdminDb();
 
-    if (!payoutId || !action || !adminUid) {
-      return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
+    // 1. Authenticate identity states via structural token lookup
+    const verifiedAdminUid = await authenticateAdmin(req, db);
+    if (!verifiedAdminUid) {
+      return NextResponse.json({ error: 'Unauthorized access sequence. Cryptographic token mismatch.' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { payoutId, action, rejectReason } = body;
+
+    if (!payoutId || !action) {
+      return NextResponse.json({ error: 'Missing required tracking fields.' }, { status: 400 });
     }
 
     if (!['approve', 'reject'].includes(action)) {
-      return NextResponse.json({ error: 'Action must be "approve" or "reject".' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid action parameter value assignment.' }, { status: 400 });
     }
 
-    const db = getAdminDb();
-
-    // Verify admin
-    const adminCheck = await isAdmin(db, adminUid);
-    if (!adminCheck) {
-      return NextResponse.json({ error: 'Unauthorized — admin access required.' }, { status: 403 });
-    }
-
-    // Fetch the payout request
     const payoutRef = db.collection('payoutRequests').doc(payoutId);
-    const payoutDoc = await payoutRef.get();
+    let userRef: FirebaseFirestore.DocumentReference;
+    let payoutData: FirebaseFirestore.DocumentData;
 
-    if (!payoutDoc.exists) {
-      return NextResponse.json({ error: 'Payout request not found.' }, { status: 404 });
-    }
+    /**
+     * 2. Phase 1 ACID Lock: Read and Update Ledger State Atomically
+     * We transition document states into a locking 'processing' mode *inside a transaction* * to eliminate split-second click-spamming or duplicate request replay threats.
+     */
+    const executionStateCheck = await db.runTransaction(async (transaction) => {
+      const payoutDoc = await transaction.get(payoutRef);
+      if (!payoutDoc.exists) throw new Error('TARGET_NOT_FOUND');
 
-    const payout = payoutDoc.data()!;
+      const data = payoutDoc.data()!;
+      if (data.status !== 'pending_review') throw new Error(`ALREADY_PROCESSED_${data.status.toUpperCase()}`);
 
-    if (payout.status !== 'pending_review') {
-      return NextResponse.json({ error: `This payout is already ${payout.status}.` }, { status: 400 });
-    }
+      payoutData = data;
+      userRef = db.collection('users').doc(data.userId);
 
-    const userRef = db.collection('users').doc(payout.userId);
-
-    // ── REJECT ──────────────────────────────────────────────────
-    if (action === 'reject') {
-      await db.runTransaction(async (transaction) => {
-        // Refund held earnings back to user
+      if (action === 'reject') {
+        // Run direct rollback right inside Phase 1 if processing a rejection request
         transaction.update(userRef, {
-          earningsNaira: FieldValue.increment(payout.amountNaira),
-          heldEarningsNaira: FieldValue.increment(-payout.amountNaira),
+          earningsNaira: FieldValue.increment(data.amountNaira),
+          heldEarningsNaira: FieldValue.increment(-data.amountNaira),
         });
 
-        // Update payout request status
         transaction.update(payoutRef, {
           status: 'rejected',
           rejectReason: rejectReason || 'Your payout request did not meet our requirements.',
           reviewedAt: FieldValue.serverTimestamp(),
-          reviewedBy: adminUid,
+          reviewedBy: verifiedAdminUid,
         });
 
-        // Notify user
-        const notifRef = db.collection('users').doc(payout.userId).collection('notifications').doc();
+        const notifRef = userRef.collection('notifications').doc();
         transaction.set(notifRef, {
           type: 'payout_rejected',
-          amountNaira: payout.amountNaira,
+          amountNaira: data.amountNaira,
           reason: rejectReason || 'Your payout request did not meet our requirements.',
           timestamp: FieldValue.serverTimestamp(),
           read: false,
         });
-      });
 
-      return NextResponse.json({ success: true, message: `Payout rejected. ₦${payout.amountNaira.toLocaleString()} refunded to user's earnings.` });
+        return { completedLocally: true };
+      }
+
+      // If approving, provisionally transition status to 'processing' to lock out simultaneous requests
+      transaction.update(payoutRef, { status: 'processing' });
+      return { completedLocally: false };
+    });
+
+    if (executionStateCheck.completedLocally) {
+      return NextResponse.json({ success: true, message: `Payout rejected. ₦${payoutData!.amountNaira.toLocaleString()} successfully returned to creator balances.` });
     }
 
-    // ── APPROVE ──────────────────────────────────────────────────
-    // Need the real bank details — fetch from the payout doc
-    // Note: account number is masked in the payout doc for security
-    // For admin approval we need the original unmasked number
-    // We'll call Paystack with the info we have (recipient needs to be re-created with the full account number)
-    // The admin approval flow re-prompts for full account details OR we store encrypted
-    // For now we create a new recipient using the bank code and stored account name
-    // In production you'd store the recipient_code from the original request
-
-    const recipientCode = payout.recipientCode;
-
+    // 3. Out-Of-Transaction Phase: Dispatch Paystack Financial Clearing Order
+    const recipientCode = payoutData!.recipientCode;
     if (!recipientCode) {
-      return NextResponse.json({
-        error: 'No recipient code found. The user must re-submit the payout request with their bank details.',
-      }, { status: 400 });
+      await payoutRef.update({ status: 'pending_review' }); // Roll back lock state if information is missing
+      return NextResponse.json({ error: 'Missing core Paystack recipient routing references.' }, { status: 400 });
     }
 
-    // Initiate the Paystack transfer
+    const paystackReference = `lonkind_payout_${payoutId}_${Date.now()}`;
+
     const transferRes = await fetch('https://api.paystack.co/transfer', {
       method: 'POST',
       headers: {
@@ -122,41 +137,46 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         source: 'balance',
-        amount: payout.amountNaira * 100, // kobo
+        amount: Math.round(payoutData!.amountNaira * 100), // convert to structural integer kobo units
         recipient: recipientCode,
-        reason: `Lonkind approved earnings payout — reviewed by admin`,
+        reason: `Lonkind Creator Earnings Withdrawal Fulfillment`,
         currency: 'NGN',
-        reference: `admin_approved_${payoutId}_${Date.now()}`,
+        reference: paystackReference,
       }),
     });
 
     const transferData = await transferRes.json();
 
+    /**
+     * 4. Phase 2 ACID Lock: Handle Third-Party Settlement Result Safely
+     * We wrap completion mappings inside a secondary deterministic transaction thread.
+     */
     if (!transferData.status) {
-      return NextResponse.json({
-        error: transferData.message || 'Paystack transfer failed. Check your Paystack balance.',
-      }, { status: 400 });
+      // Recovery Block: If Paystack flatly rejects the connection, reset lock back to 'pending_review'
+      await payoutRef.update({ 
+        status: 'pending_review',
+        lastProcessingError: transferData.message || 'Paystack automated settlement engine error output.'
+      });
+      return NextResponse.json({ error: transferData.message || 'Paystack clearing house transaction denied.' }, { status: 400 });
     }
 
-    // Update payout and deduct held earnings
     await db.runTransaction(async (transaction) => {
       transaction.update(userRef, {
-        heldEarningsNaira: FieldValue.increment(-payout.amountNaira),
+        heldEarningsNaira: FieldValue.increment(-payoutData!.amountNaira),
       });
 
       transaction.update(payoutRef, {
         status: 'completed',
-        paystackTransferReference: transferData.data.reference,
-        paystackStatus: transferData.data.status,
+        paystackTransferReference: transferData.data.reference || paystackReference,
+        paystackStatus: transferData.data.status || 'success',
         reviewedAt: FieldValue.serverTimestamp(),
-        reviewedBy: adminUid,
+        reviewedBy: verifiedAdminUid,
       });
 
-      // Notify user
-      const notifRef = db.collection('users').doc(payout.userId).collection('notifications').doc();
+      const notifRef = userRef.collection('notifications').doc();
       transaction.set(notifRef, {
         type: 'payout_approved',
-        amountNaira: payout.amountNaira,
+        amountNaira: payoutData!.amountNaira,
         timestamp: FieldValue.serverTimestamp(),
         read: false,
       });
@@ -164,29 +184,32 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `✅ Payout of ₦${payout.amountNaira.toLocaleString()} approved and transfer initiated.`,
+      message: `✅ Payout of ₦${payoutData!.amountNaira.toLocaleString()} successfully approved; execution sequence initiated.`,
     });
 
   } catch (error: any) {
-    console.error('Admin approve payout error:', error);
-    return NextResponse.json({ error: error.message || 'Internal server error.' }, { status: 500 });
+    console.error('Critical administrative payout override crash exception:', error);
+    if (error.message === 'TARGET_NOT_FOUND') {
+      return NextResponse.json({ error: 'Designated payout transaction document reference missing.' }, { status: 404 });
+    }
+    if (error.message.startsWith('ALREADY_PROCESSED')) {
+      return NextResponse.json({ error: 'Collision abort. This asset block has already been modified by another ledger line.' }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'System processing failure exception encountered.' }, { status: 500 });
   }
 }
 
-// GET: Fetch all pending review payout requests
+/**
+ * GET: Securely Fetches Pending Payout Batches
+ */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const adminUid = searchParams.get('adminUid');
-
-    if (!adminUid) {
-      return NextResponse.json({ error: 'adminUid required.' }, { status: 400 });
-    }
-
     const db = getAdminDb();
-    const adminCheck = await isAdmin(db, adminUid);
-    if (!adminCheck) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
+
+    // Authenticate identity states securely via structural token inspection
+    const verifiedAdminUid = await authenticateAdmin(req, db);
+    if (!verifiedAdminUid) {
+      return NextResponse.json({ error: 'Unauthorized request validation signature missing.' }, { status: 403 });
     }
 
     const snap = await db.collection('payoutRequests')
@@ -203,6 +226,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ requests });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal pipeline fetch error.' }, { status: 500 });
   }
 }

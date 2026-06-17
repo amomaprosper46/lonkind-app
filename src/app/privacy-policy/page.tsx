@@ -1,14 +1,10 @@
+// app/privacy/PrivacyPolicyContent.tsx
 import React from 'react';
 import Link from 'next/link';
 import { Shield, Lock, Eye, Server, RefreshCw, ArrowLeft, Mail, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export const metadata = {
-  title: 'Privacy Policy | Lonkind',
-  description: 'Our commitment to protecting your privacy and personal data.',
-};
-
-export default function PrivacyPolicyPage() {
+export default function PrivacyPolicyContent() {
   const lastUpdated = 'May 28, 2026';
 
   return (
@@ -53,7 +49,7 @@ export default function PrivacyPolicyPage() {
             <p className="text-muted-foreground leading-relaxed text-lg">
               When you use Lonkind, we collect information that you provide directly to us, such as when you create or modify your account, request on-demand services, contact customer support, or otherwise communicate with us. This information includes:
             </p>
-            <ul className="space-y-4 mt-6 text-muted-foreground">
+            <ul className="space-y-4 mt-6 text-muted-foreground pl-0 list-none">
               <li className="flex gap-3"><strong className="text-foreground min-w-[140px]">Identity Data:</strong> <span>Name, email address, profile picture, and chosen username.</span></li>
               <li className="flex gap-3"><strong className="text-foreground min-w-[140px]">Financial Data:</strong> <span>Bank account details and transaction history (processed securely via Paystack) to facilitate payouts and coin purchases.</span></li>
               <li className="flex gap-3"><strong className="text-foreground min-w-[140px]">User Content:</strong> <span>Posts, stories, messages, and interactions with other users.</span></li>

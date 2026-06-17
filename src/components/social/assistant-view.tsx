@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -7,8 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Sparkles, Newspaper } from 'lucide-react';
-import { askAssistant, AssistantOutput } from '@/ai/flows/assistant';
-import { generateNewsPost, GenerateNewsPostOutput } from '@/ai/flows/news-reporter';
+
+// ✅ Separate the runtime execution calls...
+import { askAssistant } from '@/ai/flows/assistant';
+import { generateNewsPost } from '@/ai/flows/news-reporter';
+
+// ✅ ...from the TypeScript compilation type checking structures!
+import type { AssistantOutput } from '@/ai/flows/assistant';
+import type { GenerateNewsPostOutput } from '@/ai/flows/news-reporter';
+
 import { toast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { addDoc, collection, serverTimestamp, query, where, limit, getDocs } from 'firebase/firestore';
@@ -46,7 +52,7 @@ export default function AssistantView() {
         setNewsPost(null);
         try {
             const result = await generateNewsPost({ topic: newsTopic });
-            setNewsPost(result);
+            setNewsPost(result as GenerateNewsPostOutput);
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error', description: 'Could not generate news post.' });
