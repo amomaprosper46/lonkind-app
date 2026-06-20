@@ -103,8 +103,8 @@ export default function StoriesCarousel({ currentUser, followingUids, blockedUid
                     <div className="relative">
                         <div className={`p-[2px] rounded-full ${hasMyStory ? 'bg-gradient-to-tr from-primary to-purple-500' : 'bg-muted'}`}>
                             <Avatar className="h-16 w-16 border-2 border-background">
-                                <AvatarImage src={currentUser.avatarUrl} alt={currentUser.name} />
-                                <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
+                                <AvatarImage src={currentUser?.avatarUrl || undefined} alt={currentUser?.name || 'User'} />
+                                <AvatarFallback>{currentUser?.name ? currentUser.name.charAt(0) : 'U'}</AvatarFallback>
                             </Avatar>
                         </div>
                         {!hasMyStory && (
@@ -184,10 +184,10 @@ function CreateStoryDialog({ currentUser, onClose }: { currentUser: CurrentUser,
             const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
 
             await addDoc(collection(db, 'stories'), {
-                authorUid: currentUser.uid,
-                authorHandle: currentUser.handle,
-                authorName: currentUser.name,
-                authorAvatarUrl: currentUser.avatarUrl,
+                authorUid: currentUser?.uid || '',
+                authorHandle: currentUser?.handle || '',
+                authorName: currentUser?.name || 'Unknown',
+                authorAvatarUrl: currentUser?.avatarUrl || '',
                 mediaUrl: downloadUrl,
                 timestamp: serverTimestamp(),
                 expiresAt: Timestamp.fromDate(expiresAt)

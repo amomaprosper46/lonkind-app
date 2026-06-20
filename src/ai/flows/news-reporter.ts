@@ -1,19 +1,8 @@
 "use server"; // 👈 This line completely blocks Next.js from bundling this file into the browser client!
 
-import { genkit } from 'genkit';
-import { googleAI } from '@genkit-ai/google-genai';
 import * as admin from 'firebase-admin';
-
-// 1. Initialize Firebase Admin SDK safely
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
-const db = admin.firestore();
-
-// 2. Initialize Production Genkit Instance
-const ai = genkit({
-  plugins: [googleAI()],
-});
+import { ai } from '@/ai/genkit';
+import { adminDb as db } from '@/lib/firebase-admin';
 
 interface SerperNewsArticle {
   title: string;
@@ -65,24 +54,19 @@ export const autonomousNewsReporter = ai.defineFlow(
     // A. Gather raw live tech data from the web
     const newsContext = await fetchLatestNews('tech startup innovation investment Nigeria');
     
-    if (!newsContext) {
-      throw new Error('Aborting flow: No news context could be gathered.');
-    }
-
     // B. Pass context to Gemini 1.5 Flash using production naming syntax
     const llmResponse = await ai.generate({
-      model: googleAI.model('gemini-1.5-flash'),
+      model: 'googleai/gemini-1.5-flash',
       prompt: `
         You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
-        Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.
+        ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}
         
         Strict Guidelines:
         - Do not use hashtags under any circumstances.
         - Keep the content punchy, direct, and under 280 characters.
         - Focus purely on genuine factual data; do not introduce editorial bias.
         
-        Raw News Data:
-        ${newsContext}
+        ${newsContext ? `Raw News Data:\n${newsContext}` : ''}
       `,
     });
 
@@ -98,11 +82,17 @@ export const autonomousNewsReporter = ai.defineFlow(
 
     await newPostRef.set({
       content: postContent.trim(),
-      userId: SYSTEM_BOT_UID,
+      author: {
+        uid: SYSTEM_BOT_UID,
+        name: 'Lonkind News Bot',
+        handle: 'lonkindnews',
+        avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=lonkindnews',
+        isProfessional: true,
+      },
       isAutomated: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      likesCount: 0,
-      commentsCount: 0,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      reactions: { like: 0, love: 0, laugh: 0, sad: 0 },
+      comments: 0,
     });
 
     return { success: true, postId: newPostRef.id };

@@ -68,8 +68,8 @@ export default function CreatePostCard({
             <CardContent className="p-4">
                 <div className="flex gap-4">
                     <Avatar>
-                        <AvatarImage src={currentUser.avatarUrl} alt="My Avatar" data-ai-hint="user avatar" />
-                        <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={currentUser?.avatarUrl || undefined} alt="My Avatar" data-ai-hint="user avatar" />
+                        <AvatarFallback>{currentUser?.name ? currentUser.name.charAt(0) : 'U'}</AvatarFallback>
                     </Avatar>
                     <div className="w-full">
                         <Textarea

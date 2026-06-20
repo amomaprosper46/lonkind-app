@@ -1,31 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-
-/**
- * Secure Firebase Admin Integration Setup
- */
-function getSecureAdminDb() {
-  if (!getApps().length) {
-    try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
-
-      if (sa) {
-        initializeApp({ credential: cert(sa) });
-      } else {
-        initializeApp();
-      }
-    } catch (e) {
-      console.error("Firebase Admin configuration initialization error:", e);
-      throw new Error("Financial core system initialization failed.");
-    }
-  }
-  return getFirestore();
-}
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { gemini15Flash } from '@genkit-ai/google-genai';
 
 // Enforce structured input tracking and validate parameters
 const InputSchema = z.object({
@@ -48,7 +26,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { userId, prompt: userPrompt } = parsed.data;
-    const db = getSecureAdminDb();
     const userRef = db.collection('users').doc(userId);
     let balanceSufficient = false;
 
@@ -89,7 +66,7 @@ export async function POST(req: NextRequest) {
      * from potentially hostile user input strings.
      */
     const response = await ai.generate({
-      model: 'googleai/gemini-2.0-flash',
+      model: gemini15Flash,
       prompt: userPrompt, // Handled purely as runtime variable content execution
       config: {
         systemInstruction: `You are a creative, cheerful, and responsible storyteller for the Lonkind social media app. 

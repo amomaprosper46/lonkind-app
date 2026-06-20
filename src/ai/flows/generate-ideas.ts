@@ -9,20 +9,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import admin from 'firebase-admin';
-
-// Initialize Firebase Admin SDK securely on the server
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-const adminDb = admin.firestore();
+import { adminDb } from '@/lib/firebase-admin';
 
 // 1. Updated Input Schema to include the authenticated user's ID
 const GenerateIdeasInputSchema = z.object({

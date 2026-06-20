@@ -9,20 +9,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import admin from 'firebase-admin';
-
-// Initialize Firebase Admin SDK securely on the server if it hasn't been already
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-const adminDb = admin.firestore();
+import { adminDb } from '@/lib/firebase-admin';
 
 const SubmitSupportTicketInputSchema = z.object({
   name: z.string().min(2, 'Name is required').describe('The name of the user submitting the ticket.'),

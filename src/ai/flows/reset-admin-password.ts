@@ -5,31 +5,7 @@
  */
 
 import { z } from 'genkit';
-import * as admin from 'firebase-admin';
-
-function getAdminApp() {
-  if (!admin.apps.length) {
-    try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
-        
-      if (sa) {
-        admin.initializeApp({
-          credential: admin.credential.cert(sa),
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        });
-      } else {
-        admin.initializeApp({
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        });
-      }
-    } catch (error) {
-      console.error('Failed to initialize Firebase Admin in resetAdminPassword:', error);
-    }
-  }
-  return admin.apps[0];
-}
+import { adminAuth } from '@/lib/firebase-admin';
 
 const ResetAdminPasswordInputSchema = z.object({
   masterSecretToken: z.string().describe('Cryptographic emergency bypass verification token.'),
@@ -47,7 +23,6 @@ interface ResetAdminPasswordOutput {
  * Strictly locked behind a server-side environment secret token verification step.
  */
 export async function resetAdminPassword(input: ResetAdminPasswordInput): Promise<ResetAdminPasswordOutput> {
-  getAdminApp();
   
   const adminEmail = 'admin@lonkind.com';
   const serverSystemSecret = process.env.INTERNAL_SYSTEM_RESET_SECRET;
@@ -66,9 +41,9 @@ export async function resetAdminPassword(input: ResetAdminPasswordInput): Promis
     }
 
     // 3. Locate and update the target administrative record securely
-    const userRecord = await admin.auth().getUserByEmail(adminEmail);
+    const userRecord = await adminAuth.getUserByEmail(adminEmail);
     
-    await admin.auth().updateUser(userRecord.uid, {
+    await adminAuth.updateUser(userRecord.uid, {
       password: input.newSecurePassword,
     });
 

@@ -1,5 +1,5 @@
 import { genkit } from 'genkit';
-import { googleAI } from '@genkit-ai/google-genai';
+import { googleAI, gemini15Flash } from '@genkit-ai/google-genai';
 import { createHmac, timingSafeEqual } from "crypto";
 import * as admin from 'firebase-admin';
 import * as logger from "firebase-functions/logger";
@@ -69,24 +69,19 @@ export const autonomousNewsReporter = ai.defineFlow(
   async () => {
     const newsContext = await fetchLatestNews('tech startup innovation investment Nigeria');
     
-    if (!newsContext) {
-      throw new Error('Aborting flow: No news context could be gathered.');
-    }
-
-    // Call Gemini 1.5 Flash using production naming syntax
+    // B. Call Gemini 1.5 Flash using production naming syntax
     const llmResponse = await ai.generate({
-      model: googleAI.model('gemini-1.5-flash'),
+      model: gemini15Flash,
       prompt: `
         You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
-        Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.
+        ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}
         
         Strict Guidelines:
         - Do not use hashtags under any circumstances.
         - Keep the content punchy, direct, and under 280 characters.
         - Focus purely on genuine factual data; do not introduce editorial bias.
         
-        Raw News Data:
-        ${newsContext}
+        ${newsContext ? `Raw News Data:\n${newsContext}` : ''}
       `,
     });
 
@@ -101,11 +96,17 @@ export const autonomousNewsReporter = ai.defineFlow(
 
     await newPostRef.set({
       content: postContent.trim(),
-      userId: SYSTEM_BOT_UID,
+      author: {
+        uid: SYSTEM_BOT_UID,
+        name: 'Lonkind News Bot',
+        handle: 'lonkindnews',
+        avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=lonkindnews',
+        isProfessional: true,
+      },
       isAutomated: true,
-      createdAt: FieldValue.serverTimestamp(),
-      likesCount: 0,
-      commentsCount: 0,
+      timestamp: FieldValue.serverTimestamp(),
+      reactions: { like: 0, love: 0, laugh: 0, sad: 0 },
+      comments: 0,
     });
 
     return { success: true, postId: newPostRef.id };

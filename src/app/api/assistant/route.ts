@@ -2,13 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import * as admin from 'firebase-admin';
-
-// Initialize Firebase Admin configuration states if not already registered
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  });
-}
+import { adminDb as db } from '@/lib/firebase-admin';
+import { gemini15Flash } from '@genkit-ai/google-genai';
 
 const InputSchema = z.object({
   question: z.string().trim().min(1, 'Question cannot be empty.'),
@@ -43,7 +38,7 @@ export async function POST(req: NextRequest) {
      * structural system rules from runtime user variables to neutralize injection attacks.
      */
     const chat = ai.chat({
-      model: 'googleai/gemini-2.0-flash',
+      model: gemini15Flash,
       history: history, // Automatically hydrates previous questions and answers
       config: {
         systemInstruction: `You are Lonki, a helpful, empathetic, and responsible AI assistant for the Lonkind social media app. Your primary goal is to create a positive and safe user experience.
