@@ -8,6 +8,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb } from '@/lib/firebase-admin';
+import { gemini15Flash } from '@genkit-ai/google-genai';
 
 // 1. Added userId to the schema to track coin deduction
 const RoastInputSchema = z.object({
@@ -93,6 +94,7 @@ export const generateProfileRoast = ai.defineFlow(
 
       // 5. Fire Genkit generation
       const { output } = await ai.generate({
+        model: gemini15Flash,
         prompt: `You are the funniest bio writer on the internet. Your roast bios go viral on Twitter and TikTok because they are hilariously accurate and quotable.
 
 Generate a ROAST BIO for this user's social media profile:
