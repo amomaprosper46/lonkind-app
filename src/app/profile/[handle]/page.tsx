@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useParams, notFound, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, query, where, orderBy, updateDoc, increment, serverTimestamp, addDoc, onSnapshot, runTransaction, writeBatch, deleteDoc, setDoc, collectionGroup } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
+import { db, auth, isFirebaseConfigValid } from '@/lib/firebase';
 import Link from 'next/link';
 import Image from 'next/image';
 import ProfileView from '@/components/social/profile-view';
@@ -34,11 +34,11 @@ interface UserProfile {
 
 export type FollowStatus = 'not_following' | 'following';
 
-export default function UserProfilePage() {
+function UserProfilePageInner() {
     const params = useParams();
     const router = useRouter();
     const handle = params?.handle as string | undefined;
-    const [loggedInUser, loadingAuth] = useAuthState(auth);
+    const [loggedInUser, loadingAuth] = useAuthState(auth as any);
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
     const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
@@ -522,4 +522,11 @@ export default function UserProfilePage() {
         </div>
         </Suspense>
     );
+}
+
+export default function UserProfilePage() {
+    if (!isFirebaseConfigValid) {
+        return <div className="flex min-h-screen items-center justify-center bg-background"><div className="text-muted-foreground">App requires Firebase configuration.</div></div>;
+    }
+    return <UserProfilePageInner />;
 }

@@ -188,8 +188,8 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
 };
 
 
-export default function SocialHomePage() {
-  const [user, isLoading, error] = useAuthState(auth);
+function SocialHomePageInner() {
+  const [user, isLoading, error] = useAuthState(auth as any);
   const [showAuth, setShowAuth] = React.useState(true);
   const [authView, setAuthView] = React.useState<'signIn' | 'signUp'>('signUp');
   const [isOnline, setIsOnline] = React.useState(true);
@@ -491,7 +491,14 @@ export default function SocialHomePage() {
   return (
     <>
         {!isOnline && <OfflineIndicator />}
-        {isFirebaseConfigValid ? <AppContent /> : <FirebaseConfigError />}
+        <AppContent />
     </>
   );
+}
+
+export default function SocialHomePage() {
+  if (!isFirebaseConfigValid) {
+    return <FirebaseConfigError />;
+  }
+  return <SocialHomePageInner />;
 }
