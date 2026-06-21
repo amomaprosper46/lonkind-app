@@ -35,6 +35,7 @@ const nextConfig = {
 
   // serverActions now lives inside experimental
   experimental: {
+    serverComponentsExternalPackages: ["@genkit-ai/core", "@genkit-ai/google-genai", "genkit", "@opentelemetry/instrumentation", "require-in-the-middle"],
     serverActions: {
       bodySizeLimit: "4.5mb",
     },
