@@ -17,7 +17,8 @@
     ],
     "source": ".",
     "frameworksBackend": {
-      "memory": "4GiB"
+      "memory": "4GiB",
+      "runtime": "nodejs20"
     }
   },
   "functions": {
