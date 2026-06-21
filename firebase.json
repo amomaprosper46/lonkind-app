@@ -10,15 +10,14 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "source": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
-    "source": ".",
     "frameworksBackend": {
-      "memory": "4GiB",
-      "runtime": "nodejs20"
+      "memory": "1GiB"
     }
   },
   "functions": {
