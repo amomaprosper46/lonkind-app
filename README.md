@@ -108,3 +108,4 @@ This error usually means Vercel's "Root Directory" setting is incorrect. If you 
 3.  Find the **"Root Directory"** setting.
 4.  Ensure it is set to `./` (the default, top-level directory). If it's set to `app` or another subfolder, edit it, clear the input, and save.
 5.  Go to the **"Deployments"** tab and redeploy your project.
+
