@@ -3,7 +3,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { gemini15Flash } from '@genkit-ai/google-genai';
 
 // Enforce structured input tracking and validate parameters
 const InputSchema = z.object({
@@ -66,7 +65,6 @@ export async function POST(req: NextRequest) {
      * from potentially hostile user input strings.
      */
     const response = await ai.generate({
-      model: gemini15Flash,
       prompt: userPrompt, // Handled purely as runtime variable content execution
       config: {
         systemInstruction: `You are a creative, cheerful, and responsible storyteller for the Lonkind social media app. 

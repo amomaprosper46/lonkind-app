@@ -7,7 +7,6 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { gemini15Flash } from '@genkit-ai/google-genai';
 
 const AvatarInputSchema = z.object({
   name: z.string().describe('The display name of the user.'),
@@ -41,7 +40,6 @@ export const generateAvatarConcept = ai.defineFlow(
   },
   async (input) => {
     const { output } = await ai.generate({
-      model: gemini15Flash,
       prompt: `You are a creative avatar designer for a social media platform called Lonkind. Your job is to create UNIQUE, STUNNING avatar concepts that users will love and want to show off.
 
 Generate a custom avatar concept for this user:

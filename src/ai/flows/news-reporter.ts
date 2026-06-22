@@ -3,7 +3,6 @@
 import * as admin from 'firebase-admin';
 import { ai } from '@/ai/genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
-import { gemini15Flash } from '@genkit-ai/google-genai';
 
 interface SerperNewsArticle {
   title: string;
@@ -55,9 +54,8 @@ export const autonomousNewsReporter = ai.defineFlow(
     // A. Gather raw live tech data from the web
     const newsContext = await fetchLatestNews('tech startup innovation investment Nigeria');
     
-    // B. Pass context to Gemini 1.5 Flash using production naming syntax
+    // B. Pass context to Gemini using production naming syntax
     const llmResponse = await ai.generate({
-      model: gemini15Flash,
       prompt: `
         You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
         ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}

@@ -1,5 +1,5 @@
 import { genkit } from 'genkit';
-import { googleAI, gemini15Flash } from '@genkit-ai/google-genai';
+import { googleAI } from '@genkit-ai/google-genai';
 import { createHmac, timingSafeEqual } from "crypto";
 import * as admin from 'firebase-admin';
 import * as logger from "firebase-functions/logger";
@@ -69,9 +69,8 @@ export const autonomousNewsReporter = ai.defineFlow(
   async () => {
     const newsContext = await fetchLatestNews('tech startup innovation investment Nigeria');
     
-    // B. Call Gemini 1.5 Flash using production naming syntax
+    // B. Call Gemini using production naming syntax
     const llmResponse = await ai.generate({
-      model: gemini15Flash,
       prompt: `
         You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
         ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}

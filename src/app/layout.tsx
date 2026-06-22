@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import '@/ai/genkit';
 
 export const metadata: Metadata = {
   title: 'Lonkind',

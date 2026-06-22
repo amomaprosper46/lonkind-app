@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { gemini15Flash } from '@genkit-ai/google-genai';
 
 const InputSchema = z.object({
   topic: z.string(),
@@ -17,7 +16,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { text } = await ai.generate({
-      model: gemini15Flash,
       prompt: `You are an expert news reporter and social media manager for the Lonkind app. 
   
 Your task is to find a very recent, interesting, and globally relevant news story based on the provided topic.
