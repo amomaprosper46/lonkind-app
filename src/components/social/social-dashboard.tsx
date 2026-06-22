@@ -1048,7 +1048,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         {currentView === 'leaderboard' && <LeaderboardView />}
                         {currentView === 'settings' && (
                             <SettingsView 
-                                currentUser={currentUser} 
+                                user={currentUser!} 
+                                onSignOut={onSignOut}
                                 onUpdateProfile={handleUpdateProfile} 
                                 onPasswordReset={handlePasswordReset}
                                 onDeleteAccount={handleDeleteAccount}
