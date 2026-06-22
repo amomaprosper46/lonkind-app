@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { gemini15Flash } from '@genkit-ai/google-genai';
 
 // Enforce standard Genkit message structures to protect internal context threads
 const PersonalAiInputSchema = z.object({
@@ -42,7 +41,7 @@ export async function POST(req: NextRequest) {
      * preventing users from spoofing historical context boundaries.
      */
     const chat = ai.chat({
-      model: gemini15Flash,
+      model: 'googleai/gemini-2.0-flash',
       history: sanitizedHistory,
       config: {
         systemInstruction: `You are a helpful, friendly, and expert AI assistant built into a social media application called "Lonkind". Your job is to help users with their questions, whether they are about the app, general knowledge, or creative tasks. Your responses should be clear, warm, and conversational. Format your responses with markdown when appropriate (bold, bullet points, etc.).

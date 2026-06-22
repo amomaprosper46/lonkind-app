@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
      * from potentially hostile user input strings.
      */
     const response = await ai.generate({
+      model: 'googleai/gemini-2.0-flash',
       prompt: userPrompt, // Handled purely as runtime variable content execution
       config: {
         systemInstruction: `You are a creative, cheerful, and responsible storyteller for the Lonkind social media app. 

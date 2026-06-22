@@ -56,6 +56,7 @@ export const autonomousNewsReporter = ai.defineFlow(
     
     // B. Pass context to Gemini using production naming syntax
     const llmResponse = await ai.generate({
+      model: 'googleai/gemini-2.0-flash',
       prompt: `
         You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
         ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}

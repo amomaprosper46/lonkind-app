@@ -4,7 +4,7 @@ import { googleAI, gemini15Flash } from '@genkit-ai/google-genai';
 const plugins = [];
 
 if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY) {
-  plugins.push(googleAI());
+  plugins.push(googleAI({ apiVersion: 'v1beta' }));
 }
 
 export const ai = genkit({

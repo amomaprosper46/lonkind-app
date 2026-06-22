@@ -40,6 +40,7 @@ export const generateAvatarConcept = ai.defineFlow(
   },
   async (input) => {
     const { output } = await ai.generate({
+      model: 'googleai/gemini-2.0-flash',
       prompt: `You are a creative avatar designer for a social media platform called Lonkind. Your job is to create UNIQUE, STUNNING avatar concepts that users will love and want to show off.
 
 Generate a custom avatar concept for this user:
