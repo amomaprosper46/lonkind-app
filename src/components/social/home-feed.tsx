@@ -123,12 +123,19 @@ export default function HomeFeed({
             const postList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
             setPosts(postList);
             setIsLoadingPosts(false);
-        }, (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: 'posts',
-                operation: 'list',
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+        }, (serverError: any) => {
+            console.error("Posts listener error:", serverError);
+            // Only emit permission error if it is genuinely a permission-denied error from Firestore
+            if (serverError.code === 'permission-denied') {
+                const permissionError = new FirestorePermissionError({
+                    path: 'posts',
+                    operation: 'list',
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
+            } else if (serverError.code === 'failed-precondition') {
+                // If it's an index building error, do not throw permission denied.
+                console.warn("Index is currently building. Please wait a few minutes.");
+            }
             setIsLoadingPosts(false);
         });
 
