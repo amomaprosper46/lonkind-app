@@ -139,7 +139,7 @@ function NavigationItem({ label, icon: Icon, active, onClick, badgeCount }: Navi
                 "w-full justify-start gap-3.5 h-10 px-3 rounded-xl font-medium text-sm transition-all relative group",
                 active 
                     ? "bg-indigo-600 hover:bg-indigo-600 text-white shadow-md shadow-indigo-600/10" 
-                    : "text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent hover:border-slate-800/40"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent border border-transparent hover:border-border/40"
             )}
         >
             <Icon className={cn("h-4 w-4 transition-transform group-hover:scale-105 duration-200", active ? "text-white" : "text-slate-400 group-hover:text-slate-200")} />
@@ -162,11 +162,11 @@ function DropdownMenuWrapper({ currentUser, onSignOut, changeView }: { currentUs
                     <Avatar className="h-full w-full rounded-none">
                         {/* ✅ Total strict fallback chaining to safely handle initial loading state values */}
                         <AvatarImage src={currentUser?.avatarUrl || undefined} alt={currentUser?.name || 'User'} />
-                        <AvatarFallback className="bg-slate-900 text-slate-300 font-medium text-xs rounded-none">{currentUser?.name ? currentUser.name.charAt(0) : 'U'}</AvatarFallback>
+                        <AvatarFallback className="bg-secondary text-secondary-foreground font-medium text-xs rounded-none">{currentUser?.name ? currentUser.name.charAt(0) : 'U'}</AvatarFallback>
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800 text-slate-100 p-1.5 rounded-xl shadow-2xl z-50" align="end">
+            <DropdownMenuContent className="w-56 bg-popover border-border text-popover-foreground p-1.5 rounded-xl shadow-2xl z-50" align="end">
                 <DropdownMenuLabel className="px-2.5 py-2 flex flex-col min-w-0">
                     <span className="text-sm font-semibold text-slate-200 truncate">{currentUser?.name || 'Loading profile...'}</span>
                     <span className="text-xs text-slate-500 truncate">@{currentUser?.handle || 'user'}</span>
@@ -818,9 +818,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
     // Main Layout Skeleton Return
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
+        <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
             {/* Navigation Header */}
-            <header className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/60">
+            <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
                 <div className="container max-w-7xl mx-auto h-16 flex items-center justify-between px-4 gap-4">
                     <div className="flex items-center gap-6">
                         <Link href="/" className="flex items-center gap-2.5 group">
@@ -839,10 +839,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onFocus={() => setIsSearchFocused(true)}
-                            className="w-full bg-slate-900/60 border-slate-800 text-slate-100 placeholder:text-slate-500 pl-9 pr-4 rounded-xl focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0 h-9 transition-all"
+                            className="w-full bg-secondary/60 border-border text-foreground placeholder:text-muted-foreground pl-9 pr-4 rounded-xl focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0 h-9 transition-all"
                         />
                         {isSearchFocused && (searchQuery.trim() !== '' || isSearchLoading) && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-2 z-50 max-h-[400px] overflow-y-auto backdrop-blur-xl">
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-popover border border-border rounded-xl shadow-2xl p-2 z-50 max-h-[400px] overflow-y-auto backdrop-blur-xl">
                                 {isSearchLoading ? (
                                     <div className="flex items-center justify-center py-6 text-sm text-slate-400 gap-2">
                                         <Loader2 className="h-4 w-4 animate-spin text-indigo-500" /> Searching...
@@ -893,14 +893,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <div className="flex items-center gap-2">
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl hover:bg-slate-900 border border-transparent hover:border-slate-800/60 text-slate-300 hover:text-white transition-all">
+                                <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl hover:bg-accent border border-transparent hover:border-border/60 text-muted-foreground hover:text-foreground transition-all">
                                     <Bell className="h-4 w-4" />
                                     {unreadNotifications > 0 && (
                                         <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
                                     )}
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 bg-slate-900 border-slate-800 text-slate-100 p-2 shadow-2xl rounded-xl z-50" align="end">
+                            <PopoverContent className="w-80 bg-popover border-border text-popover-foreground p-2 shadow-2xl rounded-xl z-50" align="end">
                                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800/60 mb-1">
                                     <span className="font-semibold text-sm">Notifications</span>
                                     {unreadNotifications > 0 && <span className="text-xs text-indigo-400 font-medium">{unreadNotifications} unread</span>}
@@ -1077,7 +1077,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 // Root Wrapper to Safely Mount useSearchParams Hook Constraints
 export default function SocialDashboard(props: SocialDashboardProps) {
     return (
-        <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>}>
+        <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>}>
             <SocialDashboardInternal {...props} />
         </Suspense>
     );
