@@ -3,7 +3,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import * as admin from 'firebase-admin';
 import { adminDb as db } from '@/lib/firebase-admin';
-import { gemini15Flash } from '@genkit-ai/google-genai';
+import { ai } from '@/ai/genkit';
 
 const InputSchema = z.object({
   question: z.string().trim().min(1, 'Question cannot be empty.'),
@@ -32,16 +32,18 @@ export async function POST(req: NextRequest) {
 
     const { question, history } = parsed.data;
 
-    /**
-     * 2. Initialize a Stateful Chat Instance
-     * Using ai.chat pre-compiles context history arrays safely, separating 
-     * structural system rules from runtime user variables to neutralize injection attacks.
-     */
-    const chat = ai.chat({
-      model: gemini15Flash,
-      history: history, // Automatically hydrates previous questions and answers
-      config: {
-        systemInstruction: `You are Lonki, a helpful, empathetic, and responsible AI assistant for the Lonkind social media app. Your primary goal is to create a positive and safe user experience.
+    const messages: any[] = [
+      ...history.map((m: any) => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? [{ text: m.content }] : m.content
+      })),
+      { role: 'user', content: [{ text: question }] }
+    ];
+
+    const response = await ai.generate({
+      model: 'googleai/gemini-2.0-flash',
+      messages: messages,
+      system: `You are Lonki, a helpful, empathetic, and responsible AI assistant for the Lonkind social media app. Your primary goal is to create a positive and safe user experience.
 
 ### Behavioral Rules:
 - Always be polite, patient, and understanding.
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
 - Your answers should be concise, clear, and genuinely helpful.
 - Format your response in markdown when appropriate.
 - Focus strictly on answering questions relating to app configuration, account help, support, and social interaction rules. Re-route completely off-topic systemic questions politely back to app functionality.`,
-        // Defend against toxic text generation variations
+      config: {
         safetySettings: [
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
           { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_LOW_AND_ABOVE' },
@@ -58,15 +60,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // 3. Dispatch structured generation payload
-    const response = await chat.send({ message: question });
-
-    /**
-     * 4. Return both the Answer and the Updated History Ledger
-     * Sending the complete, mutated chat history structure back to the frontend 
-     * allows your client layout to pass it straight back on subsequent follow-up questions.
-     */
-    const updatedHistory = await chat.getHistory();
+    const updatedHistory = [...messages, response.message];
 
     return NextResponse.json({ 
       answer: response.text,

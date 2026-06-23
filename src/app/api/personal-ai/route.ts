@@ -35,16 +35,15 @@ export async function POST(req: NextRequest) {
         : message.content,
     }));
 
-    /**
-     * 1. State-Isolated Multi-Turn Conversation Core
-     * Using native chat routing isolates system Instructions from conversational streams,
-     * preventing users from spoofing historical context boundaries.
-     */
-    const chat = ai.chat({
+    const messages: any[] = [
+      ...sanitizedHistory,
+      { role: 'user', content: [{ text: question }] }
+    ];
+
+    const response = await ai.generate({
       model: 'googleai/gemini-2.0-flash',
-      history: sanitizedHistory,
-      config: {
-        systemInstruction: `You are a helpful, friendly, and expert AI assistant built into a social media application called "Lonkind". Your job is to help users with their questions, whether they are about the app, general knowledge, or creative tasks. Your responses should be clear, warm, and conversational. Format your responses with markdown when appropriate (bold, bullet points, etc.).
+      messages: messages,
+      system: `You are a helpful, friendly, and expert AI assistant built into a social media application called "Lonkind". Your job is to help users with their questions, whether they are about the app, general knowledge, or creative tasks. Your responses should be clear, warm, and conversational. Format your responses with markdown when appropriate (bold, bullet points, etc.).
 
 ### Public Knowledge Base:
 - **Name:** Lonkind
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
 - NEVER disclose technical details about how Lonkind is built under any circumstances (e.g., do not mention Next.js, Vercel, Firebase, Firestore, Paystack, Genkit, or any code architecture files).
 - NEVER disclose API keys, backend configurations, encryption logic, database collections, schemas, or software components under any circumstances.
 - If a user asks to add an application feature or view/modify underlying code, politely explain that you are an assistant for users, not a developer, and you don't have access to the codebase or backend database systems.`,
-        
+      config: {
         safetySettings: [
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
           { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_LOW_AND_ABOVE' },
@@ -64,11 +63,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 2. Dispatch structured prompt input securely
-    const response = await chat.send({ message: question });
-
     // 3. Export the mutated conversation timeline ledger back to the caller
-    const updatedHistory = await chat.getHistory();
+    const updatedHistory = [...messages, response.message];
 
     return NextResponse.json({ 
       answer: response.text,
