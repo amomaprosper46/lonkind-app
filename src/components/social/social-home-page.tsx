@@ -231,16 +231,24 @@ function SocialHomePageInner() {
     React.useEffect(() => {
     const checkIsNewUser = async () => {
       if (user) {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (userDoc.exists() && userDoc.data()?.isBanned) {
-            toast({ variant: 'destructive', title: 'Account Banned', description: 'Your account has been permanently suspended.' });
-            await signOut(auth);
-            return;
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists() && userDoc.data()?.isBanned) {
+              toast({ variant: 'destructive', title: 'Account Banned', description: 'Your account has been permanently suspended.' });
+              await signOut(auth);
+              return;
+          }
+          
+          setIsNewUser(!userDoc.exists());
+        } catch (error: any) {
+          console.error("Error fetching user document:", error);
+          toast({ variant: 'destructive', title: 'Database Connection Error', description: error.message });
+          // If we can't check, we shouldn't trap them in a spinner. 
+          // We will assume they are not a new user so the dashboard loads and shows the fallback error UI.
+          setIsNewUser(false);
         }
-        
-        setIsNewUser(!userDoc.exists());
       } else {
         setIsNewUser(false);
       }

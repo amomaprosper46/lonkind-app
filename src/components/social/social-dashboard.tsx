@@ -260,6 +260,18 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     diamonds: 0,
                 });
             }
+        }, (error) => {
+            console.error("onSnapshot Error:", error);
+            toast({ variant: 'destructive', title: 'Database Error', description: error.message });
+            // Fallback so it stops spinning
+            setCurrentUser({
+                name: user.displayName || 'Anonymous',
+                avatarUrl: user.photoURL || `https://placehold.co/100x100.png?text=Err`,
+                handle: 'error_user',
+                uid: user.uid,
+                email: user.email || '',
+                isProfessional: false,
+            });
         });
          return () => unsubscribe();
     }, [user.uid, user.displayName, user.photoURL, user.email]);
