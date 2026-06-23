@@ -27,6 +27,9 @@ import StoryGeneratorView from './story-generator-view';
 import type { ProfileData } from './edit-profile-dialog';
 import HomeFeed from './home-feed';
 
+import { DockedChatProvider, useDockedChat } from './docked-chat-context';
+import DockedChatContainer from './docked-chat-container';
+
 // ✅ Decoupled Import Architecture
 import { searchPosts } from '@/ai/flows/search-posts';
 import type { SearchPostsOutput } from '@/ai/flows/search-posts';
@@ -816,6 +819,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
       // Retained placeholder for continued logic
     };
 
+    const { openChat } = useDockedChat();
+
     if (!currentUser) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
@@ -1075,12 +1080,12 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <div className="space-y-2 mt-2">
                         {/* Mock Contacts List */}
                         {[
-                            { name: 'Sarah Jenkins', avatar: 'https://i.pravatar.cc/150?u=sarah', online: true },
-                            { name: 'Michael Chen', avatar: 'https://i.pravatar.cc/150?u=michael', online: true },
-                            { name: 'Emma Watson', avatar: 'https://i.pravatar.cc/150?u=emma', online: false },
-                            { name: 'David Smith', avatar: 'https://i.pravatar.cc/150?u=david', online: true },
+                            { id: 'mock-1', name: 'Sarah Jenkins', avatar: 'https://i.pravatar.cc/150?u=sarah', online: true },
+                            { id: 'mock-2', name: 'Michael Chen', avatar: 'https://i.pravatar.cc/150?u=michael', online: true },
+                            { id: 'mock-3', name: 'Emma Watson', avatar: 'https://i.pravatar.cc/150?u=emma', online: false },
+                            { id: 'mock-4', name: 'David Smith', avatar: 'https://i.pravatar.cc/150?u=david', online: true },
                         ].map((contact, i) => (
-                            <div key={i} className="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+                            <div key={i} onClick={() => openChat(contact)} className="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
                                 <div className="relative">
                                     <Avatar className="h-8 w-8">
                                         <AvatarImage src={contact.avatar} alt={contact.name} />
@@ -1120,7 +1125,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 export default function SocialDashboard(props: SocialDashboardProps) {
     return (
         <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>}>
-            <SocialDashboardInternal {...props} />
+            <DockedChatProvider>
+                <SocialDashboardInternal {...props} />
+                <DockedChatContainer />
+            </DockedChatProvider>
         </Suspense>
     );
 }

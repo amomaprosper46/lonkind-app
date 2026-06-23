@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2 } from 'lucide-react';
+import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit, getDoc } from 'firebase/firestore';
@@ -307,9 +307,9 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
 
     return (
         <main className="col-span-9">
-            <Card className="h-[calc(100vh-10rem)] flex">
+            <Card className="h-[calc(100vh-10rem)] flex overflow-hidden">
                 {/* Conversation List */}
-                <div className="w-1/3 border-r flex flex-col">
+                <div className={cn("border-r flex flex-col transition-all", selectedConversation ? "hidden md:flex md:w-1/3" : "w-full md:w-1/3")}>
                     <CardHeader className="p-4 border-b">
                          <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -369,16 +369,19 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                 </div>
 
                 {/* Chat Window */}
-                <div className="w-2/3 flex flex-col bg-secondary/30">
+                <div className={cn("flex flex-col bg-secondary/30 transition-all", selectedConversation ? "w-full md:w-2/3" : "hidden md:flex md:w-2/3")}>
                     {selectedConversation ? (
                         <>
                             <CardHeader className="p-4 border-b flex-row items-center gap-4 bg-background">
+                                <Button variant="ghost" size="icon" className="md:hidden shrink-0" onClick={() => setSelectedConversation(null)}>
+                                    <ChevronLeft className="h-5 w-5" />
+                                </Button>
                                 <Avatar>
                                     <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
                                     {/* Added optional chaining and fallback character */}
                                     <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
                                 </Avatar>
-                                 <h2 className="text-xl font-bold">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
+                                 <h2 className="text-xl font-bold truncate">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
                             </CardHeader>
                             <ScrollArea className="flex-1 p-4">
                                 <div className="space-y-2">
