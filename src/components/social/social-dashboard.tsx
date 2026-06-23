@@ -816,6 +816,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
       // Retained placeholder for continued logic
     };
 
+    if (!currentUser) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        );
+    }
+
     // Main Layout Skeleton Return
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">

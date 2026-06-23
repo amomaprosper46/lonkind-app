@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     const messages = [
       ...sanitizedHistory,
       {
-        role: 'user',
+        role: 'user' as const,
         content: [{ text: question }],
       },
     ];
@@ -97,7 +97,7 @@ You are a helpful, friendly AI assistant built into "Lonkind".
     const updatedHistory = [
       ...messages,
       {
-        role: 'model',
+        role: 'model' as const,
         content: [{ text: answer }],
       },
     ];

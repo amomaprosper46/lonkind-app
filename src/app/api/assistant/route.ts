@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         role: m.role,
         content: typeof m.content === 'string' ? [{ text: m.content }] : m.content
       })),
-      { role: 'user', content: [{ text: question }] }
+      { role: 'user' as const, content: [{ text: question }] }
     ];
 
     const response = await ai.generate({
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    const updatedHistory = [...messages, response.message];
+    const updatedHistory = [...messages, { role: 'model' as const, content: [{ text: response.text }] }];
 
     return NextResponse.json({ 
       answer: response.text,
