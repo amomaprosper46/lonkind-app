@@ -159,195 +159,156 @@ export default function SettingsView({
         <p className="text-muted-foreground mt-2">Manage your account, privacy, and app preferences.</p>
       </header>
 
-      <Tabs defaultValue="account" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="account"><SettingsIcon className="mr-2 h-4 w-4" />Account</TabsTrigger>
-          <TabsTrigger value="wallet"><Wallet className="mr-2 h-4 w-4" />Wallet</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="privacy"><Shield className="mr-2 h-4 w-4" />Privacy</TabsTrigger>
-          <TabsTrigger value="support"><HelpCircle className="mr-2 h-4 w-4" />Support</TabsTrigger>
-        </TabsList>
+      <div className="w-full space-y-4">
+        {/* Account Information */}
+        <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
+          <div className="bg-muted/30 px-4 py-2 border-b">
+            <h2 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+              <SettingsIcon className="h-4 w-4" /> Account Settings
+            </h2>
+          </div>
+          <div className="divide-y divide-border/50">
+            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <Label className="font-semibold text-base">Display Name</Label>
+                <p className="text-sm text-muted-foreground">This is your public name on the app.</p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-transparent border-t-0 border-x-0 rounded-none px-0 focus-visible:ring-0 w-full sm:w-[200px]" />
+                <Button variant="secondary" size="sm" onClick={handleNameSave} disabled={isSavingName || displayName === user.name || !displayName.trim()}>
+                  {isSavingName ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Update'}
+                </Button>
+              </div>
+            </div>
 
-        <TabsContent value="account" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Information</CardTitle>
-              <CardDescription>Manage your public and private account details.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input value={user.email || 'No email associated'} disabled className="bg-muted/40" />
-                <p className="text-sm text-muted-foreground">Your email address cannot be changed.</p>
+            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <Label className="font-semibold text-base">Email Address</Label>
+                <p className="text-sm text-muted-foreground">{user.email || 'No email associated'}</p>
               </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label htmlFor="name">Display Name</Label>
-                <div className="flex items-center gap-2">
-                  <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-                  <Button onClick={handleNameSave} disabled={isSavingName || displayName === user.name || !displayName.trim()}>
-                    {isSavingName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Save
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">This is your public display name.</p>
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label>Password</Label>
-                <div>
-                  <Button variant="outline" onClick={onPasswordReset}>Change Password</Button>
-                </div>
-                <p className="text-sm text-muted-foreground">You will be sent an email to reset your password.</p>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between rounded-lg border border-input p-4">
-                <div>
-                  <h4 className="font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-muted-foreground" /> Active Sessions</h4>
-                  <p className="text-sm text-muted-foreground">See and manage where your account is logged in.</p>
-                </div>
-                <Button variant="outline" disabled>View Devices</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
 
-        <TabsContent value="wallet" className="mt-6">
-          <WalletView />
-        </TabsContent>
+            <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/20 transition-colors" onClick={onPasswordReset}>
+              <div>
+                <Label className="font-semibold text-base cursor-pointer">Security and Login</Label>
+                <p className="text-sm text-muted-foreground">Change your password.</p>
+              </div>
+              <Button variant="outline" size="sm">Edit</Button>
+            </div>
+          </div>
+        </Card>
 
-        <TabsContent value="appearance" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Appearance</CardTitle>
-              <CardDescription>Customize the look and feel of the app to your preference.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup 
-                defaultValue={theme} 
-                onValueChange={setTheme}
-                className="grid sm:grid-cols-3 gap-4"
-              >
-                {['light', 'dark', 'system'].map((t) => (
-                  <div key={t}>
-                    <RadioGroupItem value={t} id={t} className="peer sr-only" />
-                    <Label htmlFor={t} className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary capitalize cursor-pointer">
-                      {t}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="privacy" className="mt-6">
-           <Card>
-            <CardHeader>
-              <CardTitle>Privacy and Safety</CardTitle>
-              <CardDescription>Control who can interact with you and your content.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between rounded-lg border border-input p-4">
-                <div>
-                  <h4 className="font-semibold">Show your online status</h4>
-                  <p className="text-sm text-muted-foreground">Allow others to see when you are online.</p>
-                </div>
-                <Switch
-                  checked={lastSeenVisible}
-                  onCheckedChange={setLastSeenVisible}
-                  aria-label="Toggle online status visibility"
-                />
+        {/* Privacy and Safety */}
+        <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
+          <div className="bg-muted/30 px-4 py-2 border-b">
+            <h2 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+              <Shield className="h-4 w-4" /> Privacy & Safety
+            </h2>
+          </div>
+          <div className="divide-y divide-border/50">
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <Label className="font-semibold text-base">Active Status</Label>
+                <p className="text-sm text-muted-foreground">Show when you're active.</p>
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-input p-4">
-                <div>
-                  <h4 className="font-semibold flex items-center gap-2"><EyeOff className="h-4 w-4 text-muted-foreground" /> Ghost Mode</h4>
-                  <p className="text-sm text-muted-foreground">When enabled, your views on profiles and content will not be counted or shown.</p>
-                </div>
-                <Switch
-                  checked={ghostMode}
-                  onCheckedChange={setGhostMode}
-                  aria-label="Toggle ghost mode"
-                />
-              </div>
-              <div className="space-y-2">
-                <h4 className="font-semibold flex items-center gap-2"><UserX className="h-4 w-4 text-muted-foreground" /> Blocked Users</h4>
-                <p className="text-sm text-muted-foreground">Blocked users cannot see your profile, posts, or message you.</p>
-                {blockedUsers.length > 0 ? (
-                  <Card>
-                    <CardContent className="p-4 space-y-4">
-                      {blockedUsers.map(blockedUser => (
-                        <div key={blockedUser.uid} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{blockedUser.name}</p>
-                            <p className="text-sm text-muted-foreground">@{blockedUser.handle}</p>
-                          </div>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            disabled={isUnblockingMap[blockedUser.uid] || !onUnblockUser}
-                            onClick={() => handleLocalUnblock(blockedUser.uid)}
-                          >
-                            {isUnblockingMap[blockedUser.uid] && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                            Unblock
-                          </Button>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic p-4 text-center border rounded-lg bg-muted/20">You haven't blocked any users.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              <Switch checked={lastSeenVisible} onCheckedChange={setLastSeenVisible} />
+            </div>
 
-        <TabsContent value="support" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Help & Support</CardTitle>
-              <CardDescription>Contact our support team for assistance.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...supportForm}>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <Label className="font-semibold text-base flex items-center gap-2"><EyeOff className="h-4 w-4" /> Ghost Mode</Label>
+                <p className="text-sm text-muted-foreground">Hide your profile views.</p>
+              </div>
+              <Switch checked={ghostMode} onCheckedChange={setGhostMode} />
+            </div>
+
+            <div className="p-4">
+              <Label className="font-semibold text-base flex items-center gap-2 mb-2"><UserX className="h-4 w-4" /> Blocking</Label>
+              <p className="text-sm text-muted-foreground mb-3">Review people you've previously blocked.</p>
+              {blockedUsers.length > 0 ? (
+                <div className="space-y-3 bg-muted/20 rounded-md p-3 border">
+                  {blockedUsers.map(blockedUser => (
+                    <div key={blockedUser.uid} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm">{blockedUser.name}</p>
+                        <p className="text-xs text-muted-foreground">@{blockedUser.handle}</p>
+                      </div>
+                      <Button variant="secondary" size="sm" disabled={isUnblockingMap[blockedUser.uid] || !onUnblockUser} onClick={() => handleLocalUnblock(blockedUser.uid)}>
+                        {isUnblockingMap[blockedUser.uid] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Unblock'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic border rounded-md bg-muted/10 p-3">No blocked users.</p>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Appearance */}
+        <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
+          <div className="bg-muted/30 px-4 py-2 border-b">
+            <h2 className="text-sm font-bold uppercase text-muted-foreground">Appearance</h2>
+          </div>
+          <div className="p-4">
+            <RadioGroup defaultValue={theme} onValueChange={setTheme} className="flex gap-4">
+              {['light', 'dark', 'system'].map((t) => (
+                <div key={t} className="flex items-center space-x-2">
+                  <RadioGroupItem value={t} id={t} />
+                  <Label htmlFor={t} className="capitalize cursor-pointer">{t}</Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </div>
+        </Card>
+
+        {/* Wallet */}
+        <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
+          <div className="bg-muted/30 px-4 py-2 border-b">
+            <h2 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+              <Wallet className="h-4 w-4" /> Creator Wallet
+            </h2>
+          </div>
+          <div className="p-4">
+             <WalletView currentUser={user} />
+          </div>
+        </Card>
+
+        {/* Support */}
+        <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
+          <div className="bg-muted/30 px-4 py-2 border-b">
+            <h2 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+              <HelpCircle className="h-4 w-4" /> Help & Support
+            </h2>
+          </div>
+          <div className="p-4">
+             <Form {...supportForm}>
                 <form onSubmit={supportForm.handleSubmit(handleSupportSubmit)} className="space-y-4">
-                  <FormField
-                    control={supportForm.control}
-                    name="subject"
-                    render={({ field }) => (
+                  <FormField control={supportForm.control} name="subject" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Subject</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., Issue with my transaction" {...field} />
+                          <Input placeholder="Subject" {...field} className="bg-transparent" />
                         </FormControl>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={supportForm.control}
-                    name="message"
-                    render={({ field }) => (
+                  <FormField control={supportForm.control} name="message" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Message</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="Please describe your issue in detail..." rows={5} {...field} />
+                          <Textarea placeholder="How can we help?" rows={3} {...field} className="bg-transparent" />
                         </FormControl>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" disabled={isSubmittingTicket}>
-                    {isSubmittingTicket && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Send Message
+                  <Button type="submit" size="sm" disabled={isSubmittingTicket} className="w-full sm:w-auto">
+                    {isSubmittingTicket ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send to Support'}
                   </Button>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          </div>
+        </Card>
+      </div>
       
       <Card className="border-destructive/40 bg-destructive/[0.01] mt-8">
         <CardHeader>

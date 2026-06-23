@@ -980,7 +980,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 </aside>
 
                 {/* Center Rendered View Matrix Switchboard */}
-                <main className="col-span-12 md:col-span-9 space-y-6">
+                <main className="col-span-12 md:col-span-9 lg:col-span-6 space-y-6">
                     <Suspense fallback={<LoadingComponent />}>
                         {currentView === 'home' && isClient && (
                             <HomeFeed 
@@ -1066,6 +1066,39 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         {currentView === 'admin' && currentUser?.email === 'admin@lonkind.com' && <AdminDashboardView />}
                     </Suspense>
                 </main>
+
+                {/* Right Side Contacts & Activity Panel */}
+                <aside className="hidden lg:block lg:col-span-3 space-y-4 sticky top-24">
+                    <div className="flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
+                        <h3 className="font-semibold text-sm">Contacts</h3>
+                    </div>
+                    <div className="space-y-2 mt-2">
+                        {/* Mock Contacts List */}
+                        {[
+                            { name: 'Sarah Jenkins', avatar: 'https://i.pravatar.cc/150?u=sarah', online: true },
+                            { name: 'Michael Chen', avatar: 'https://i.pravatar.cc/150?u=michael', online: true },
+                            { name: 'Emma Watson', avatar: 'https://i.pravatar.cc/150?u=emma', online: false },
+                            { name: 'David Smith', avatar: 'https://i.pravatar.cc/150?u=david', online: true },
+                        ].map((contact, i) => (
+                            <div key={i} className="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+                                <div className="relative">
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarImage src={contact.avatar} alt={contact.name} />
+                                        <AvatarFallback>{contact.name.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    {contact.online && (
+                                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background ring-1 ring-green-600/50" />
+                                    )}
+                                </div>
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-foreground transition-colors">{contact.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="mt-6 flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
+                        <h3 className="font-semibold text-sm">Group Conversations</h3>
+                    </div>
+                </aside>
             </div>
 
             {/* Micro-Overlay Global Drawer Shell for Post Discussions Comments sheet thread views */}

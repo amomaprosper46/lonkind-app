@@ -91,7 +91,8 @@ export default function StoriesCarousel({ currentUser, followingUids, blockedUid
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
                 
                 {/* Create / My Story Button */}
-                <div className="flex flex-col items-center gap-1 min-w-[72px] cursor-pointer snap-start" 
+                <div 
+                    className="relative flex flex-col group min-w-[110px] w-[110px] h-[190px] rounded-xl overflow-hidden cursor-pointer snap-start bg-card border shadow-sm hover:brightness-95 transition-all" 
                     onClick={() => {
                         const myGroupIndex = groupedStories.findIndex(g => g[0].authorUid === currentUser.uid);
                         if (myGroupIndex !== -1) {
@@ -100,42 +101,58 @@ export default function StoriesCarousel({ currentUser, followingUids, blockedUid
                             setIsCreateOpen(true);
                         }
                     }}>
-                    <div className="relative">
-                        <div className={`p-[2px] rounded-full ${hasMyStory ? 'bg-gradient-to-tr from-primary to-purple-500' : 'bg-muted'}`}>
-                            <Avatar className="h-16 w-16 border-2 border-background">
-                                <AvatarImage src={currentUser?.avatarUrl || undefined} alt={currentUser?.name || 'User'} />
-                                <AvatarFallback>{currentUser?.name ? currentUser.name.charAt(0) : 'U'}</AvatarFallback>
-                            </Avatar>
-                        </div>
-                        {!hasMyStory && (
-                            <div className="absolute bottom-0 right-0 bg-primary text-primary-foreground rounded-full p-1 border-2 border-background">
-                                <Plus className="h-4 w-4" />
+                    {hasMyStory ? (
+                        <>
+                            <div className="absolute inset-0 bg-black/20 z-10" />
+                            <img src={groupedStories.find(g => g[0].authorUid === currentUser.uid)?.[0].mediaUrl || currentUser?.avatarUrl} className="absolute inset-0 w-full h-full object-cover" />
+                            <div className="absolute top-2 left-2 z-20 rounded-full border-2 border-primary">
+                                <Avatar className="h-8 w-8">
+                                    <AvatarImage src={currentUser?.avatarUrl} alt="You" />
+                                    <AvatarFallback>U</AvatarFallback>
+                                </Avatar>
                             </div>
-                        )}
-                    </div>
-                    <span className="text-xs font-medium truncate w-full text-center">
-                        {hasMyStory ? 'Your Story' : 'Add Story'}
-                    </span>
+                            <span className="absolute bottom-2 left-2 right-2 text-[11px] font-semibold text-white z-20 truncate drop-shadow-md">
+                                Your Story
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <div className="h-[65%] w-full relative overflow-hidden">
+                                <img src={currentUser?.avatarUrl || ''} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                            </div>
+                            <div className="h-[35%] w-full bg-card flex flex-col items-center justify-end pb-2 relative">
+                                <div className="absolute -top-4 bg-primary text-primary-foreground rounded-full p-1 border-4 border-card">
+                                    <Plus className="h-5 w-5" />
+                                </div>
+                                <span className="text-[11px] font-semibold">Create Story</span>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Other Users' Stories */}
                 {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="flex flex-col items-center gap-1 min-w-[72px] animate-pulse">
-                            <div className="h-16 w-16 rounded-full bg-muted" />
-                            <div className="h-3 w-12 bg-muted rounded mt-1" />
-                        </div>
+                        <div key={i} className="min-w-[110px] w-[110px] h-[190px] rounded-xl bg-muted animate-pulse snap-start" />
                     ))
                 ) : (
                     groupedStories.filter(g => g[0].authorUid !== currentUser.uid).map((userStories, index) => (
-                        <div key={userStories[0].authorUid} className="flex flex-col items-center gap-1 min-w-[72px] cursor-pointer snap-start" onClick={() => setSelectedStoryIndex(index + (hasMyStory ? 1 : 0))}>
-                             <div className="p-[2px] rounded-full bg-gradient-to-tr from-primary to-purple-500">
-                                <Avatar className="h-16 w-16 border-2 border-background">
+                        <div 
+                            key={userStories[0].authorUid} 
+                            className="relative flex flex-col min-w-[110px] w-[110px] h-[190px] rounded-xl overflow-hidden cursor-pointer snap-start bg-slate-800 shadow-sm hover:brightness-95 transition-all group" 
+                            onClick={() => setSelectedStoryIndex(index + (hasMyStory ? 1 : 0))}>
+                            
+                            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 z-10" />
+                            <img src={userStories[0].mediaUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                            
+                            <div className="absolute top-2 left-2 z-20 rounded-full border-[2.5px] border-primary ring-2 ring-background/20 overflow-hidden">
+                                <Avatar className="h-8 w-8">
                                     <AvatarImage src={userStories[0].authorAvatarUrl} alt={userStories[0].authorName} />
                                     <AvatarFallback>{userStories[0].authorName.charAt(0)}</AvatarFallback>
                                 </Avatar>
                             </div>
-                            <span className="text-xs font-medium truncate w-full text-center">
+                            
+                            <span className="absolute bottom-2 left-2 right-2 text-[11px] font-semibold text-white z-20 truncate drop-shadow-md">
                                 {userStories[0].authorName.split(' ')[0]}
                             </span>
                         </div>
