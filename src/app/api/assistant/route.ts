@@ -3,7 +3,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import * as admin from 'firebase-admin';
 import { adminDb as db } from '@/lib/firebase-admin';
-import { ai } from '@/ai/genkit';
 
 const InputSchema = z.object({
   question: z.string().trim().min(1, 'Question cannot be empty.'),
