@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const response = await ai.generate({
-      model: 'googleai/gemini-2.0-flash',
+      model: 'googleai/gemini-2.5-flash',
       messages,
       system: `
 You are a helpful, friendly AI assistant built into "Lonkind".

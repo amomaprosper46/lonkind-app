@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
     }
 
-    const { question, history } = parsed.data;
+    const { question, history = [] } = parsed.data;
 
     const messages: any[] = [
       ...history.map((m: any) => ({
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const response = await ai.generate({
-      model: 'googleai/gemini-2.0-flash',
+      model: 'googleai/gemini-2.5-flash',
       messages: messages,
       system: `You are Lonki, a helpful, empathetic, and responsible AI assistant for the Lonkind social media app. Your primary goal is to create a positive and safe user experience.
 
