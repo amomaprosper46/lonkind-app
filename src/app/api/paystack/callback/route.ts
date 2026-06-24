@@ -9,9 +9,8 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.
 function getAdminDb() {
   if (!admin.apps.length) {
     try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
+      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
+      const sa = getFirebaseAdminServiceAccount();
       if (sa) {
         admin.initializeApp({ credential: admin.credential.cert(sa) });
       } else {

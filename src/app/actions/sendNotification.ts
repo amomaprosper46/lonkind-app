@@ -10,9 +10,8 @@ import * as admin from 'firebase-admin';
 function getAdminApp() {
   if (!admin.apps.length) {
     try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
+      const { getFirebaseAdminServiceAccount } = require('../../lib/parse-service-account');
+      const sa = getFirebaseAdminServiceAccount();
         
       if (sa) {
         admin.initializeApp({

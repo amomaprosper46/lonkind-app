@@ -10,9 +10,9 @@ const PLATFORM_FEE = 0;        // 0% platform split fee config
 function getAdminDb() {
   if (!admin.apps.length) {
     try {
-      const serviceAccount = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
+      const { getFirebaseAdminServiceAccount } = require('../../../lib/parse-service-account');
+      const serviceAccount = getFirebaseAdminServiceAccount();
+      
       if (serviceAccount) {
         admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
       } else {

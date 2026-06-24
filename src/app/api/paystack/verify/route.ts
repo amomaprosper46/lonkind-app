@@ -10,9 +10,8 @@ function getAdminDb() {
     // Use environment variable for admin credentials if available
     // Otherwise use application default credentials (works on Firebase hosting / Cloud Run)
     try {
-      const serviceAccount = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
+      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
+      const serviceAccount = getFirebaseAdminServiceAccount();
 
       if (serviceAccount) {
         initializeApp({ credential: cert(serviceAccount) });

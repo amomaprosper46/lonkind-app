@@ -11,23 +11,20 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 /**
  * Secure Firebase Admin Database Initializer
  */
 function getSecureAdminDb() {
-  if (!getApps().length) {
+  if (!admin.apps.length) {
     try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
-
-      if (sa) {
-        initializeApp({ credential: cert(sa) });
-      } else {
-        initializeApp();
-      }
+      const { getFirebaseAdminServiceAccount } = require('../lib/parse-service-account');
+      const sa = getFirebaseAdminServiceAccount();
+      admin.initializeApp({
+        credential: sa ? admin.credential.cert(sa) : admin.credential.applicationDefault(),
+      });
     } catch (e) {
       console.error("Firebase Admin initialization error:", e);
       throw new Error("Core system initialization failure.");

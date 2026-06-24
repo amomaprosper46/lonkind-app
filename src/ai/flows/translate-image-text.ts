@@ -19,9 +19,8 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 function getSecureAdminDb() {
   if (!getApps().length) {
     try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
+      const { getFirebaseAdminServiceAccount } = require('../../lib/parse-service-account');
+      const sa = getFirebaseAdminServiceAccount();
 
       if (sa) {
         initializeApp({ credential: cert(sa) });

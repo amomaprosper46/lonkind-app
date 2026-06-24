@@ -8,9 +8,12 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 function getAdminDb() {
   if (!admin.apps.length) {
     try {
-      if (process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT) {
-        const sa = JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT);
-        admin.initializeApp({ credential: admin.credential.cert(sa) });
+      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
+      const sa = getFirebaseAdminServiceAccount();
+      if (sa) {
+        admin.initializeApp({
+          credential: admin.credential.cert(sa),
+        });
       } else {
         admin.initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
       }

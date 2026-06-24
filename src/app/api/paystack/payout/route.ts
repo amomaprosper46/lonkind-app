@@ -16,9 +16,8 @@ const FAST_EARNINGS_DAYS = 30;                // If earned ₦5k+ in < 30 days o
 function getAdminDb() {
   if (!getApps().length) {
     try {
-      const sa = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT)
-        : undefined;
+      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
+      const sa = getFirebaseAdminServiceAccount();
       sa
         ? initializeApp({ credential: cert(sa) })
         : initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
