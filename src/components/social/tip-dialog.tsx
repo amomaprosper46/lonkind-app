@@ -32,8 +32,11 @@ export const baseTipOptions = [
 ];
 
 export const premiumTipOptions = [
+    { coins: 5000, diamonds: 5000, label: 'Sports Car', emoji: '🏎️', isPremium: true },
     { coins: 10000, diamonds: 10000, label: 'Lion', emoji: '🦁', isPremium: true },
-    { coins: 50000, diamonds: 50000, label: 'Universe', emoji: '🌌', isPremium: true },
+    { coins: 50000, diamonds: 50000, label: 'Yacht', emoji: '🛥️', isPremium: true },
+    { coins: 100000, diamonds: 100000, label: 'Private Jet', emoji: '✈️', isPremium: true },
+    { coins: 500000, diamonds: 500000, label: 'Universe', emoji: '🌌', isPremium: true },
 ];
 
 export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient, mode = 'post', spaceId }: TipDialogProps) {

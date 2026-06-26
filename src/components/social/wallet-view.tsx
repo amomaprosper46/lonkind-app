@@ -191,12 +191,12 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                             </Card>
                              <Card className="bg-muted/50">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                     <CardTitle className="text-sm font-medium">Diamond Balance</CardTitle>
-                                     <Gem className="h-4 w-4 text-muted-foreground" />
+                                     <CardTitle className="text-sm font-medium">Creator Earnings</CardTitle>
+                                     <div className="bg-green-500/10 p-1.5 rounded-full"><Gem className="h-4 w-4 text-green-500" /></div>
                                 </CardHeader>
                                 <CardContent>
-                                     <div className="text-2xl font-bold">{(currentUser.diamonds || 0).toLocaleString()}</div>
-                                     <p className="text-xs text-muted-foreground">Received from tips.</p>
+                                     <div className="text-2xl font-bold text-green-500">₦{((currentUser.diamonds || 0) * 15).toLocaleString()}</div>
+                                     <p className="text-xs text-muted-foreground mt-1">Available to cash out ({(currentUser.diamonds || 0).toLocaleString()} Diamonds)</p>
                                 </CardContent>
                             </Card>
                         </CardContent>
