@@ -26,7 +26,8 @@ service cloud.firestore {
 
       allow update: if isSignedIn() && (
         isAdmin() ||
-        isOwner(userId)
+        isOwner(userId) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds', 'lifetimeTipsReceived', 'badges', 'updatedAt']))
       );
 
       allow delete: if isOwner(userId) || isAdmin();
