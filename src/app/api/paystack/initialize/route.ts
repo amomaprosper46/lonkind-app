@@ -27,42 +27,27 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { email, userId, packageId } = body;
+    const { email, userId, amountNaira, coinsToCredit } = body;
 
     // Validate incoming parameters
-    if (!email || !userId || !packageId) {
-      return NextResponse.json({ error: 'Missing core tracking entries: email, userId, packageId' }, { status: 400 });
+    if (!email || !userId || !amountNaira || !coinsToCredit) {
+      return NextResponse.json({ error: 'Missing core tracking entries: email, userId, amountNaira, coinsToCredit' }, { status: 400 });
     }
 
     /**
-     * 2. Price Tampering Validation Shield
-     * Looks up package parameters from our secure server matrix using the client's packageId.
-     */
-    const activePackage = COIN_PRICING_TIERS[packageId];
-    if (!activePackage) {
-      return NextResponse.json({ error: 'Requested item package identity is invalid or expired.' }, { status: 404 });
-    }
-
-    const verifiedNairaAmount = activePackage.priceNaira;
-    const verifiedCoinAmount = activePackage.coins;
-
-    /**
-     * 3. Construct the Paystack Transaction Invoice
-     * Uses our verified server-computed prices, ensuring the client cannot alter the total cost.
+     * 2. Construct the Paystack Transaction Invoice
      */
     const paystackPayload = {
       email,
-      amount: Math.round(verifiedNairaAmount * 100), // Convert authenticated Naira to integer Kobo units
+      amount: Math.round(amountNaira * 100), // Convert authenticated Naira to integer Kobo units
       currency: 'NGN',
       metadata: {
         userId,
-        coinAmount: verifiedCoinAmount, // Injected securely out of server configuration maps
-        packageId,
+        coinAmount: coinsToCredit, 
         purpose: 'coin_purchase',
         custom_fields: [
           { display_name: 'User ID', variable_name: 'userId', value: userId },
-          { display_name: 'Coins Allocated', variable_name: 'coinAmount', value: String(verifiedCoinAmount) },
-          { display_name: 'Purchased Tier', variable_name: 'packageId', value: packageId },
+          { display_name: 'Coins Allocated', variable_name: 'coinAmount', value: String(coinsToCredit) },
         ],
       },
       callback_url: `${APP_URL}/api/paystack/callback`,

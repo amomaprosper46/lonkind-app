@@ -97,9 +97,9 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     email: currentUser.email || 'user@example.com',
-                    amount: pkg.price,
+                    amountNaira: pkg.price,
+                    coinsToCredit: pkg.coins,
                     userId: currentUser.uid,
-                    coinAmount: coinAmount,
                 })
             });
 
