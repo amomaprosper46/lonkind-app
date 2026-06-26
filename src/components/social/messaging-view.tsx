@@ -152,6 +152,14 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                             setIsLoading(false);
                         }
                     }
+                }, (error) => {
+                    console.error('Error fetching last message:', error);
+                    if (pendingUpdates > 0) {
+                        pendingUpdates--;
+                        if (pendingUpdates === 0) {
+                            setIsLoading(false);
+                        }
+                    }
                 });
 
                 messageUnsubscribes.push(unsubMsg);

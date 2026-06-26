@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy, ShieldAlert } from 'lucide-react';
+import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy, ShieldAlert, ArrowLeft, Menu } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import { Input } from '@/components/ui/input';
 import { db, storage, auth } from '@/lib/firebase';
@@ -40,6 +40,13 @@ import { cn } from '@/lib/utils';
 import { compressImage } from '@/lib/image-compression';
 
 const LoadingComponent = () => <div className="col-span-12 md:col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
+const MobileNavItem = ({ icon: Icon, active, onClick }: { icon: any, active: boolean, onClick: () => void }) => (
+    <button onClick={onClick} className={cn("h-12 w-12 flex flex-col items-center justify-center rounded-full transition-all duration-300", active ? "text-indigo-400 bg-indigo-500/10" : "text-slate-500 hover:text-slate-300")}>
+        <Icon className={cn("h-6 w-6 transition-transform duration-300", active ? "scale-110" : "scale-100")} />
+        {active && <span className="absolute -bottom-1 w-1 h-1 bg-indigo-500 rounded-full" />}
+    </button>
+);
 
 const MessagingView = dynamic(() => import('./messaging-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const SettingsView = dynamic(() => import('./settings-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
@@ -841,11 +848,26 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         );
     }
 
+    const isMobileFullscreenFeature = !['home', 'explore', 'groups'].includes(currentView);
+
     // Main Layout Skeleton Return
     return (
-        <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-            {/* Navigation Header */}
-            <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+        <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-20 md:pb-0">
+            {/* Mobile Fullscreen Header (Only shows when in a feature like Messages, Profile, Settings) */}
+            {isMobileFullscreenFeature && (
+                <div className="md:hidden sticky top-0 z-50 w-full bg-background/95 backdrop-blur-xl border-b border-border/60 flex items-center h-14 px-4 shadow-sm">
+                    <Button variant="ghost" size="icon" onClick={() => changeView('home')} className="mr-3 -ml-2 h-9 w-9 text-slate-400 hover:text-foreground">
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <span className="font-semibold text-base tracking-tight capitalize text-foreground">{currentView.replace('-', ' ')}</span>
+                </div>
+            )}
+
+            {/* Navigation Header (Hidden on Mobile if Fullscreen Feature) */}
+            <header className={cn(
+                "sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60",
+                isMobileFullscreenFeature ? "hidden md:block" : "block"
+            )}>
                 <div className="container max-w-7xl mx-auto h-16 flex items-center justify-between px-4 gap-4">
                     <div className="flex items-center gap-6">
                         <Link href="/" className="flex items-center gap-2.5 group">
@@ -969,8 +991,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
             {/* Dashboard Core Body Space Layout wrapper */}
             <div className="flex-1 container max-w-7xl mx-auto px-4 py-6 grid grid-cols-12 gap-6 items-start">
-                {/* Left Side Navigation Panel */}
-                <aside className="col-span-12 md:col-span-3 space-y-2 md:sticky md:top-24">
+                {/* Left Side Navigation Panel (Hidden on Mobile) */}
+                <aside className="hidden md:block col-span-12 md:col-span-3 space-y-2 sticky top-24">
                     <NavigationItem label="Home Feed" icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} />
                     <NavigationItem label="Explore" icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} />
                     <NavigationItem label="Channels & Groups" icon={Users} active={currentView === 'groups'} onClick={() => changeView('groups')} />
@@ -980,7 +1002,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Ecosystem</div>
                     <NavigationItem label="AI Command Center" icon={Wand2} active={currentView === 'ai-command-center'} onClick={() => changeView('ai-command-center')} />
-                    <NavigationItem label="Personal AI Clone" icon={BrainCircuit} active={currentView === 'personal-ai'} onClick={() => changeView('personal-ai')} />
+                    <NavigationItem label="Lonki Personal AI" icon={BrainCircuit} active={currentView === 'personal-ai'} onClick={() => changeView('personal-ai')} />
                     <NavigationItem label="Automated Storyteller" icon={Lightbulb} active={currentView === 'story-writer'} onClick={() => changeView('story-writer')} />
 
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Finance & Tools</div>
@@ -1117,6 +1139,43 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     </div>
                 </aside>
             </div>
+
+            {/* Mobile Floating Bottom Navigation Pill (Custom Lonkind Layout) */}
+            {!isMobileFullscreenFeature && (
+                <div className="md:hidden fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+                    <div className="pointer-events-auto bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-2xl border border-slate-700/50 shadow-2xl shadow-indigo-500/10 rounded-full flex items-center justify-around px-4 py-2 w-full max-w-sm gap-1">
+                        <MobileNavItem icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} />
+                        <MobileNavItem icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} />
+                        
+                        <div className="relative -mt-8 mx-2">
+                            <button onClick={() => changeView('messages')} className="h-14 w-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-500/40 flex items-center justify-center transform hover:scale-105 active:scale-95 transition-all border-4 border-background">
+                                <MessageSquare className="h-6 w-6" />
+                            </button>
+                        </div>
+                        
+                        <MobileNavItem icon={Users} active={currentView === 'groups'} onClick={() => changeView('groups')} />
+                        
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button className="h-12 w-12 flex flex-col items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors relative">
+                                    <Menu className="h-6 w-6" />
+                                    {unreadNotifications > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-indigo-500" />}
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 mb-2 rounded-2xl border-slate-700/50 bg-slate-900/95 backdrop-blur-xl">
+                                <DropdownMenuLabel className="text-xs text-slate-400">Lonkind Features</DropdownMenuLabel>
+                                <DropdownMenuSeparator className="bg-slate-800" />
+                                <DropdownMenuItem onClick={() => changeView('wallet')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wallet className="mr-2 h-4 w-4" /> Creator Wallet</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => changeView('ai-command-center')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wand2 className="mr-2 h-4 w-4" /> AI Command Center</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => changeView('personal-ai')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><BrainCircuit className="mr-2 h-4 w-4" /> Lonki Personal AI</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => changeView('story-writer')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Lightbulb className="mr-2 h-4 w-4" /> Automated Storyteller</DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-slate-800" />
+                                <DropdownMenuItem onClick={() => changeView('settings')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Cog className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
+            )}
 
             {/* Micro-Overlay Global Drawer Shell for Post Discussions Comments sheet thread views */}
             {selectedPostForComments && (

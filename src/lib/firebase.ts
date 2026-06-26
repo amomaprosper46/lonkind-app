@@ -5,6 +5,7 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database";
 import { getMessaging, isSupported } from "firebase/messaging";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 // Your web app's Firebase configuration
 // These values are read from environment variables for deployment.
@@ -42,6 +43,24 @@ export const rtdb = (app ? getDatabase(app) : null) as unknown as ReturnType<typ
 
 let messagingInstance: any = null;
 if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+    // 1. Initialize App Check
+    if (app) {
+        try {
+            // In development, automatically generate a debug token in the browser console
+            if (process.env.NODE_ENV === 'development') {
+                (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN || true;
+            }
+            
+            initializeAppCheck(app, {
+                provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || 'missing-recaptcha-key'),
+                isTokenAutoRefreshEnabled: true
+            });
+        } catch (e) {
+            console.error("Firebase App Check failed to initialize", e);
+        }
+    }
+
+    // 2. Initialize Messaging
     isSupported().then((supported) => {
         if (supported && app) {
             messagingInstance = getMessaging(app);

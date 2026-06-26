@@ -14,23 +14,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="application-name" content="Lonkind" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Lonkind" />
-        <meta name="format-detection" content="telephone=no" />
-        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#3B82F6" />
-        <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
       </head>
-      <body className={`font-sans antialiased`}>
+
+      <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -38,7 +33,16 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <FirebaseErrorListener />
-          {children}
+
+          {/* 🔥 THIS IS THE FIX */}
+          <div className="min-h-screen flex flex-col">
+            <main className="flex-1 flex justify-center">
+              <div className="w-full max-w-6xl px-4">
+                {children}
+              </div>
+            </main>
+          </div>
+
           <Toaster />
         </ThemeProvider>
       </body>
