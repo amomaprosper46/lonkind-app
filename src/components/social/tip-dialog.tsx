@@ -59,7 +59,7 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
 
         setIsTipping(true);
         try {
-            const COIN_TO_DIAMOND_CONVERSION_RATE = 10;
+            const COIN_TO_DIAMOND_CONVERSION_RATE = 1;
             
             await runTransaction(db, async (transaction) => {
                 const senderRef = doc(db, 'users', currentUser.uid);
@@ -232,6 +232,9 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                                     <span className="font-bold">{option.coins.toLocaleString()}</span>
                                 </div>
                                 <p className="text-sm font-semibold mt-1">{option.label}</p>
+                                <div className="mt-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-[10px] text-green-500 font-medium">
+                                    <span>Creator earns ₦{(option.diamonds * 15).toLocaleString()}</span>
+                                </div>
                             </Button>
                         ))}
                     </div>
