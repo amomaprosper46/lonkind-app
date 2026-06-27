@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const reference = searchParams.get('reference') || searchParams.get('trxref');
 
   if (!reference) {
-    return NextResponse.redirect(`${APP_URL}/wallet?payment=failed&reason=no_reference`);
+    return NextResponse.redirect(`${APP_URL}/?view=wallet&payment=failed&reason=no_reference`);
   }
 
   try {
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     if (!verifyData.status || verifyData.data?.status !== 'success') {
       console.warn(`[Paystack Callback] Transaction validation failed for verification token: ${reference}`);
-      return NextResponse.redirect(`${APP_URL}/wallet?payment=failed&reason=payment_not_successful`);
+      return NextResponse.redirect(`${APP_URL}/?view=wallet&payment=failed&reason=payment_not_successful`);
     }
 
     const { userId, coinAmount } = verifyData.data.metadata || {};
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
     if (!userId || !coinAmount) {
       console.error('Invalid payment metadata:', verifyData.data.metadata);
-      return NextResponse.redirect(`${APP_URL}/wallet?payment=error&reason=invalid_metadata`);
+      return NextResponse.redirect(`${APP_URL}/?view=wallet&payment=error&reason=invalid_metadata`);
     }
 
     const db = getAdminDb();
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
     const existing = await txRef.get();
     if (existing.exists) {
        return NextResponse.redirect(
-        `${APP_URL}/wallet?payment=success&coins=${existing.data()?.coinsAdded}&amount=${amountNaira}`
+        `${APP_URL}/?view=wallet&payment=success&coins=${existing.data()?.coinsAdded}&amount=${amountNaira}`
       );
     }
 
@@ -87,11 +87,11 @@ export async function GET(req: NextRequest) {
 
     // 4. Redirect user back to wallet with success message
     return NextResponse.redirect(
-      `${APP_URL}/wallet?payment=success&coins=${coinAmount}&amount=${amountNaira}`
+      `${APP_URL}/?view=wallet&payment=success&coins=${coinAmount}&amount=${amountNaira}`
     );
 
   } catch (error: any) {
     console.error('[Paystack Callback Engine Exception]:', error);
-    return NextResponse.redirect(`${APP_URL}/wallet?payment=error&reason=processing_exception`);
+    return NextResponse.redirect(`${APP_URL}/?view=wallet&payment=error&reason=processing_exception`);
   }
 }
