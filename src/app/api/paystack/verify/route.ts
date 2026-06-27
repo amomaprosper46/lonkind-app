@@ -4,23 +4,21 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
+import { getFirebaseAdminServiceAccount } from '@/lib/parse-service-account';
+
 // Initialize Firebase Admin SDK (for server-side Firestore writes)
 function getAdminDb() {
   if (!getApps().length) {
-    // Use environment variable for admin credentials if available
-    // Otherwise use application default credentials (works on Firebase hosting / Cloud Run)
     try {
-      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
-      const serviceAccount = getFirebaseAdminServiceAccount();
-
-      if (serviceAccount) {
-        initializeApp({ credential: cert(serviceAccount) });
+      const sa = getFirebaseAdminServiceAccount();
+      if (sa) {
+        initializeApp({ credential: cert(sa) });
       } else {
-        // Fallback: use the project ID from env and ADC
-        initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+        initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'impactful-ideas' });
       }
     } catch (e) {
-      initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+      console.error("Firebase Admin initialization error:", e);
+      initializeApp({ projectId: 'impactful-ideas' });
     }
   }
   return getFirestore();

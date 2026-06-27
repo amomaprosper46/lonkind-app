@@ -6,21 +6,23 @@ import * as admin from 'firebase-admin';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.app';
 
+import { getFirebaseAdminServiceAccount } from '@/lib/parse-service-account';
+
 function getAdminDb() {
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     try {
-      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
       const sa = getFirebaseAdminServiceAccount();
       if (sa) {
-        admin.initializeApp({ credential: admin.credential.cert(sa) });
+        initializeApp({ credential: cert(sa) });
       } else {
-        admin.initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+        initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'impactful-ideas' });
       }
     } catch (e) {
       console.error("Firebase Admin initialization error:", e);
+      initializeApp({ projectId: 'impactful-ideas' });
     }
   }
-  return admin.firestore();
+  return getFirestore();
 }
 
 export async function GET(req: NextRequest) {

@@ -7,22 +7,23 @@ import { z } from 'zod';
 const NAIRA_PER_COIN = 20;     // ₦20 per coin
 const PLATFORM_FEE = 0;        // 0% platform split fee config
 
+import { getFirebaseAdminServiceAccount } from '@/lib/parse-service-account';
+
 function getAdminDb() {
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     try {
-      const { getFirebaseAdminServiceAccount } = require('../../../lib/parse-service-account');
-      const serviceAccount = getFirebaseAdminServiceAccount();
-      
-      if (serviceAccount) {
-        admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+      const sa = getFirebaseAdminServiceAccount();
+      if (sa) {
+        initializeApp({ credential: cert(sa) });
       } else {
-        admin.initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+        initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'impactful-ideas' });
       }
     } catch (e) {
       console.error("Firebase Admin initialization fallback error:", e);
+      initializeApp({ projectId: 'impactful-ideas' });
     }
   }
-  return admin.firestore();
+  return getFirestore();
 }
 
 // 1. Removed fromUserId from schema to completely eliminate client-side parameter injection vectors
