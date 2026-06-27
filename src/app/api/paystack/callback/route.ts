@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import * as admin from 'firebase-admin';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
@@ -23,10 +23,6 @@ function getAdminDb() {
   return admin.firestore();
 }
 
-/**
- * GET: Handles Client Web Browser Re-entry Point Following Financial Authorization
- * strictly handles verification and validation routines before building redirect signals.
- */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const reference = searchParams.get('reference') || searchParams.get('trxref');
@@ -36,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 1. Asymmetric Cryptographic Sanity Verification Check
+    // 1. Verify payment directly with Paystack
     const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       method: 'GET',
       headers: { 
@@ -52,28 +48,46 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/wallet?payment=failed&reason=payment_not_successful`);
     }
 
-    // Extract transaction properties from data payload signatures securely
-    const { coinAmount } = verifyData.data.metadata || {};
+    const { userId, coinAmount } = verifyData.data.metadata || {};
     const amountNaira = verifyData.data.amount / 100;
 
-    /**
-     * 2. Idempotence Verification Loop
-     * Instead of writing updates directly inside an unstable browser thread context, 
-     * we query our system state. If the webhook has completed processing, we let the user know.
-     * If the ledger record doesn't exist yet, we send them to a waiting screen that polls for updates.
-     */
-    const db = getAdminDb();
-    const txDoc = await db.collection('transactions').doc(reference).get();
+    if (!userId || !coinAmount) {
+      console.error('Invalid payment metadata:', verifyData.data.metadata);
+      return NextResponse.redirect(`${APP_URL}/wallet?payment=error&reason=invalid_metadata`);
+    }
 
-    if (txDoc.exists) {
-      return NextResponse.redirect(
-        `${APP_URL}/wallet?payment=success&coins=${coinAmount || txDoc.data()?.coinsAdded}&amount=${amountNaira}`
+    const db = getAdminDb();
+    const txRef = db.collection('transactions').doc(reference);
+
+    // 2. Check if already processed
+    const existing = await txRef.get();
+    if (existing.exists) {
+       return NextResponse.redirect(
+        `${APP_URL}/wallet?payment=success&coins=${existing.data()?.coinsAdded}&amount=${amountNaira}`
       );
     }
 
-    // Direct to a polling layout page if the webhook hasn't updated the transaction table yet
+    // 3. Process the transaction and credit coins atomically
+    await db.runTransaction(async (transaction) => {
+      transaction.set(txRef, {
+        userId,
+        paystackReference: reference,
+        amountNaira,
+        coinsAdded: Number(coinAmount),
+        status: 'success',
+        type: 'coin_purchase',
+        time: FieldValue.serverTimestamp(),
+      });
+
+      const userRef = db.collection('users').doc(userId);
+      transaction.update(userRef, {
+        coins: FieldValue.increment(Number(coinAmount)),
+      });
+    });
+
+    // 4. Redirect user back to wallet with success message
     return NextResponse.redirect(
-      `${APP_URL}/wallet?payment=processing&reference=${reference}&coins=${coinAmount || 0}`
+      `${APP_URL}/wallet?payment=success&coins=${coinAmount}&amount=${amountNaira}`
     );
 
   } catch (error: any) {
