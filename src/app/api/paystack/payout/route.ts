@@ -62,17 +62,21 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // ── Rate limit: max 1 payout request per 24 hours ──
+    // ── Rate limit: max 1 successful/processing payout request per 24 hours (ignore failed transfers) ──
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentRequests = await db.collection('payoutRequests')
       .where('userId', '==', userId)
       .where('createdAt', '>=', Timestamp.fromDate(oneDayAgo))
-      .limit(1)
       .get();
 
-    if (!recentRequests.empty) {
+    const activeRequests = recentRequests.docs.filter(doc => {
+      const st = (doc.data().status || '').toLowerCase();
+      return st !== 'failed' && st !== 'error' && st !== 'rejected' && st !== 'cancelled';
+    });
+
+    if (activeRequests.length > 0) {
       return NextResponse.json({
-        error: 'You can only request one payout per 24 hours. Please try again tomorrow.',
+        error: 'You can only request one successful payout per 24 hours. Please try again tomorrow.',
       }, { status: 429 });
     }
 

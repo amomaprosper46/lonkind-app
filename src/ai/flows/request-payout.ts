@@ -96,7 +96,10 @@ const requestPayoutFlow = ai.defineFlow(
 
         let totalLiquidatedPastDay = 0;
         historicalVolumeQuery.forEach(doc => {
-          totalLiquidatedPastDay += doc.data().diamondAmount || 0;
+          const st = (doc.data().status || '').toLowerCase();
+          if (st !== 'failed' && st !== 'error' && st !== 'rejected' && st !== 'cancelled') {
+            totalLiquidatedPastDay += doc.data().diamondAmount || 0;
+          }
         });
 
         if (totalLiquidatedPastDay + diamondAmount > config.dailyLimit) {
