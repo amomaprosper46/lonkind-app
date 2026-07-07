@@ -3,7 +3,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
-export const ModeratorInputSchema = z.object({
+const ModeratorInputSchema = z.object({
   targetType: z.enum(['post', 'comment', 'message', 'user', 'livestream']),
   targetId: z.string(),
   reportReason: z.string(),
@@ -16,7 +16,7 @@ export const ModeratorInputSchema = z.object({
 
 export type ModeratorInput = z.infer<typeof ModeratorInputSchema>;
 
-export const ModeratorOutputSchema = z.object({
+const ModeratorOutputSchema = z.object({
   confidenceScore: z.number().min(0).max(100),
   recommendedAction: z.enum(['ignore', 'warn', 'hide_content', 'restrict_account', 'escalate']),
   explanation: z.string(),
