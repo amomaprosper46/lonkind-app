@@ -88,16 +88,6 @@
           "order": "DESCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "reactions",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "user.uid",
-          "order": "ASCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": []

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -74,12 +73,12 @@ export default function AICommandCenterView({ isProfessional, currentUser }: { i
                                 <CardDescription>Generate, share, and vote on ideas that can change the world.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <IdeasView />
+                                <IdeasView currentUser={currentUser} />
                             </CardContent>
                         </Card>
                     </TabsContent>
                     <TabsContent value="story" className="mt-4">
-                        <StoryGeneratorView />
+                        <StoryGeneratorView currentUser={currentUser} />
                     </TabsContent>
                     <TabsContent value="stats" className="mt-4">
                         <AppStatisticsView />

@@ -10,6 +10,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const SubmitSupportTicketInputSchema = z.object({
   name: z.string().min(2, 'Name is required').describe('The name of the user submitting the ticket.'),
@@ -48,8 +49,8 @@ const submitSupportTicketFlow = ai.defineFlow(
         subject,
         message,
         status: 'open', // Default status for new tickets
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       console.log(`Support ticket ${ticketRef.id} successfully created for ${email}`);

@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft } from 'lucide-react';
+import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft, BadgeCheck, Star, Heart, Medal } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit, getDoc } from 'firebase/firestore';
@@ -15,10 +15,11 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { sendPushNotification } from '@/app/actions/sendNotification';
+import Link from 'next/link';
 
 export interface Conversation {
     id: string;
-    participants: { uid: string; name: string; avatarUrl: string; }[];
+    participants: { uid: string; name: string; avatarUrl: string; handle?: string; isProfessional?: boolean; badges?: string[]; }[];
     participantUids: string[];
     lastMessage: { text?: string; type: 'text' | 'audio', timestamp: any; } | null;
     unreadCount?: number; 
@@ -97,7 +98,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                 const userDoc = await getDoc(doc(db, 'users', uid));
                                 if (userDoc.exists()) {
                                     const ud = userDoc.data();
-                                    participants.push({ uid, name: ud.name || 'Unknown', avatarUrl: ud.avatarUrl || '' });
+                                    participants.push({ uid, name: ud.name || 'Unknown', avatarUrl: ud.avatarUrl || '', isProfessional: ud.isProfessional, badges: ud.badges });
                                 } else {
                                     participants.push({ uid, name: 'Unknown', avatarUrl: '' });
                                 }
@@ -358,8 +359,17 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                         <AvatarFallback>{otherUser.name?.charAt(0) || '?'}</AvatarFallback>
                                     </Avatar>
                                     <div className="ml-4 flex-1 overflow-hidden">
-                                        <div className="flex justify-between items-center">
-                                            <p className="font-semibold truncate">{otherUser.name || 'Unknown'}</p>
+                                        <div className="flex justify-between items-center select-none">
+                                            <div className="flex items-center gap-1 overflow-hidden">
+                                                {otherUser.handle ? (
+                                                    <Link href={`/profile/${otherUser.handle}`} className="font-semibold truncate hover:underline" onClick={(e) => e.stopPropagation()}>
+                                                        {otherUser.name || 'Unknown'}
+                                                    </Link>
+                                                ) : (
+                                                    <p className="font-semibold truncate">{otherUser.name || 'Unknown'}</p>
+                                                )}
+                                                {otherUser.isProfessional && <BadgeCheck className="h-4 w-4 text-primary shrink-0" />}
+                                            </div>
                                             {convo.lastMessage?.timestamp && (
                                                  <p className="text-xs text-muted-foreground whitespace-nowrap">
                                                     {formatDistanceToNow(convo.lastMessage.timestamp.toDate(), { addSuffix: true })}
@@ -385,11 +395,28 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                     <ChevronLeft className="h-5 w-5" />
                                 </Button>
                                 <Avatar>
-                                    <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
-                                    {/* Added optional chaining and fallback character */}
-                                    <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
+                                    {getOtherParticipant(selectedConversation)?.handle ? (
+                                        <Link href={`/profile/${getOtherParticipant(selectedConversation)?.handle}`}>
+                                            <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
+                                            <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
+                                        </Link>
+                                    ) : (
+                                        <>
+                                            <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
+                                            <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
+                                        </>
+                                    )}
                                 </Avatar>
-                                 <h2 className="text-xl font-bold truncate">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
+                                 <div className="flex items-center gap-1 select-none overflow-hidden">
+                                    {getOtherParticipant(selectedConversation)?.handle ? (
+                                        <Link href={`/profile/${getOtherParticipant(selectedConversation)?.handle}`}>
+                                            <h2 className="text-xl font-bold truncate hover:underline">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
+                                        </Link>
+                                    ) : (
+                                        <h2 className="text-xl font-bold truncate">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
+                                    )}
+                                     {getOtherParticipant(selectedConversation)?.isProfessional && <BadgeCheck className="h-5 w-5 text-primary shrink-0" />}
+                                 </div>
                             </CardHeader>
                             <ScrollArea className="flex-1 p-4">
                                 <div className="space-y-2">

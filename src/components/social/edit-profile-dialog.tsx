@@ -27,6 +27,7 @@ export interface ProfileData {
     bio?: string;
     avatarFile?: File;
     businessUrl?: string;
+    followerPrivacy?: 'public' | 'private';
 }
 
 interface EditProfileDialogProps {
@@ -44,6 +45,7 @@ const profileSchema = z.object({
     .regex(/^[a-zA-Z0-9_]+$/, "Handle can only contain letters, numbers, and underscores."),
   bio: z.string().max(160, "Bio cannot be longer than 160 characters.").optional(),
   businessUrl: z.string().url("Please enter a valid URL (e.g., https://example.com)").or(z.literal('')).optional(),
+  followerPrivacy: z.enum(['public', 'private']).default('public'),
 });
 
 
@@ -60,6 +62,7 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
             handle: currentUser.handle,
             bio: currentUser.bio || '',
             businessUrl: currentUser.businessUrl || '',
+            followerPrivacy: (currentUser as any).followerPrivacy || 'public',
         },
     });
 
@@ -91,6 +94,7 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
             handle: data.handle,
             bio: data.bio,
             businessUrl: data.businessUrl,
+            followerPrivacy: data.followerPrivacy,
             avatarFile: avatarFile || undefined
         });
         setIsSaving(false);
@@ -149,6 +153,25 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
                         <Label htmlFor="businessUrl">Business URL</Label>
                         <Input id="businessUrl" {...register('businessUrl')} placeholder="https://example.com" />
                         {errors.businessUrl && <p className="text-destructive text-sm mt-1">{errors.businessUrl.message}</p>}
+                    </div>
+                    <div className="flex items-center justify-between border rounded-lg p-3">
+                        <div>
+                            <Label htmlFor="followerPrivacy" className="font-semibold">Public Followers List</Label>
+                            <p className="text-sm text-muted-foreground">Allow others to see who follows you.</p>
+                        </div>
+                        <Controller
+                            name="followerPrivacy"
+                            control={control}
+                            render={({ field }) => (
+                                <input
+                                    type="checkbox"
+                                    id="followerPrivacy"
+                                    checked={field.value === 'public'}
+                                    onChange={(e) => field.onChange(e.target.checked ? 'public' : 'private')}
+                                    className="h-4 w-4"
+                                />
+                            )}
+                        />
                     </div>
 
                     <DialogFooter>

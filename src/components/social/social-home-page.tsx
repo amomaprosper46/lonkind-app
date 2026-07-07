@@ -1,4 +1,3 @@
-
 'use client';
 import React, { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -126,7 +125,7 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
                     followersCount: 0,
                     followingCount: 0,
                     balance: isProfessionalAccount ? 123.45 : 0,
-                    coins: 100,
+                    coins: 0,
                     diamonds: 0,
                 });
             } catch (e: any) {
@@ -241,7 +240,11 @@ function SocialHomePageInner() {
               return;
           }
           
-          setIsNewUser(!userDoc.exists());
+          if (!userDoc.exists()) {
+            setIsNewUser(true);
+          } else {
+            setIsNewUser(false);
+          }
         } catch (error: any) {
           console.error("Error fetching user document:", error);
           toast({ variant: 'destructive', title: 'Database Connection Error', description: error.message });

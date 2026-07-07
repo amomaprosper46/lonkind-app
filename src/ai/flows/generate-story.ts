@@ -11,6 +11,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // 1. Updated input schema to require the user's document ID
 const GenerateStoryInputSchema = z.object({
@@ -76,7 +77,7 @@ const generateStoryFlow = ai.defineFlow(
 
         balanceSufficient = true;
         transaction.update(userRef, {
-          coins: admin.firestore.FieldValue.increment(-STORY_COST),
+          coins: FieldValue.increment(-STORY_COST),
         });
       });
 

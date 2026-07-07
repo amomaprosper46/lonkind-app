@@ -12,26 +12,8 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import * as admin from 'firebase-admin';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-
-/**
- * Secure Firebase Admin Database Initializer
- */
-function getSecureAdminDb() {
-  if (!admin.apps.length) {
-    try {
-      const { getFirebaseAdminServiceAccount } = require('../lib/parse-service-account');
-      const sa = getFirebaseAdminServiceAccount();
-      admin.initializeApp({
-        credential: sa ? admin.credential.cert(sa) : admin.credential.applicationDefault(),
-      });
-    } catch (e) {
-      console.error("Firebase Admin initialization error:", e);
-      throw new Error("Core system initialization failure.");
-    }
-  }
-  return getFirestore();
-}
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
 
 // 1. Updated input schema to require the user's ID for premium tracking
 const GenerateNewsPostInputSchema = z.object({
@@ -81,7 +63,6 @@ const newsReporterFlow = ai.defineFlow(
     const NEWS_POST_COST = 2; // Premium execution balance constraint
 
     try {
-      const adminDb = getSecureAdminDb();
       const userRef = adminDb.collection('users').doc(userId);
       let balanceSufficient = false;
 

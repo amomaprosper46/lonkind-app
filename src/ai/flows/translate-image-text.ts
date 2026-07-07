@@ -11,29 +11,8 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-
-/**
- * Secure Firebase Admin Database Initializer
- */
-function getSecureAdminDb() {
-  if (!getApps().length) {
-    try {
-      const { getFirebaseAdminServiceAccount } = require('../../lib/parse-service-account');
-      const sa = getFirebaseAdminServiceAccount();
-
-      if (sa) {
-        initializeApp({ credential: cert(sa) });
-      } else {
-        initializeApp();
-      }
-    } catch (e) {
-      console.error("Firebase Admin initialization error:", e);
-      throw new Error("Core system initialization failure.");
-    }
-  }
-  return getFirestore();
-}
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
 
 // 1. Updated schema to require the user's ID for coin charging
 const TranslateImageTextInputSchema = z.object({
@@ -81,7 +60,6 @@ const translateImageTextFlow = ai.defineFlow(
     const IMAGE_TRANSLATION_COST = 3; // Premium multimodal transaction fee
 
     try {
-      const adminDb = getSecureAdminDb();
       const userRef = adminDb.collection('users').doc(userId);
       let balanceSufficient = false;
 

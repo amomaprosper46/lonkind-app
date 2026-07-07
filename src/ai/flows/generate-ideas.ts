@@ -10,6 +10,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // 1. Updated Input Schema to include the authenticated user's ID
 const GenerateIdeasInputSchema = z.object({
@@ -78,7 +79,7 @@ const generateIdeasFlow = ai.defineFlow(
         balanceSufficient = true;
         // Deduct exactly 1 coin for the API generation call
         transaction.update(userRef, {
-          coins: admin.firestore.FieldValue.increment(-1)
+          coins: FieldValue.increment(-1)
         });
       });
 

@@ -1,10 +1,11 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useParams, notFound, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, query, where, orderBy, updateDoc, increment, serverTimestamp, addDoc, onSnapshot, runTransaction, writeBatch, deleteDoc, setDoc, collectionGroup } from 'firebase/firestore';
-import { db, auth, isFirebaseConfigValid } from '@/lib/firebase';
+import { db, auth, storage, isFirebaseConfigValid } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { compressImage } from '@/lib/image-compression';
 import Link from 'next/link';
 import Image from 'next/image';
 import ProfileView from '@/components/social/profile-view';
@@ -26,13 +27,13 @@ interface UserProfile {
     handle: string;
     avatarUrl: string;
     isProfessional?: boolean;
-    followersCount?: number;
-    followingCount?: number;
+    friendsCount?: number;
     bio?: string;
     businessUrl?: string;
+    followerPrivacy?: 'public' | 'private';
 }
 
-export type FollowStatus = 'not_following' | 'following';
+export type FriendStatus = 'not_friends' | 'pending_sent' | 'pending_received' | 'friends';
 
 function UserProfilePageInner() {
     const params = useParams();
@@ -46,7 +47,7 @@ function UserProfilePageInner() {
     const [userReactions, setUserReactions] = useState<Map<string, ReactionType>>(new Map());
     const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
     
-    const [followStatus, setFollowStatus] = useState<FollowStatus>('not_following');
+    const [friendStatus, setFriendStatus] = useState<FriendStatus>('not_friends');
 
     const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
 
@@ -125,10 +126,34 @@ function UserProfilePageInner() {
     useEffect(() => {
         if (!loggedInUser || !profileUser) return;
     
-        // Real-time follow status
-        const followingRef = doc(db, 'users', loggedInUser.uid, 'following', profileUser.uid);
-        const unsubFollow = onSnapshot(followingRef, (snap) => {
-            setFollowStatus(snap.exists() ? 'following' : 'not_following');
+        // Real-time friend status
+        const friendRef = doc(db, 'users', loggedInUser.uid, 'friends', profileUser.uid);
+        const requestSentRef = doc(db, 'users', profileUser.uid, 'friendRequests', loggedInUser.uid);
+        const requestReceivedRef = doc(db, 'users', loggedInUser.uid, 'friendRequests', profileUser.uid);
+
+        let unsubSent: (() => void) | null = null;
+        let unsubReceived: (() => void) | null = null;
+
+        const unsubFriend = onSnapshot(friendRef, (snap) => {
+            if (snap.exists()) {
+                setFriendStatus('friends');
+                if (unsubSent) { unsubSent(); unsubSent = null; }
+                if (unsubReceived) { unsubReceived(); unsubReceived = null; }
+            } else {
+                // Not friends, check if we sent a request
+                unsubSent = onSnapshot(requestSentRef, (sentSnap) => {
+                    if (sentSnap.exists()) {
+                        setFriendStatus('pending_sent');
+                        if (unsubReceived) { unsubReceived(); unsubReceived = null; }
+                    } else {
+                        // Not sent, check if we received a request
+                        unsubReceived = onSnapshot(requestReceivedRef, (receivedSnap) => {
+                            if (receivedSnap.exists()) setFriendStatus('pending_received');
+                            else setFriendStatus('not_friends');
+                        });
+                    }
+                });
+            }
         });
     
         // Real-time saved posts
@@ -153,7 +178,9 @@ function UserProfilePageInner() {
 
     
         return () => {
-            unsubFollow();
+            unsubFriend();
+            if (unsubSent) unsubSent();
+            if (unsubReceived) unsubReceived();
             unsubSaved();
             unsubReactions();
         };
@@ -295,61 +322,75 @@ function UserProfilePageInner() {
         }
     };
 
-    const handleFollowAction = async (action: 'follow' | 'unfollow', targetUser: UserProfile) => {
+    const handleFriendAction = async (action: 'add' | 'cancel' | 'accept' | 'unfriend', targetUser: UserProfile) => {
         if (!loggedInUser || !currentUser) return;
 
         const currentUserRef = doc(db, 'users', loggedInUser.uid);
         const targetUserRef = doc(db, 'users', targetUser.uid);
     
-        const followingRef = doc(db, 'users', loggedInUser.uid, 'following', targetUser.uid);
-        const followerRef = doc(db, 'users', targetUser.uid, 'followers', loggedInUser.uid);
+        const friend1Ref = doc(db, 'users', loggedInUser.uid, 'friends', targetUser.uid);
+        const friend2Ref = doc(db, 'users', targetUser.uid, 'friends', loggedInUser.uid);
+
+        const requestSentRef = doc(db, 'users', targetUser.uid, 'friendRequests', loggedInUser.uid);
+        const requestReceivedRef = doc(db, 'users', loggedInUser.uid, 'friendRequests', targetUser.uid);
     
         const batch = writeBatch(db);
     
         try {
-            if (action === 'follow') {
-                batch.set(followingRef, {
-                    name: targetUser.name,
-                    handle: targetUser.handle,
-                    avatarUrl: targetUser.avatarUrl,
-                    timestamp: serverTimestamp(),
-                });
-                batch.set(followerRef, {
+            if (action === 'add') {
+                batch.set(requestSentRef, {
                     name: currentUser.name,
                     handle: currentUser.handle,
                     avatarUrl: currentUser.avatarUrl,
                     timestamp: serverTimestamp(),
                 });
-                batch.update(currentUserRef, { followingCount: increment(1) });
-                batch.update(targetUserRef, { followersCount: increment(1) });
-
-            } else { // unfollow
-                batch.delete(followingRef);
-                batch.delete(followerRef);
-                batch.update(currentUserRef, { followingCount: increment(-1) });
-                batch.update(targetUserRef, { followersCount: increment(-1) });
-                
-                toast({ title: `You have unfollowed ${targetUser.name}` });
+                toast({ title: `Friend request sent to ${targetUser.name}` });
+            } else if (action === 'cancel') {
+                batch.delete(requestSentRef);
+                toast({ title: `Friend request canceled` });
+            } else if (action === 'accept') {
+                batch.delete(requestReceivedRef);
+                batch.set(friend1Ref, {
+                    name: targetUser.name,
+                    handle: targetUser.handle,
+                    avatarUrl: targetUser.avatarUrl,
+                    timestamp: serverTimestamp(),
+                });
+                batch.set(friend2Ref, {
+                    name: currentUser.name,
+                    handle: currentUser.handle,
+                    avatarUrl: currentUser.avatarUrl,
+                    timestamp: serverTimestamp(),
+                });
+                batch.update(currentUserRef, { friendsCount: increment(1) });
+                batch.update(targetUserRef, { friendsCount: increment(1) });
+                toast({ title: `You and ${targetUser.name} are now friends!` });
+            } else if (action === 'unfriend') {
+                batch.delete(friend1Ref);
+                batch.delete(friend2Ref);
+                batch.update(currentUserRef, { friendsCount: increment(-1) });
+                batch.update(targetUserRef, { friendsCount: increment(-1) });
+                toast({ title: `You have unfriended ${targetUser.name}` });
             }
     
             await batch.commit();
 
-            // Attempt to send notification separately (may fail due to security rules, but won't block follow)
-            if (action === 'follow') {
+            // Attempt to send notification separately
+            if (action === 'add') {
                 try {
                     const notificationRef = doc(collection(db, 'users', targetUser.uid, 'notifications'));
                     await setDoc(notificationRef, {
-                        type: 'new_follower',
+                        type: 'friend_request',
                         fromUser: { name: currentUser.name, handle: currentUser.handle, avatarUrl: currentUser.avatarUrl, uid: currentUser.uid },
                         timestamp: serverTimestamp(),
                         read: false,
                     });
                 } catch (notifError) {
-                    console.warn("Could not send follow notification:", notifError);
+                    console.warn("Could not send friend notification:", notifError);
                 }
             }
         } catch (error) {
-            console.error("Error updating follow status: ", error);
+            console.error("Error updating friend status: ", error);
             toast({ variant: 'destructive', title: 'Error', description: 'Something went wrong.' });
         }
     };
@@ -359,12 +400,22 @@ function UserProfilePageInner() {
         
         try {
             const userDocRef = doc(db, 'users', currentUser.uid);
-            await updateDoc(userDocRef, {
+            const updateData: any = {
                 name: data.name,
                 handle: data.handle,
                 bio: data.bio,
                 businessUrl: data.businessUrl,
-            });
+                followerPrivacy: data.followerPrivacy || 'public',
+            };
+
+            if (data.avatarFile) {
+                const fileToUpload = await compressImage(data.avatarFile);
+                const storageRef = ref(storage, `avatars/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+                const snapshot = await uploadBytes(storageRef, fileToUpload);
+                updateData.avatarUrl = await getDownloadURL(snapshot.ref);
+            }
+
+            await updateDoc(userDocRef, updateData);
 
             toast({ title: "Success", description: "Profile updated!" });
 
@@ -487,9 +538,9 @@ function UserProfilePageInner() {
                         onDeletePost={handleDeletePost}
                         userReactions={userReactions}
                         savedPostIds={savedPostIds}
-                        onFollowAction={handleFollowAction}
+                        onFriendAction={handleFriendAction}
                         onMessage={handleStartMessage}
-                        followStatus={followStatus}
+                        friendStatus={friendStatus}
                         onStartCall={handleStartCall}
                         onUpdateProfile={handleUpdateProfile}
                     />

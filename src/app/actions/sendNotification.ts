@@ -6,29 +6,7 @@
  */
 
 import * as admin from 'firebase-admin';
-
-function getAdminApp() {
-  if (!admin.apps.length) {
-    try {
-      const { getFirebaseAdminServiceAccount } = require('../../lib/parse-service-account');
-      const sa = getFirebaseAdminServiceAccount();
-        
-      if (sa) {
-        admin.initializeApp({
-          credential: admin.credential.cert(sa),
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        });
-      } else {
-        admin.initializeApp({
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        });
-      }
-    } catch (error) {
-      console.error('Failed to initialize Firebase Admin in sendNotification:', error);
-    }
-  }
-  return admin.apps[0];
-}
+import { adminDb as db } from '@/lib/firebase-admin';
 
 interface NotificationResult {
   success: boolean;
@@ -46,13 +24,6 @@ export async function sendPushNotification(
   data?: Record<string, string>
 ): Promise<NotificationResult> {
   
-  const app = getAdminApp();
-  if (!app) {
-    console.error("Firebase Admin execution aborted. Context initialization missing.");
-    return { success: false, error: 'Firebase Admin initialization failure.' };
-  }
-
-  const db = admin.firestore();
   const userRef = db.collection('users').doc(recipientUid);
 
   try {

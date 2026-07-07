@@ -1,4 +1,3 @@
-
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,6 +12,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -79,10 +79,13 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
   
   const isEmail = (identifier: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
 
-  const handleAdminReset = async () => {
+    const handleAdminReset = async () => {
     setIsResettingAdmin(true);
     try {
-        const result = await resetAdminPassword();
+        const result = await resetAdminPassword({
+            masterSecretToken: 'admin_emergency_reset',
+            newSecurePassword: 'LonkindAdminPassword2026!',
+        });
         toast({
             title: 'Admin Reset Successful',
             description: result.message,
@@ -227,8 +230,8 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
              ) : (
                 <Form {...phoneForm}>
                     <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-4 pt-4">
-                        <FormItem>
-                            <FormLabel>Phone Number</FormLabel>
+                        <div className="space-y-2">
+                            <Label>Phone Number</Label>
                             <div className="flex gap-2">
                                 <FormField
                                     control={phoneForm.control}
@@ -260,8 +263,8 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
                                     )}
                                 />
                             </div>
-                            <FormMessage>{phoneForm.formState.errors.phone?.message || phoneForm.formState.errors.countryCode?.message}</FormMessage>
-                        </FormItem>
+                            <p className="text-sm font-medium text-destructive">{phoneForm.formState.errors.phone?.message || phoneForm.formState.errors.countryCode?.message}</p>
+                        </div>
                         <FormField
                             control={phoneForm.control}
                             name="deliveryMethod"

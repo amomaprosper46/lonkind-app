@@ -88,8 +88,12 @@ export const autonomousNewsReporter = ai.defineFlow(
         handle: 'lonkindnews',
         avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=lonkindnews',
         isProfessional: true,
+        badges: ['Top Creator'],
       },
       isAutomated: true,
+      groupId: null, // REQUIRED: Makes post visible on home feed and explore timeline
+      mediaUrl: null,
+      mediaType: null,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       reactions: { like: 0, love: 0, laugh: 0, sad: 0 },
       comments: 0,

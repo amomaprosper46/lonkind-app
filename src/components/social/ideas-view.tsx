@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -9,12 +8,14 @@ import { generateIdeas } from '@/ai/flows/generate-ideas';
 import { toast } from '@/hooks/use-toast';
 import { Card } from '@/components/ui/card';
 
+import { CurrentUser } from '@/components/social/social-dashboard';
+
 interface IdeaWithVotes {
   text: string;
   votes: number;
 }
 
-export default function IdeasView() {
+export default function IdeasView({ currentUser }: { currentUser: CurrentUser }) {
     const [topic, setTopic] = useState('Renewable Energy');
     const [keywords, setKeywords] = useState('solar, community, affordable');
     const [ideas, setIdeas] = useState<IdeaWithVotes[] | null>(null);
@@ -26,9 +27,13 @@ export default function IdeasView() {
         setIdeas(null);
         setUserVotes(new Map()); // Reset votes on new generation
         try {
-            const result = await generateIdeas({ topic, keywords });
-            const ideasWithVotes = result.ideas.map(idea => ({ text: idea, votes: 0 }));
-            setIdeas(ideasWithVotes);
+            const result = await generateIdeas({ userId: currentUser.uid, topic, keywords });
+            if (result.success && result.ideas) {
+                const ideasWithVotes = result.ideas.map(idea => ({ text: idea, votes: 0 }));
+                setIdeas(ideasWithVotes);
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: result.message || 'Could not generate ideas.' });
+            }
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error', description: 'Could not generate ideas.' });

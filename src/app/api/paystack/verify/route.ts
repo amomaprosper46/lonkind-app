@@ -1,28 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
-
-import { getFirebaseAdminServiceAccount } from '@/lib/parse-service-account';
-
-// Initialize Firebase Admin SDK (for server-side Firestore writes)
-function getAdminDb() {
-  if (!getApps().length) {
-    try {
-      const sa = getFirebaseAdminServiceAccount();
-      if (sa) {
-        initializeApp({ credential: cert(sa) });
-      } else {
-        initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'impactful-ideas' });
-      }
-    } catch (e) {
-      console.error("Firebase Admin initialization error:", e);
-      initializeApp({ projectId: 'impactful-ideas' });
-    }
-  }
-  return getFirestore();
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,12 +40,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid payment metadata' }, { status: 400 });
     }
 
-    const db = getAdminDb();
+    const db = adminDb;
 
     // Check if this reference was already processed (idempotency)
     const txRef = db.collection('transactions').doc(reference);
     const existing = await txRef.get();
-    if (existing.exists) {
+    if (existing.exists && existing.data()?.status === 'success') {
       return NextResponse.json({ success: true, message: 'Already processed', alreadyProcessed: true });
     }
 
@@ -73,14 +53,16 @@ export async function POST(req: NextRequest) {
     await db.runTransaction(async (transaction) => {
       // Create transaction record
       transaction.set(txRef, {
+        id: reference,
         userId,
         paystackReference: reference,
+        amount: amountNaira,
         amountNaira,
         coinsAdded: Number(coinAmount),
         status: 'success',
         type: 'coin_purchase',
         time: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
 
       // Credit coins to user
       const userRef = db.collection('users').doc(userId);

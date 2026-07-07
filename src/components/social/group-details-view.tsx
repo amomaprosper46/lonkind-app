@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -25,6 +24,7 @@ interface NewPostMedia {
 
 interface GroupDetailsViewProps {
     groupId: string;
+    onBack?: () => void;
     currentUser: CurrentUser;
     onReact: (postId: string, reaction: ReactionType, authorUid: string) => void;
     onComment: (post: Post) => void;
@@ -48,6 +48,7 @@ const getUserLocation = (): Promise<GeolocationPosition> => {
 
 export default function GroupDetailsView({ 
     groupId,
+    onBack,
     currentUser, 
     onReact,
     onComment,
@@ -62,6 +63,7 @@ export default function GroupDetailsView({
     
     const [newPostContent, setNewPostContent] = useState('');
     const [newPostMedia, setNewPostMedia] = useState<NewPostMedia | null>(null);
+    const [newPostMusic, setNewPostMusic] = useState<{title: string, url: string} | null>(null);
     const [isCreatingPost, setIsCreatingPost] = useState(false);
 
     useEffect(() => {
@@ -91,7 +93,7 @@ export default function GroupDetailsView({
         };
     }, [groupId]);
 
-    const handleCreatePost = async () => {
+    const handleCreatePost = async (extraSettings?: any) => {
         if (!currentUser || (!newPostContent.trim() && !newPostMedia) || !group) return;
         setIsCreatingPost(true);
 
@@ -108,7 +110,10 @@ export default function GroupDetailsView({
             }
 
             if (newPostMedia) {
-                const fileToUpload = await compressImage(newPostMedia.file);
+                const fileToUpload = newPostMedia.type === 'image' 
+                    ? await compressImage(newPostMedia.file) 
+                    : newPostMedia.file;
+                
                 const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
                 const snapshot = await uploadBytes(storageRef, fileToUpload);
                 mediaUrl = await getDownloadURL(snapshot.ref);
@@ -127,17 +132,36 @@ export default function GroupDetailsView({
                 reactions: { like: 0, love: 0, laugh: 0, sad: 0 },
                 comments: 0,
                 timestamp: serverTimestamp(),
-                groupId: group.id,
+                groupId: groupId,
+                mediaUrl: mediaUrl || null,
+                mediaType: mediaType || null,
+                geohash: geohash || null,
+                music: newPostMusic || null,
             };
             if(mediaType === 'image' && mediaUrl) postData.imageUrl = mediaUrl;
             if(mediaType === 'video' && mediaUrl) postData.videoUrl = mediaUrl;
             if(geohash) postData.geohash = geohash;
 
-            await addDoc(collection(db, 'posts'), postData);
+            if (extraSettings?.isVipOnly) {
+                postData.isVipOnly = true;
+                postData.unlockCoins = extraSettings.unlockCoins || 50;
+                postData.unlockedBy = [currentUser.uid];
+            }
+            if (extraSettings?.isCause) {
+                postData.isCause = true;
+                postData.causeTitle = extraSettings.causeTitle || 'Community Cause';
+                postData.targetCoins = extraSettings.targetCoins || 5000;
+                postData.raisedCoins = 0;
+            }
+
+            const newPostRef = await addDoc(collection(db, 'posts'), postData);
             
+            const completePost = { ...postData, id: newPostRef.id };
+            setPosts([completePost, ...posts]);
             setNewPostContent('');
             setNewPostMedia(null);
-            toast({ title: 'Post created!', description: `Your post has been added to ${group.name}.` });
+            setNewPostMusic(null);
+            toast({ title: 'Success', description: 'Your post has been published to the group.' });
         } catch (e) {
             console.error("Error during post creation: ", e);
             toast({ variant: 'destructive', title: 'Error', description: 'Could not create post. Please try again.' });
@@ -193,6 +217,11 @@ export default function GroupDetailsView({
 
     return (
         <main className="col-span-12 md:col-span-8 lg:col-span-6">
+            {onBack && (
+                <Button variant="ghost" onClick={onBack} className="mb-4">
+                    ← Back to Groups
+                </Button>
+            )}
             <Card className="mb-6 overflow-hidden">
                 <div className="h-48 bg-cover bg-center" style={{ backgroundImage: `url(${group.coverUrl})` }} />
                 <CardHeader>
@@ -226,6 +255,8 @@ export default function GroupDetailsView({
                         setNewPostContent={setNewPostContent}
                         newPostMedia={newPostMedia}
                         setNewPostMedia={setNewPostMedia}
+                        newPostMusic={newPostMusic}
+                        setNewPostMusic={setNewPostMusic}
                         handleCreatePost={handleCreatePost}
                         isCreatingPost={isCreatingPost}
                     />

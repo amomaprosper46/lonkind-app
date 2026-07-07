@@ -82,6 +82,18 @@ export default function SettingsView({
   
   const [lastSeenVisible, setLastSeenVisible] = useState(true);
   const [ghostMode, setGhostMode] = useState(false);
+  const [isFollowersPrivate, setIsFollowersPrivate] = useState(user.followerPrivacy === 'private');
+
+  const handleFollowerPrivacyChange = async (checked: boolean) => {
+    setIsFollowersPrivate(checked);
+    try {
+        await onUpdateProfile({ followerPrivacy: checked ? 'private' : 'public' });
+        toast({ title: 'Privacy Updated', description: 'Your follower list privacy has been updated.' });
+    } catch (err) {
+        setIsFollowersPrivate(!checked);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not update privacy setting.' });
+    }
+  };
 
   // Sync state cleanly if the upstream user payload structure updates dynamically
   useEffect(() => {
@@ -220,6 +232,14 @@ export default function SettingsView({
                 <p className="text-sm text-muted-foreground">Hide your profile views.</p>
               </div>
               <Switch checked={ghostMode} onCheckedChange={setGhostMode} />
+            </div>
+
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <Label className="font-semibold text-base flex items-center gap-2"><Users className="h-4 w-4" /> Follower Privacy</Label>
+                <p className="text-sm text-muted-foreground">Hide your followers list from other users.</p>
+              </div>
+              <Switch checked={isFollowersPrivate} onCheckedChange={handleFollowerPrivacyChange} />
             </div>
 
             <div className="p-4">

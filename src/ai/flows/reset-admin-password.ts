@@ -14,7 +14,7 @@ const ResetAdminPasswordInputSchema = z.object({
 export type ResetAdminPasswordInput = z.infer<typeof ResetAdminPasswordInputSchema>;
 
 interface ResetAdminPasswordOutput {
-  success: z.infer<typeof z.boolean>;
+  success: boolean;
   message: string;
 }
 

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -65,6 +64,7 @@ export default function HomeFeed({
     const [isCreatingPost, setIsCreatingPost] = useState(false);
     const [newPostContent, setNewPostContent] = useState('');
     const [newPostMedia, setNewPostMedia] = useState<NewPostMedia | null>(null);
+    const [newPostMusic, setNewPostMusic] = useState<{title: string, url: string} | null>(null);
     const [followingUids, setFollowingUids] = useState<string[] | null>(null);
 
     useEffect(() => {
@@ -142,7 +142,7 @@ export default function HomeFeed({
         return () => unsubscribe();
     }, [followingUids]);
 
-    const handleCreatePost = async () => {
+    const handleCreatePost = async (extraSettings?: any) => {
         if (!currentUser || (!newPostContent.trim() && !newPostMedia)) return;
         setIsCreatingPost(true);
 
@@ -159,7 +159,10 @@ export default function HomeFeed({
             }
 
             if (newPostMedia) {
-                const fileToUpload = await compressImage(newPostMedia.file);
+                const fileToUpload = newPostMedia.type === 'image' 
+                    ? await compressImage(newPostMedia.file) 
+                    : newPostMedia.file;
+                
                 const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
                 const snapshot = await uploadBytes(storageRef, fileToUpload);
                 mediaUrl = await getDownloadURL(snapshot.ref);
@@ -179,40 +182,48 @@ export default function HomeFeed({
                 comments: 0,
                 timestamp: serverTimestamp(),
                 groupId: null, // This is a global post
+                mediaUrl: mediaUrl || null,
+                mediaType: mediaType || null,
+                geohash: geohash || null,
+                music: newPostMusic || null,
             };
             if(mediaType === 'image' && mediaUrl) postData.imageUrl = mediaUrl;
             if(mediaType === 'video' && mediaUrl) postData.videoUrl = mediaUrl;
             if(geohash) postData.geohash = geohash;
 
+            if (extraSettings?.isVipOnly) {
+                postData.isVipOnly = true;
+                postData.unlockCoins = extraSettings.unlockCoins || 50;
+                postData.unlockedBy = [currentUser.uid];
+            }
+            if (extraSettings?.isCause) {
+                postData.isCause = true;
+                postData.causeTitle = extraSettings.causeTitle || 'Community Cause';
+                postData.targetCoins = extraSettings.targetCoins || 5000;
+                postData.raisedCoins = 0;
+            }
 
-            addDoc(collection(db, 'posts'), postData)
-                .then(() => {
-                    setNewPostContent('');
-                    setNewPostMedia(null);
-                    toast({ title: 'Post created!', description: 'Your post is now live.' });
-                })
-                .catch((serverError) => {
-                     // Check if it's a permission error
-                    if (serverError.code === 'permission-denied') {
-                        const permissionError = new FirestorePermissionError({
-                            path: 'posts',
-                            operation: 'create',
-                            requestResourceData: postData,
-                        } satisfies SecurityRuleContext);
-                        errorEmitter.emit('permission-error', permissionError);
-                    } else {
-                        // Handle other errors
-                        console.error("Error creating post: ", serverError);
-                        toast({ variant: 'destructive', title: 'Error', description: 'Could not create post. Please try again later.' });
-                    }
-                })
-                .finally(() => {
-                    setIsCreatingPost(false);
-                });
-
-        } catch (e) {
-            console.error("Error during post creation: ", e);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not create post. Please try again.' });
+            const newPostRef = await addDoc(collection(db, 'posts'), postData);
+            const completePost = { ...postData, id: newPostRef.id };
+            setPosts([completePost, ...posts]);
+            setNewPostContent('');
+            setNewPostMedia(null);
+            setNewPostMusic(null);
+            toast({ title: 'Success', description: 'Your post has been published.' });
+        } catch (serverError: any) {
+            // Check if it's a permission error
+            if (serverError.code === 'permission-denied') {
+                const permissionError = new FirestorePermissionError({
+                    path: 'posts',
+                    operation: 'create',
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
+            } else {
+                // Handle other errors
+                console.error("Error creating post: ", serverError);
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not create post. Please try again later.' });
+            }
+        } finally {
             setIsCreatingPost(false);
         }
     };
@@ -226,6 +237,8 @@ export default function HomeFeed({
                 setNewPostContent={setNewPostContent}
                 newPostMedia={newPostMedia}
                 setNewPostMedia={setNewPostMedia}
+                newPostMusic={newPostMusic}
+                setNewPostMusic={setNewPostMusic}
                 handleCreatePost={handleCreatePost}
                 isCreatingPost={isCreatingPost}
             />

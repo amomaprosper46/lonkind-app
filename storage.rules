@@ -31,5 +31,23 @@ service firebase.storage {
       allow read, write: if isOwner(userId);
     }
     
+    /**
+     * POSTS MEDIA
+     * Anyone can read posts. Only the owner can write to their folder.
+     */
+    match /posts/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    /**
+     * AVATARS MEDIA
+     * Anyone can view avatars. Only the owner can upload their avatar.
+     */
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+    
   }
 }

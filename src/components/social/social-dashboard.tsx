@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy, ShieldAlert, ArrowLeft, Menu } from 'lucide-react';
+import { MessageSquare, Search, Bell, Home, User, Sparkles, Loader2, Lightbulb, Heart, UserPlus, Cog, Video, LogOut, Bookmark, Users, Wand2, Mic, BrainCircuit, DollarSign, BadgeCheck, Compass, FileText, Radio, MapPin, Wallet, UserCheck, Trophy, ShieldAlert, ArrowLeft, Menu, Check } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import { Input } from '@/components/ui/input';
 import { db, storage, auth } from '@/lib/firebase';
@@ -26,6 +27,7 @@ import AICommandCenterView from './ai-command-center-view';
 import StoryGeneratorView from './story-generator-view';
 import type { ProfileData } from './edit-profile-dialog';
 import HomeFeed from './home-feed';
+import SuperGiftOverlay from './super-gift-overlay';
 
 import { DockedChatProvider, useDockedChat } from './docked-chat-context';
 import DockedChatContainer from './docked-chat-container';
@@ -41,9 +43,9 @@ import { compressImage } from '@/lib/image-compression';
 
 const LoadingComponent = () => <div className="col-span-12 md:col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
-const MobileNavItem = ({ icon: Icon, active, onClick }: { icon: any, active: boolean, onClick: () => void }) => (
-    <button onClick={onClick} className={cn("h-12 w-12 flex flex-col items-center justify-center rounded-full transition-all duration-300", active ? "text-indigo-400 bg-indigo-500/10" : "text-slate-500 hover:text-slate-300")}>
-        <Icon className={cn("h-6 w-6 transition-transform duration-300", active ? "scale-110" : "scale-100")} />
+const MobileNavItem = ({ icon: Icon, active, onClick, title }: { icon: any, active: boolean, onClick: () => void, title?: string }) => (
+    <button onClick={onClick} title={title} className={cn("h-10 w-10 flex flex-col items-center justify-center rounded-full transition-all duration-300 shrink-0", active ? "text-indigo-400 bg-indigo-500/10 font-bold" : "text-slate-500 hover:text-slate-300")}>
+        <Icon className={cn("h-5 w-5 transition-transform duration-300", active ? "scale-110" : "scale-100")} />
         {active && <span className="absolute -bottom-1 w-1 h-1 bg-indigo-500 rounded-full" />}
     </button>
 );
@@ -58,6 +60,7 @@ const SpacesView = dynamic(() => import('./spaces-view').then(mod => mod.default
 const NearbyView = dynamic(() => import('./nearby-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const CommentSheet = dynamic(() => import('./comment-sheet').then(mod => mod.default), { ssr: false });
 const AdminDashboardView = dynamic(() => import('./admin-dashboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const FriendsView = dynamic(() => import('./friends-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const LeaderboardView = dynamic(() => import('./leaderboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
@@ -67,7 +70,7 @@ type SocialDashboardProps = {
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin';
+type View = 'home' | 'explore' | 'groups' | 'friends' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin';
 
 export interface SuggestedUser {
     id: string;
@@ -130,6 +133,7 @@ export interface CurrentUser {
     balance?: number;
     coins?: number;
     diamonds?: number;
+    followerPrivacy?: 'public' | 'private';
 }
 
 // Sub-Module: Clean Navigation Sidebar Button Binding Interface
@@ -220,6 +224,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [mutedUsers, setMutedUsers] = useState<MutedUser[]>([]);
+
+  const [friendRequests, setFriendRequests] = useState<any[]>([]);
+  const [friendSuggestions, setFriendSuggestions] = useState<any[]>([]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -337,6 +344,20 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
         const unsubMuted = onSnapshot(mutedUsersRef, (snapshot) => {
             setMutedUsers(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as MutedUser)));
         });
+
+        const friendRequestsRef = collection(db, 'users', currentUser.uid, 'friendRequests');
+        const unsubRequests = onSnapshot(friendRequestsRef, (snapshot) => {
+            const requests = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+            setFriendRequests(requests);
+        });
+
+        const usersRef = collection(db, 'users');
+        const unsubSuggestions = onSnapshot(query(usersRef, limit(15)), (snapshot) => {
+            const suggestions = snapshot.docs
+                .map(doc => ({ uid: doc.id, ...doc.data() }))
+                .filter(u => u.uid !== currentUser.uid && !(u as any).isGroup && (u as any).type !== 'group' && (u as any).accountType !== 'group');
+            setFriendSuggestions(suggestions.slice(0, 5)); // Just show 5 suggestions
+        });
         
         return () => {
             unsubReactions();
@@ -344,6 +365,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             unsubNotifs();
             unsubBlocked();
             unsubMuted();
+            unsubRequests();
+            unsubSuggestions();
         };
     }, [currentUser?.uid]);
     
@@ -853,6 +876,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     // Main Layout Skeleton Return
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-20 md:pb-0">
+            <SuperGiftOverlay />
             {/* Mobile Fullscreen Header (Only shows when in a feature like Messages, Profile, Settings) */}
             {isMobileFullscreenFeature && (
                 <div className="md:hidden sticky top-0 z-50 w-full bg-background/95 backdrop-blur-xl border-b border-border/60 flex items-center h-14 px-4 shadow-sm">
@@ -874,14 +898,15 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                             <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform duration-300">
                                 <Sparkles className="h-4 w-4 text-white animate-pulse" />
                             </div>
-                            <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">Lonkind</span>
+                            <span className="hidden sm:inline-block font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">Lonkind</span>
                         </Link>
                     </div>
 
                     {/* Global OmniSearch Bar */}
-                    <div ref={searchContainerRef} className="hidden md:flex relative flex-1 max-w-md mx-6">
+                    <div ref={searchContainerRef} className="flex relative flex-1 max-w-md mx-2 md:mx-6">
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                         <Input
+                            id="omni-search-input"
                             placeholder="Search accounts or posts..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -995,7 +1020,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 <aside className="hidden md:block col-span-12 md:col-span-3 space-y-2 sticky top-24">
                     <NavigationItem label="Home Feed" icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} />
                     <NavigationItem label="Explore" icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} />
-                    <NavigationItem label="Channels & Groups" icon={Users} active={currentView === 'groups'} onClick={() => changeView('groups')} />
+                    <NavigationItem label="Friends & Requests" icon={Users} active={currentView === 'friends'} onClick={() => changeView('friends')} badgeCount={friendRequests.length} />
+                    <NavigationItem label="Channels & Groups" icon={Radio} active={currentView === 'groups'} onClick={() => changeView('groups')} />
                     <NavigationItem label="Direct Messages" icon={MessageSquare} active={currentView === 'messages'} onClick={() => changeView('messages')} badgeCount={0} />
                     <NavigationItem label="Short Videos" icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} />
                     <NavigationItem label="Saved Content" icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} />
@@ -1026,15 +1052,12 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 currentUser={currentUser} 
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
-                                handleReact={handleReact}
-                                handleSavePost={handleSavePost}
-                                handleComment={handleComment}
-                                handleOpenComments={handleOpenComments}
-                                handleDeletePost={handleDeletePost}
-                                handleReportPost={handleReportPost}
-                                handleMuteUser={handleMuteUser}
-                                handleAddFriend={handleAddFriend}
-                                sentFriendRequests={sentFriendRequests}
+                                onReact={handleReact}
+                                onSavePost={handleSavePost}
+                                onComment={(post) => setSelectedPostForComments(post)}
+                                onDeletePost={handleDeletePost}
+                                onReportPost={handleReportPost}
+                                onMuteUser={handleMuteUser}
                             />
                         )}
                         {currentView === 'explore' && (
@@ -1043,12 +1066,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
                                 onReact={handleReact}
-                                onComment={handleComment}
+                                onComment={(post) => setSelectedPostForComments(post)}
                                 onSavePost={handleSavePost}
                                 onDeletePost={handleDeletePost}
                             />
                         )}
-                        {currentView === 'groups' && <GroupsView currentUser={currentUser} onSelectGroup={(id) => changeView('group-details', id)} />}
+                        {currentView === 'groups' && <GroupsView currentUser={currentUser} onGroupSelect={(id: string) => changeView('group-details', id)} />}
+                        {currentView === 'friends' && <FriendsView currentUser={currentUser} friendRequests={friendRequests} friendSuggestions={friendSuggestions} onAcceptRequest={handleAcceptFriendRequest} onAddFriend={handleAddFriend} sentRequests={sentFriendRequests} />}
                         {currentView === 'group-details' && activeGroupId && (
                             <GroupDetailsView 
                                 groupId={activeGroupId} 
@@ -1057,7 +1081,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
                                 onReact={handleReact}
-                                onComment={handleComment}
+                                onComment={(post) => setSelectedPostForComments(post)}
                                 onSavePost={handleSavePost}
                                 onDeletePost={handleDeletePost}
                             />
@@ -1069,7 +1093,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
                                 onReact={handleReact}
-                                onComment={handleComment}
+                                onComment={(post) => setSelectedPostForComments(post)}
                                 onSavePost={handleSavePost}
                                 onDeletePost={handleDeletePost}
                             />
@@ -1079,13 +1103,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 currentUser={currentUser} 
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
-                                handleReact={handleReact}
-                                handleSavePost={handleSavePost}
-                                handleComment={handleComment}
-                                handleOpenComments={handleOpenComments}
-                                handleDeletePost={handleDeletePost}
-                                handleReportPost={handleReportPost}
-                                handleMuteUser={handleMuteUser}
+                                onReact={handleReact}
+                                onSavePost={handleSavePost}
+                                onComment={(post) => setSelectedPostForComments(post)}
+                                onDeletePost={handleDeletePost}
                             />
                         )}
                         {currentView === 'ai-command-center' && <AICommandCenterView currentUser={currentUser} />}
@@ -1106,66 +1127,130 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     </Suspense>
                 </main>
 
-                {/* Right Side Contacts & Activity Panel */}
-                <aside className="hidden lg:block lg:col-span-3 space-y-4 sticky top-24">
-                    <div className="flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
-                        <h3 className="font-semibold text-sm">Contacts</h3>
-                    </div>
-                    <div className="space-y-2 mt-2">
-                        {/* Mock Contacts List */}
-                        {[
-                            { id: 'mock-1', name: 'Sarah Jenkins', avatar: 'https://i.pravatar.cc/150?u=sarah', online: true },
-                            { id: 'mock-2', name: 'Michael Chen', avatar: 'https://i.pravatar.cc/150?u=michael', online: true },
-                            { id: 'mock-3', name: 'Emma Watson', avatar: 'https://i.pravatar.cc/150?u=emma', online: false },
-                            { id: 'mock-4', name: 'David Smith', avatar: 'https://i.pravatar.cc/150?u=david', online: true },
-                        ].map((contact, i) => (
-                            <div key={i} onClick={() => openChat(contact)} className="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
-                                <div className="relative">
-                                    <Avatar className="h-8 w-8">
-                                        <AvatarImage src={contact.avatar} alt={contact.name} />
-                                        <AvatarFallback>{contact.name.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                    {contact.online && (
-                                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background ring-1 ring-green-600/50" />
-                                    )}
-                                </div>
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-foreground transition-colors">{contact.name}</span>
-                            </div>
-                        ))}
-                    </div>
+                {/* Right Side Social Graph Panel */}
+                <aside className="hidden lg:block lg:col-span-3 space-y-6 sticky top-24">
                     
-                    <div className="mt-6 flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
-                        <h3 className="font-semibold text-sm">Group Conversations</h3>
+                    {/* Friend Requests Section */}
+                    {friendRequests.length > 0 && (
+                        <div>
+                            <div className="flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
+                                <h3 className="font-semibold text-sm">Friend Requests</h3>
+                                <Badge className="bg-indigo-500">{friendRequests.length}</Badge>
+                            </div>
+                            <div className="space-y-3 mt-4">
+                                {friendRequests.map((req, i) => (
+                                    <div key={i} className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-border/50">
+                                        <div className="flex items-center gap-3">
+                                            <Avatar className="h-10 w-10 border border-border/50">
+                                                <AvatarImage src={req.from?.avatarUrl} alt={req.from?.name} />
+                                                <AvatarFallback>{req.from?.name?.charAt(0) || 'U'}</AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex flex-col overflow-hidden">
+                                                <Link href={`/profile/${req.from?.handle}`} className="text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-500 transition-colors truncate">
+                                                    {req.from?.name}
+                                                </Link>
+                                                <span className="text-xs text-muted-foreground truncate">@{req.from?.handle}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 w-full mt-1">
+                                            <Button size="sm" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" onClick={(e) => handleAcceptFriendRequest({ id: req.uid, type: 'friend_request', fromUser: req.from, timestamp: req.timestamp, read: false }, e as any)}>
+                                                Accept
+                                            </Button>
+                                            <Button size="sm" variant="outline" className="w-full" onClick={() => {
+                                                // Optional: add decline handler
+                                                toast({ title: 'Request declined' })
+                                                deleteDoc(doc(db, 'users', currentUser.uid, 'friendRequests', req.uid));
+                                            }}>
+                                                Decline
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Friend Suggestions Section */}
+                    <div>
+                        <div className="flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
+                            <h3 className="font-semibold text-sm">Suggested Friends</h3>
+                        </div>
+                        <div className="space-y-3 mt-4">
+                            {friendSuggestions.length === 0 && (
+                                <div className="text-xs text-muted-foreground px-2">Loading suggestions...</div>
+                            )}
+                            {friendSuggestions.map((suggestion, i) => {
+                                const requestSent = sentFriendRequests.has(suggestion.uid);
+                                return (
+                                    <div key={i} className="flex items-center justify-between gap-3 p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors group">
+                                        <Link href={`/profile/${suggestion.handle}`} className="flex items-center gap-3 overflow-hidden flex-1">
+                                            <Avatar className="h-9 w-9 border border-border/50">
+                                                <AvatarImage src={suggestion.avatarUrl} alt={suggestion.name} />
+                                                <AvatarFallback>{suggestion.name?.charAt(0) || 'U'}</AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex flex-col overflow-hidden">
+                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 group-hover:text-indigo-500 transition-colors truncate">{suggestion.name}</span>
+                                                <span className="text-xs text-muted-foreground truncate">@{suggestion.handle}</span>
+                                            </div>
+                                        </Link>
+                                        <Button 
+                                            size="icon" 
+                                            variant={requestSent ? "secondary" : "outline"} 
+                                            className={cn("h-8 w-8 shrink-0 rounded-full transition-all", requestSent ? "bg-indigo-100 text-indigo-700" : "hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200")}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!requestSent) handleAddFriend(suggestion as any);
+                                            }}
+                                            disabled={requestSent}
+                                        >
+                                            {requestSent ? <Check className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="pt-3">
+                            <Button variant="outline" className="w-full text-xs font-semibold text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 flex items-center justify-center gap-2" onClick={() => changeView('friends')}>
+                                <Users className="h-4 w-4" /> View All Friends & Requests
+                            </Button>
+                        </div>
                     </div>
                 </aside>
             </div>
 
-            {/* Mobile Floating Bottom Navigation Pill (Custom Lonkind Layout) */}
+            {/* Mobile Native Bottom App Bar (Custom Lonkind Sleek Layout) */}
             {!isMobileFullscreenFeature && (
-                <div className="md:hidden fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
-                    <div className="pointer-events-auto bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-2xl border border-slate-700/50 shadow-2xl shadow-indigo-500/10 rounded-full flex items-center justify-around px-4 py-2 w-full max-w-sm gap-1">
-                        <MobileNavItem icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} />
-                        <MobileNavItem icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} />
+                <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border/60 pb-[env(safe-area-inset-bottom)]">
+                    <div className="flex items-center justify-between px-2 h-14 overflow-x-auto no-scrollbar gap-1">
+                        <MobileNavItem icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} title="Home" />
+                        <MobileNavItem icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} title="Explore" />
+                        <MobileNavItem icon={Radio} active={currentView === 'groups'} onClick={() => changeView('groups')} title="Groups" />
+                        <MobileNavItem icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} title="Videos" />
                         
-                        <div className="relative -mt-8 mx-2">
-                            <button onClick={() => changeView('messages')} className="h-14 w-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-500/40 flex items-center justify-center transform hover:scale-105 active:scale-95 transition-all border-4 border-background">
-                                <MessageSquare className="h-6 w-6" />
+                        <div className="relative -mt-4 mx-1 shrink-0">
+                            <button onClick={() => changeView('messages')} className="h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-500/40 flex items-center justify-center transform hover:scale-105 active:scale-95 transition-all border-4 border-background" title="Messages">
+                                <MessageSquare className="h-5 w-5" />
                             </button>
                         </div>
                         
-                        <MobileNavItem icon={Users} active={currentView === 'groups'} onClick={() => changeView('groups')} />
+                        <MobileNavItem icon={Users} active={currentView === 'friends'} onClick={() => changeView('friends')} title="Friends & Requests" />
+                        <MobileNavItem icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} title="Saved" />
+                        <MobileNavItem icon={Wallet} active={currentView === 'wallet'} onClick={() => changeView('wallet')} title="Wallet" />
                         
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <button className="h-12 w-12 flex flex-col items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors relative">
-                                    <Menu className="h-6 w-6" />
+                                <button className="h-10 w-10 flex flex-col items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors relative shrink-0" title="More">
+                                    <Menu className="h-5 w-5" />
                                     {unreadNotifications > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-indigo-500" />}
                                 </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 mb-2 rounded-2xl border-slate-700/50 bg-slate-900/95 backdrop-blur-xl">
                                 <DropdownMenuLabel className="text-xs text-slate-400">Lonkind Features</DropdownMenuLabel>
                                 <DropdownMenuSeparator className="bg-slate-800" />
-                                <DropdownMenuItem onClick={() => changeView('wallet')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wallet className="mr-2 h-4 w-4" /> Creator Wallet</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                    const input = document.getElementById('omni-search-input');
+                                    if (input) { input.focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+                                }} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Search className="mr-2 h-4 w-4" /> Search</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => changeView('ai-command-center')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wand2 className="mr-2 h-4 w-4" /> AI Command Center</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => changeView('personal-ai')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><BrainCircuit className="mr-2 h-4 w-4" /> Lonki Personal AI</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => changeView('story-writer')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Lightbulb className="mr-2 h-4 w-4" /> Automated Storyteller</DropdownMenuItem>
@@ -1181,9 +1266,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             {selectedPostForComments && (
                 <CommentSheet
                     post={selectedPostForComments}
-                    isOpen={!!selectedPostForComments}
-                    onClose={() => setSelectedPostForComments(null)}
-                    onAddComment={handleComment}
+                    onOpenChange={(open) => !open && setSelectedPostForComments(null)}
+                    onCommentSubmit={handleComment}
+                    currentUser={currentUser}
                 />
             )}
         </div>

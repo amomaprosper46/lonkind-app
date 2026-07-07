@@ -1,4 +1,3 @@
-
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,12 +12,13 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPhoneNumber, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from "firebase/firestore"; 
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -29,6 +29,7 @@ import { Separator } from '../ui/separator';
 
 declare global {
   interface Window {
+    recaptchaVerifier?: RecaptchaVerifier;
     confirmationResult?: ConfirmationResult;
   }
 }
@@ -42,8 +43,7 @@ const emailFormSchema = z.object({
 const phoneFormSchema = z.object({
     name: z.string().min(2, { message: 'Name must be at least 2 characters.'}),
     countryCode: z.string().min(1, "Please select a country."),
-    phone: z.string().min(5, { message: 'Please enter a valid phone number.'}),
-    deliveryMethod: z.enum(['sms', 'notification', 'whatsapp'], { required_error: 'You need to select a delivery method.' }),
+    phone: z.string().min(5, { message: 'Please enter a valid phone number.'})
 });
 
 const codeFormSchema = z.object({
@@ -57,8 +57,35 @@ type SignUpFormProps = {
 
 export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isWaitingForEmail, setIsWaitingForEmail] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [phoneAuthData, setPhoneAuthData] = useState<{name: string, phone: string} | null>(null);
+  
+  React.useEffect(() => {
+      if (!window.recaptchaVerifier && auth) {
+          window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+              size: 'invisible'
+          });
+      }
+  }, []);
+
+  React.useEffect(() => {
+      let interval: NodeJS.Timeout;
+      if (isWaitingForEmail) {
+          interval = setInterval(async () => {
+              if (auth.currentUser) {
+                  await auth.currentUser.reload();
+                  if (auth.currentUser.emailVerified) {
+                      clearInterval(interval);
+                      setIsWaitingForEmail(false);
+                      toast({ title: 'Email Verified!', description: 'Welcome to Lonkind!' });
+                      onSignUp();
+                  }
+              }
+          }, 3000); // Check every 3 seconds
+      }
+      return () => { if (interval) clearInterval(interval); }
+  }, [isWaitingForEmail, onSignUp]);
   
   const emailForm = useForm<z.infer<typeof emailFormSchema>>({
     resolver: zodResolver(emailFormSchema),
@@ -67,7 +94,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   const phoneForm = useForm<z.infer<typeof phoneFormSchema>>({
       resolver: zodResolver(phoneFormSchema),
-      defaultValues: { name: '', countryCode: '+234', phone: '', deliveryMethod: 'sms' },
+      defaultValues: { name: '', countryCode: '+234', phone: '' },
   });
 
   const codeForm = useForm<z.infer<typeof codeFormSchema>>({
@@ -88,12 +115,11 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
         await sendEmailVerification(user);
         
         toast({
-            title: 'Account Created!',
-            description: "You're now logged in. Please check your inbox to verify your email.",
+            title: 'Verification Email Sent!',
+            description: "Please check your inbox to verify your email. This screen will automatically proceed once you click the link.",
         });
 
-        emailForm.reset();
-        onSignUp();
+        setIsWaitingForEmail(true);
 
     } catch (error: any) {
          const errorCode = error.code;
@@ -113,24 +139,6 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   async function onPhoneSubmit(data: z.infer<typeof phoneFormSchema>) {
     setIsLoading(true);
-    
-    if (data.deliveryMethod === 'whatsapp') {
-        toast({
-            title: 'Coming Soon!',
-            description: `WhatsApp delivery is not yet available. Please select another method.`,
-        });
-        setIsLoading(false);
-        return;
-    }
-
-     if (data.deliveryMethod === 'notification') {
-        // Simulate sending a notification. In a real app, this would use FCM.
-        console.log("Simulating sending a push notification for verification...");
-        toast({
-            title: 'In-App Notification Sent',
-            description: `A verification code has been sent as a Lonkind notification. For this demo, we'll proceed with SMS.`,
-        });
-    }
 
     try {
       const verifier = window.recaptchaVerifier;
@@ -178,12 +186,25 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   return (
     <>
-        <Tabs defaultValue="email" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="email">Email</TabsTrigger>
-                <TabsTrigger value="phone">Phone</TabsTrigger>
-            </TabsList>
-            <TabsContent value="email">
+        <div id="recaptcha-container"></div>
+        {isWaitingForEmail ? (
+            <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <div>
+                    <h3 className="text-xl font-bold">Waiting for Verification</h3>
+                    <p className="text-muted-foreground mt-2 max-w-[250px]">
+                        We sent a verification link to your email. Please check your inbox and click the link. 
+                        This screen will automatically disappear once verified.
+                    </p>
+                </div>
+            </div>
+        ) : (
+            <Tabs defaultValue="email" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="email">Email</TabsTrigger>
+                    <TabsTrigger value="phone">Phone</TabsTrigger>
+                </TabsList>
+                <TabsContent value="email">
                  <Form {...emailForm}>
                     <form onSubmit={emailForm.handleSubmit(createEmailAccount)} className="space-y-4 pt-4">
                         <FormField
@@ -272,8 +293,8 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                                 </FormItem>
                                 )}
                             />
-                            <FormItem>
-                                <FormLabel>Phone Number</FormLabel>
+                            <div className="space-y-2">
+                                <Label>Phone Number</Label>
                                 <div className="flex gap-2">
                                     <FormField
                                         control={phoneForm.control}
@@ -305,60 +326,19 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                                         )}
                                     />
                                 </div>
-                                <FormMessage>{phoneForm.formState.errors.phone?.message || phoneForm.formState.errors.countryCode?.message}</FormMessage>
-                            </FormItem>
-                            
-                            <FormField
-                                control={phoneForm.control}
-                                name="deliveryMethod"
-                                render={({ field }) => (
-                                    <FormItem className="space-y-3">
-                                        <FormLabel>How to get the code?</FormLabel>
-                                        <FormControl>
-                                            <RadioGroup
-                                            onValueChange={field.onChange}
-                                            defaultValue={field.value}
-                                            className="flex flex-col space-y-1"
-                                            >
-                                            <FormItem className="flex items-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                <RadioGroupItem value="sms" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">
-                                                SMS message
-                                                </FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                <RadioGroupItem value="whatsapp" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">
-                                                WhatsApp Message
-                                                </FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                <RadioGroupItem value="notification" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">
-                                                Lonkind Notification
-                                                </FormLabel>
-                                            </FormItem>
-                                            </RadioGroup>
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                                <p className="text-sm font-medium text-destructive">{phoneForm.formState.errors.phone?.message || phoneForm.formState.errors.countryCode?.message}</p>
+                            </div>
 
-                            <Button type="submit" className="w-full" disabled={true}>
-                                Coming Soon (Currently Locked)
+                            <Button type="submit" className="w-full" disabled={isLoading}>
+                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Send SMS Code
                             </Button>
                         </form>
                     </Form>
                 )}
             </TabsContent>
         </Tabs>
+        )}
         <div className="mt-4 text-center text-sm">
             Already have an account?{" "}
             <Button variant="link" className="p-0 h-auto" onClick={onShowSignIn}>

@@ -8,6 +8,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // 1. Added userId to the schema to track coin deduction
 const RoastInputSchema = z.object({
@@ -30,7 +31,7 @@ const RoastOutputSchema = z.object({
   message: z.string(),
   roastBio: z.string().optional().describe('The generated roast bio. Max 160 characters, punchy and hilarious.'),
   roastTitle: z.string().optional().describe('A short, catchy title for the roast (e.g. "The Verdict Is In 🔥").'),
-  savageryLevel: z.number().optional().min(1).max(10).describe('How savage the roast is on a scale of 1-10.'),
+  savageryLevel: z.number().min(1).max(10).optional().describe('How savage the roast is on a scale of 1-10.'),
   emoji: z.string().optional().describe('A single emoji that best represents this roast.'),
 });
 export type RoastOutput = z.infer<typeof RoastOutputSchema>;
@@ -64,7 +65,7 @@ export const generateProfileRoast = ai.defineFlow(
 
         balanceSufficient = true;
         transaction.update(userRef, {
-          coins: admin.firestore.FieldValue.increment(-1)
+          coins: FieldValue.increment(-1)
         });
       });
 

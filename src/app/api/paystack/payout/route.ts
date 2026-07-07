@@ -1,40 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
 
 // ─── Payout Policy Constants ─────────────────────────────────────
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
-const MIN_WITHDRAWAL_NAIRA = 50_000;          // ₦50,000 minimum
-const MAX_DAILY_PAYOUT_REQUESTS = 1;          // Max 1 per 24 hours
-const ACCOUNT_AGE_DAYS_REQUIRED = 7;          // Account must be 7+ days old
-const SUSPICIOUS_SINGLE_SENDER_PERCENT = 70;  // Flag if one sender = 70%+ of earnings
-const LARGE_FIRST_PAYOUT_NAIRA = 10_000;      // Flag if first payout > ₦10k
-const ALWAYS_REVIEW_ABOVE_NAIRA = 50_000;     // Always manual review above ₦50k
-const MIN_POSTS_FOR_PAYOUT = 5;               // Must have at least 5 posts
-const FAST_EARNINGS_DAYS = 30;                // If earned ₦5k+ in < 30 days old acct → flag
 
-function getAdminDb() {
-  if (!getApps().length) {
-    try {
-      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
-      const sa = getFirebaseAdminServiceAccount();
-      sa
-        ? initializeApp({ credential: cert(sa) })
-        : initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
-    } catch {
-      initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
-    }
-  }
-  return getFirestore();
-}
+/**
+ * Diamond Payout Value in Global Currencies
+ * 1 Diamond = ₦15 NGN | $0.015 USD | 0.22 GHS | 2.25 KES | £0.012 GBP | €0.014 EUR | 0.27 ZAR
+ */
+const DIAMOND_PAYOUT_RATE: Record<string, number> = {
+  'NGN': 15,
+  'USD': 0.015,
+  'GHS': 0.22,
+  'KES': 2.25,
+  'GBP': 0.012,
+  'EUR': 0.014,
+  'ZAR': 0.27,
+};
 
-// ─── Anti-Fraud Analyser ─────────────────────────────────────────
-interface FraudCheck {
-  flagged: boolean;
-  reasons: string[];
-}
-
-// (Fraud checks removed because all payouts now require manual review)
+const COUNTRY_MAP: Record<string, string> = {
+  'NG': 'nigeria',
+  'GH': 'ghana',
+  'KE': 'kenya',
+  'ZA': 'south africa',
+  'US': 'united states',
+  'GB': 'united kingdom',
+};
 
 // ─── POST: Request Payout ────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -44,19 +36,14 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { userId, amountNaira, bankCode, accountNumber, accountName } = body;
+    const { userId, diamondAmount, amountNaira, bankCode, accountNumber, accountName, currency = 'NGN' } = body;
+    const cleanCurrency = currency.toUpperCase();
+    const rate = DIAMOND_PAYOUT_RATE[cleanCurrency] || DIAMOND_PAYOUT_RATE['NGN'];
 
-    if (!userId || !amountNaira || !bankCode || !accountNumber || !accountName) {
-      return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
+    if (!userId || (!diamondAmount && !amountNaira) || !bankCode || !accountNumber || !accountName) {
+      return NextResponse.json({ error: 'Missing required payout fields.' }, { status: 400 });
     }
 
-    if (amountNaira < MIN_WITHDRAWAL_NAIRA) {
-      return NextResponse.json({
-        error: `Minimum withdrawal is ₦${MIN_WITHDRAWAL_NAIRA.toLocaleString()}. You requested ₦${amountNaira.toLocaleString()}.`,
-      }, { status: 400 });
-    }
-
-    const db = getAdminDb();
     const userRef = db.collection('users').doc(userId);
     const userDoc = await userRef.get();
 
@@ -65,11 +52,13 @@ export async function POST(req: NextRequest) {
     }
 
     const userData = userDoc.data()!;
-    const currentEarnings = userData.earningsNaira || 0;
+    const currentDiamonds = userData.diamonds || 0;
+    const requiredDiamonds = diamondAmount || Math.ceil(amountNaira / rate);
+    const amountPaid = requiredDiamonds * rate;
 
-    if (currentEarnings < amountNaira) {
+    if (currentDiamonds < requiredDiamonds) {
       return NextResponse.json({
-        error: `Insufficient earnings. Your balance is ₦${currentEarnings.toLocaleString()} but you requested ₦${amountNaira.toLocaleString()}.`,
+        error: `Insufficient diamonds balance. You have ${currentDiamonds.toLocaleString()} diamonds but requested ${requiredDiamonds.toLocaleString()} diamonds.`,
       }, { status: 400 });
     }
 
@@ -87,36 +76,134 @@ export async function POST(req: NextRequest) {
       }, { status: 429 });
     }
 
-    // ── All payouts require manual review ──
     const reference = `payout_${userId}_${Date.now()}`;
 
-    // Store for manual review
-    await db.collection('payoutRequests').doc(reference).set({
-      userId,
-      amountNaira,
-      bankCode,
-      accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'), // mask
-      accountName,
-      reference,
-      status: 'pending_review',
-      createdAt: FieldValue.serverTimestamp(),
-      reviewedAt: null,
-      reviewedBy: null,
-      // We must store the raw recipient details so the admin API can create the recipient
-      rawAccountNumber: accountNumber, // Store securely for admin to execute
-    });
+    // Pre-save payout request immediately so the reference is permanently recorded in Firestore history
+    try {
+      await db.collection('payoutRequests').doc(reference).set({
+        id: reference,
+        userId,
+        amount: amountPaid,
+        currency: cleanCurrency,
+        diamondAmount: requiredDiamonds,
+        bankCode,
+        accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'),
+        accountName,
+        reference,
+        status: 'initiated',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (dbErr) {
+      console.error('Failed to pre-save payout request reference:', dbErr);
+    }
 
-    // Hold the earnings (deduct from balance, add to held)
-    await userRef.update({
-      earningsNaira: FieldValue.increment(-amountNaira),
-      heldEarningsNaira: FieldValue.increment(amountNaira),
-    });
+    try {
+      // 1. Create Transfer Recipient
+      const recipientRes = await fetch('https://api.paystack.co/transferrecipient', {
+          method: 'POST',
+          headers: {
+              Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+              type: cleanCurrency === 'NGN' ? "nuban" : "basa",
+              name: accountName,
+              account_number: accountNumber,
+              bank_code: bankCode,
+              currency: cleanCurrency
+          })
+      });
+      
+      const recipientData = await recipientRes.json();
+      if (!recipientData.status) {
+          const err: any = new Error(recipientData.message || "Failed to create transfer recipient");
+          err.rawPaystackResponse = recipientData;
+          throw err;
+      }
 
-    return NextResponse.json({
-      success: true,
-      status: 'pending_review',
-      message: `Your payout request of ₦${amountNaira.toLocaleString()} has been submitted for manual review. Our team will process it soon.`,
-    });
+      const recipientCode = recipientData.data.recipient_code;
+
+      // 2. Initiate Transfer
+      const transferRes = await fetch('https://api.paystack.co/transfer', {
+          method: 'POST',
+          headers: {
+              Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+              source: "balance",
+              amount: Math.round(amountPaid * 100), // sub-units
+              reference: reference,
+              recipient: recipientCode,
+              reason: "Lonkind Creator Payout"
+          })
+      });
+
+      const transferData = await transferRes.json();
+      if (!transferData.status) {
+          const err: any = new Error(transferData.message || "Failed to initiate transfer");
+          err.rawPaystackResponse = transferData;
+          throw err;
+      }
+
+      // Record the successful (processing) transaction
+      await db.collection('payoutRequests').doc(reference).set({
+        id: reference,
+        userId,
+        amount: amountPaid,
+        currency: cleanCurrency,
+        diamondAmount: requiredDiamonds,
+        bankCode,
+        accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'), // mask
+        accountName,
+        reference,
+        paystackTransferCode: transferData.data.transfer_code,
+        status: transferData.data.status || 'processing',
+        rawPaystackResponse: transferData,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      // Deduct diamonds from user's balance permanently only upon successful initiation
+      await userRef.update({
+        diamonds: FieldValue.increment(-requiredDiamonds)
+      });
+
+      return NextResponse.json({
+        success: true,
+        status: transferData.data.status,
+        message: `Your payout of ${cleanCurrency} ${amountPaid.toLocaleString()} is being processed via Paystack!`,
+      });
+
+    } catch (payoutError: any) {
+      console.error('[Paystack Transfer Execution Error]:', payoutError, payoutError.rawPaystackResponse);
+      
+      // Store failed payout attempt in Firebase database so admin and user can inspect exact error
+      try {
+        await db.collection('payoutRequests').doc(reference).set({
+          id: reference,
+          userId,
+          amount: amountPaid,
+          currency: cleanCurrency,
+          diamondAmount: requiredDiamonds,
+          bankCode,
+          accountNumber: accountNumber.replace(/\d(?=\d{4})/g, '*'),
+          accountName,
+          reference,
+          status: 'failed',
+          errorReason: payoutError.message || 'Unknown transfer failure',
+          rawPaystackResponse: payoutError.rawPaystackResponse || null,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (dbErr) {
+        console.error('Failed to log payout error to Firestore:', dbErr);
+      }
+
+      // Notice: diamonds are NOT deducted if payout throws an error, so user balance is safely preserved!
+      return NextResponse.json({ 
+        error: `Paystack Error: ${payoutError.message || 'Transfer failed.'}`,
+        rawResponse: payoutError.rawPaystackResponse || null
+      }, { status: 400 });
+    }
 
   } catch (error: any) {
     console.error('Payout error:', error);
@@ -124,18 +211,22 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ─── GET: Fetch Nigerian banks list ──────────────────────────────
-export async function GET() {
+// ─── GET: Fetch banks list for selected country ──────────────────
+export async function GET(req: NextRequest) {
   try {
     if (!PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY.includes('xxxxxxx')) {
       return NextResponse.json({ error: 'Paystack not configured.' }, { status: 503 });
     }
-    const res = await fetch('https://api.paystack.co/bank?country=nigeria&currency=NGN&perPage=100', {
+    const { searchParams } = new URL(req.url);
+    const countryCode = (searchParams.get('country') || 'NG').toUpperCase();
+    const paystackCountryName = COUNTRY_MAP[countryCode] || 'nigeria';
+
+    const res = await fetch(`https://api.paystack.co/bank?country=${encodeURIComponent(paystackCountryName)}&perPage=100`, {
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
     });
     const data = await res.json();
     if (!data.status) return NextResponse.json({ error: 'Could not fetch banks.' }, { status: 400 });
-    return NextResponse.json({ banks: data.data });
+    return NextResponse.json({ banks: data.data, country: countryCode });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -9,8 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Wand2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { generateStory, GenerateStoryOutput } from '@/ai/flows/generate-story';
+import { CurrentUser } from '@/components/social/social-dashboard';
 
-export default function StoryGeneratorView() {
+export default function StoryGeneratorView({ currentUser }: { currentUser: CurrentUser }) {
     const [prompt, setPrompt] = useState('A brave cat who wants to fly');
     const [story, setStory] = useState<GenerateStoryOutput | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function StoryGeneratorView() {
         setIsLoading(true);
         setStory(null);
         try {
-            const result = await generateStory({ prompt });
+            const result = await generateStory({ userId: currentUser.uid, prompt });
             setStory(result);
         } catch (error) {
             console.error(error);

@@ -6,34 +6,16 @@
  */
 
 import { z } from 'genkit';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
 
 /**
- * Centered Firebase Admin Initialization Routing Layer
- * Safely handles environment differences between Vercel and Firebase Hosting containers.
+ * Platform Commission Rate (App Cut)
+ * 20% platform cut on coin-to-diamond conversion.
+ * Creator receives 80% of the coin value in diamonds.
  */
-function getSecureAdminDb() {
-  if (!getApps().length) {
-    try {
-      const { getFirebaseAdminServiceAccount } = require('../../lib/parse-service-account');
-      const sa = getFirebaseAdminServiceAccount();
-
-      if (sa) {
-        initializeApp({ credential: cert(sa) });
-      } else {
-        // Natively binds internal service accounts inside cloud environments
-        initializeApp();
-      }
-    } catch (e) {
-      console.error("Critical Admin initialization vector failure:", e);
-      throw new Error("Financial core system initialization failed.");
-    }
-  }
-  return getFirestore();
-}
-
-const COIN_TO_DIAMOND_CONVERSION_RATE = 1;
+const APP_CUT_PERCENTAGE = 20;
+const CREATOR_PAYOUT_RATE = (100 - APP_CUT_PERCENTAGE) / 100;
 
 const SendTipInputSchema = z.object({
   fromUserId: z.string().describe('The validated UID of the tipping sender.'),
@@ -64,7 +46,6 @@ export async function sendTip(input: SendTipInput): Promise<SendTipOutput> {
   }
 
   try {
-    const adminDb = getSecureAdminDb();
 
     // Execute atomic wallet adjustments safely away from public exposure vectors
     await adminDb.runTransaction(async (transaction) => {
@@ -82,7 +63,8 @@ export async function sendTip(input: SendTipInput): Promise<SendTipOutput> {
         throw new Error('The designated recipient account details could not be matched.');
       }
 
-      const diamondValue = Math.floor(coinAmount * COIN_TO_DIAMOND_CONVERSION_RATE);
+      const diamondValue = Math.max(1, Math.floor(coinAmount * CREATOR_PAYOUT_RATE));
+      const appCutCoins = coinAmount - diamondValue;
 
       // B. Structure immutable audit trails inside your data collections
       const giftRef = adminDb.collection('gifts').doc();
@@ -108,6 +90,27 @@ export async function sendTip(input: SendTipInput): Promise<SendTipOutput> {
         diamonds: FieldValue.increment(diamondValue),
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      // Record App Cut into platform revenue ledger
+      if (appCutCoins > 0) {
+        const platformRevRef = adminDb.collection('platformRevenue').doc('summary');
+        transaction.set(platformRevRef, {
+          totalAppCutCoins: FieldValue.increment(appCutCoins),
+          lastUpdatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const cutLogRef = adminDb.collection('appCutLogs').doc();
+        transaction.set(cutLogRef, {
+          giftId: giftRef.id,
+          fromUserId,
+          toUserId,
+          coinAmount,
+          diamondValue,
+          appCutCoins,
+          appCutPercentage: APP_CUT_PERCENTAGE,
+          timestamp: FieldValue.serverTimestamp(),
+        });
+      }
 
       // D. Broadcast structural payload alerts if operating within a live Audio Space
       if (spaceId) {

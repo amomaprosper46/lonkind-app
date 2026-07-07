@@ -1,23 +1,26 @@
-import * as admin from 'firebase-admin';
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import { getFirebaseAdminServiceAccount } from './parse-service-account';
 
-if (!admin.apps.length) {
-  let credential;
+function initApp() {
+  const apps = getApps();
+  if (apps.length > 0) {
+    return apps[0]!; // Returns the existing app, completely bypassing the bugged getApp() "[DEFAULT]" lookup.
+  }
 
   const sa = getFirebaseAdminServiceAccount();
   if (sa) {
-    credential = admin.credential.cert(sa);
+    return initializeApp({ credential: cert(sa) });
   } else {
-    console.warn("Could not parse FIREBASE_ADMIN_SERVICE_ACCOUNT. Falling back to applicationDefault().");
-    credential = admin.credential.applicationDefault();
+    console.warn("Could not parse LONKIND_ADMIN_SERVICE_ACCOUNT. Falling back to default project ID.");
+    return initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'impactful-ideas' });
   }
-
-  admin.initializeApp({
-      credential,
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  });
 }
 
-export const adminDb = admin.firestore();
-export const adminAuth = admin.auth();
-export const adminStorage = admin.storage();
+const app = initApp();
+
+export const adminDb = getFirestore(app);
+export const adminAuth = getAuth(app);
+export const adminStorage = getStorage(app);

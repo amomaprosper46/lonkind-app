@@ -1,28 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb as db, adminAuth } from '@/lib/firebase-admin';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
-
-function getAdminDb() {
-  if (!admin.apps.length) {
-    try {
-      const { getFirebaseAdminServiceAccount } = require('../../../../lib/parse-service-account');
-      const sa = getFirebaseAdminServiceAccount();
-      if (sa) {
-        admin.initializeApp({
-          credential: admin.credential.cert(sa),
-        });
-      } else {
-        admin.initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
-      }
-    } catch (error) {
-      console.error("Firebase Admin initialization error:", error);
-    }
-  }
-  return admin.firestore();
-}
 
 /**
  * Authenticates the requesting user via asymmetric token decryption 
@@ -35,7 +15,7 @@ async function authenticateAdmin(req: NextRequest, db: FirebaseFirestore.Firesto
 
     const idToken = authHeader.split('Bearer ')[1];
     // Decrypt the ID token cryptographically via the core Firebase authentication engine
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
     const uid = decodedToken.uid;
 
     const adminDoc = await db.collection('admins').doc(uid).get();
@@ -51,8 +31,6 @@ async function authenticateAdmin(req: NextRequest, db: FirebaseFirestore.Firesto
  */
 export async function POST(req: NextRequest) {
   try {
-    const db = getAdminDb();
-
     // 1. Authenticate identity states via structural token lookup
     const verifiedAdminUid = await authenticateAdmin(req, db);
     if (!verifiedAdminUid) {
@@ -207,8 +185,6 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const db = getAdminDb();
-
     // Authenticate identity states securely via structural token inspection
     const verifiedAdminUid = await authenticateAdmin(req, db);
     if (!verifiedAdminUid) {

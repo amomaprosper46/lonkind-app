@@ -26,8 +26,8 @@ service cloud.firestore {
 
       allow update: if isSignedIn() && (
         isAdmin() ||
-        isOwner(userId) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds', 'lifetimeTipsReceived', 'badges', 'updatedAt']))
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coins', 'diamonds', 'earningsNaira', 'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven'])) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount']))
       );
 
       allow delete: if isOwner(userId) || isAdmin();
@@ -148,9 +148,7 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         request.auth.uid == resource.data.userId;
 
-      allow create: if isSignedIn();
-
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /* ---------------- PAYOUTS ---------------- */
@@ -159,10 +157,7 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         request.auth.uid == resource.data.userId;
 
-      allow create: if isSignedIn() &&
-        request.auth.uid == request.resource.data.userId;
-
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /* ---------------- GIFTS ---------------- */
@@ -170,10 +165,7 @@ service cloud.firestore {
     match /gifts/{giftId} {
       allow read: if true;
 
-      allow create: if isSignedIn() &&
-        request.auth.uid == request.resource.data.fromUserId;
-
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /* ---------------- CONVERSATIONS ---------------- */
