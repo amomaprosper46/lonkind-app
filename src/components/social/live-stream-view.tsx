@@ -21,17 +21,21 @@ export default function LiveStreamView({
   onLeave,
 }: LiveStreamViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const roomId = getLiveRoomId(hostUid);
+  const roomId = getLiveRoomId(hostUid || userId || 'default_host');
+  const validUserId = userId || `user_${Math.floor(Math.random() * 100000)}`;
+  const validUserName = userName || 'Guest User';
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    console.log('Zego Live Streaming setup:', { ZEGO_APP_ID, roomId, validUserId, validUserName, isHost });
 
     const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
       ZEGO_APP_ID,
       ZEGO_APP_SIGN,
       roomId,
-      userId,
-      userName,
+      validUserId,
+      validUserName,
       7200
     );
 
@@ -58,7 +62,7 @@ export default function LiveStreamView({
     return () => {
       try { zp.destroy(); } catch (_) {}
     };
-  }, [roomId, userId, userName, isHost, onLeave]);
+  }, [roomId, validUserId, validUserName, isHost, onLeave]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
