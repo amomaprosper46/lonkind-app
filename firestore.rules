@@ -27,7 +27,8 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         isAdmin() ||
         (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coins', 'diamonds', 'earningsNaira', 'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven'])) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount']))
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount'])) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken']))
       );
 
       allow delete: if isOwner(userId) || isAdmin();
@@ -179,8 +180,26 @@ service cloud.firestore {
         request.auth.uid in resource.data.participantUids;
 
       match /messages/{messageId} {
-        allow read, write: if isSignedIn() &&
+        // Create a new message
+        allow create: if isSignedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
+
+        // Update for edit by sender or per‑user delete
+        allow update: if isSignedIn() && (
+          // Sender can edit text and set editedAt, but cannot modify other fields
+          (resource.data.senderId == request.auth.uid &&
+            request.resource.data.text is string &&
+            request.resource.data.editedAt == request.time &&
+            request.resource.data.deletedFor == resource.data.deletedFor &&
+            request.resource.data.type == resource.data.type) ||
+          // Any participant can add themselves to deletedFor (per‑user delete)
+          (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids &&
+            request.resource.data.deletedFor == resource.data.deletedFor.union([request.auth.uid]) &&
+            request.resource.data.text == resource.data.text &&
+            request.resource.data.type == resource.data.type)
+        );
+        // No hard delete allowed
+        // (delete) is implicitly denied by not granting it
       }
     }
 
@@ -188,6 +207,48 @@ service cloud.firestore {
 
     match /admins/{userId} {
       allow read, write: if isAdmin() || (isSignedIn() && request.auth.token.email == 'admin@lonkind.com' && request.auth.uid == userId);
+    }
+
+    /* ---------------- WALLETS (server-write only) -------------- */
+
+    match /wallets/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false; // Admin SDK only — no client writes ever
+    }
+
+    /* -------------- PAYOUT REQUESTS (server-write only) -------- */
+
+    match /payoutRequests/{requestId} {
+      allow read: if isSignedIn() &&
+        request.auth.uid == resource.data.userId;
+      allow create, update, delete: if false; // Admin SDK only
+    }
+
+    /* -------------- PAYOUT IDEMPOTENCY (server-write only) ----- */
+
+    match /payoutIdempotency/{keyId} {
+      allow read, write: if false; // Admin SDK only — internal dedup store
+    }
+
+    /* -------------- WEBHOOK LOGS (server-write only) ----------- */
+
+    match /webhookLogs/{logId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false; // Admin SDK only
+    }
+
+    /* -------------- AUDIT LOGS (append-only, admin-read) ------- */
+
+    match /wallet_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false; // Admin SDK only — append-only
+    }
+
+    /* -------------- TRENDING HASHTAGS (server-write only) ------ */
+
+    match /trending_hashtags/{tagId} {
+      allow read: if true; // Publicly readable for trending UI
+      allow write: if false; // Cloud Functions only
     }
   }
 }

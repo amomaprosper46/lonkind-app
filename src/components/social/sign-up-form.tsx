@@ -152,12 +152,16 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       setShowCodeForm(true);
       toast({ title: "Verification code sent!", description: `A code has been sent via SMS to ${fullPhoneNumber}.` });
 
-    } catch(error) {
-        console.error("Phone auth error: ", error);
-        toast({ variant: 'destructive', title: 'Could not send code', description: 'This phone number may already be in use or is invalid.'});
-    } finally {
-        setIsLoading(false);
-    }
+      } catch(error: any) {
+          console.error("Phone auth error: ", error);
+          let errorMessage = 'Could not send code. Please try again.';
+          if (error.code === 'auth/credential-already-in-use') {
+            errorMessage = 'This phone number is already registered. Please sign in instead.';
+          }
+          toast({ variant: 'destructive', title: 'Phone Sign Up Failed', description: errorMessage });
+      } finally {
+          setIsLoading(false);
+      }
   }
 
   async function onCodeSubmit(data: z.infer<typeof codeFormSchema>) {

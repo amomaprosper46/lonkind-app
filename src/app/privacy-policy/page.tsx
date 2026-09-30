@@ -5,7 +5,7 @@ import { Shield, Lock, Eye, Server, RefreshCw, ArrowLeft, Mail, FileText } from 
 import { Button } from '@/components/ui/button';
 
 export default function PrivacyPolicyContent() {
-  const lastUpdated = 'May 28, 2026';
+  const lastUpdated = 'August 4, 2026';
 
   return (
     <main className="min-h-screen bg-background selection:bg-primary/20">

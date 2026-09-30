@@ -22,9 +22,14 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatDistanceToNow } from 'date-fns';
 import dynamic from 'next/dynamic';
+import { CallBackProps, STATUS } from 'react-joyride';
+
+const Joyride = dynamic(() => import('react-joyride').then(mod => mod.Joyride), { ssr: false });
 import PersonalAiView from './personal-ai-view';
 import AICommandCenterView from './ai-command-center-view';
+import LeaderboardView from './leaderboard-view';
 import StoryGeneratorView from './story-generator-view';
+
 import type { ProfileData } from './edit-profile-dialog';
 import HomeFeed from './home-feed';
 import SuperGiftOverlay from './super-gift-overlay';
@@ -63,14 +68,16 @@ const AdminDashboardView = dynamic(() => import('./admin-dashboard-view').then(m
 const FriendsView = dynamic(() => import('./friends-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const LeaderboardView = dynamic(() => import('./leaderboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const SuggestionsPage = dynamic(() => import('@/app/suggestions/page').then(m => m.default), { loading: () => <LoadingComponent />, ssr: false });
+const FriendRequestsPage = dynamic(() => import('@/app/friend-requests/page').then(m => m.default), { loading: () => <LoadingComponent />, ssr: false });
+const LiveStreamView = dynamic(() => import('./live-stream-view'), { ssr: false });
 
 type SocialDashboardProps = {
   user: FirebaseUser;
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'friends' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin';
+type View = 'home' | 'explore' | 'groups' | 'friends' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin' | 'live';
 
 export interface SuggestedUser {
     id: string;
@@ -107,8 +114,8 @@ export interface NotificationFromUser {
 
 export interface Notification {
     id: string;
-    type: 'friend_request' | 'friend_request_accepted' | 'new_reaction' | 'new_comment' | 'new_message' | 'group_post' | 'new_follower';
-    fromUser: NotificationFromUser;
+    type: 'friend_request' | 'friend_request_accepted' | 'new_reaction' | 'new_comment' | 'new_message' | 'group_post' | 'new_follower' | 'payout_approved' | 'payout_rejected';
+    fromUser?: NotificationFromUser;
     postId?: string;
     reactionType?: ReactionType;
     commentText?: string;
@@ -119,6 +126,10 @@ export interface Notification {
     messageSnippet?: string;
     groupId?: string;
     groupName?: string;
+    // Payout fields
+    amount?: number;
+    currency?: string;
+    reason?: string;
 }
 
 export interface CurrentUser {
@@ -134,6 +145,7 @@ export interface CurrentUser {
     coins?: number;
     diamonds?: number;
     followerPrivacy?: 'public' | 'private';
+    hasCompletedTour?: boolean;
 }
 
 // Sub-Module: Clean Navigation Sidebar Button Binding Interface
@@ -143,10 +155,12 @@ interface NavigationItemProps {
     active: boolean;
     onClick: () => void;
     badgeCount?: number;
+    id?: string;
 }
-function NavigationItem({ label, icon: Icon, active, onClick, badgeCount }: NavigationItemProps) {
+function NavigationItem({ label, icon: Icon, active, onClick, badgeCount, id }: NavigationItemProps) {
     return (
         <Button
+            id={id}
             variant="ghost"
             onClick={onClick}
             className={cn(
@@ -227,6 +241,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
   const [friendRequests, setFriendRequests] = useState<any[]>([]);
   const [friendSuggestions, setFriendSuggestions] = useState<any[]>([]);
+  const [trendingHashtags, setTrendingHashtags] = useState<{tag: string, count: number}[]>([]);
+  const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -237,7 +253,12 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const view = searchParams.get('view') as View;
     const conversationId = searchParams.get('conversationId');
     const groupId = searchParams.get('groupId');
+    const tag = searchParams.get('hashtag') || searchParams.get('tag');
 
+    if (tag) {
+      setActiveHashtag(tag.startsWith('#') ? tag : `#${tag}`);
+      setCurrentView('home');
+    }
     if (view) {
       setCurrentView(view);
     }
@@ -272,6 +293,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     balance: 0,
                     coins: 0,
                     diamonds: 0,
+                    hasCompletedTour: false,
                 });
             }
         }, (error) => {
@@ -302,13 +324,43 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
+
+    const handleClearHashtag = useCallback(() => {
+        setActiveHashtag(null);
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('hashtag');
+            url.searchParams.delete('tag');
+            window.history.pushState({}, '', url.toString());
+        }
+    }, []);
+
+    // Listen for hashtag clicks from PostCard — wire them into feed & sync URL
+    useEffect(() => {
+        const handleHashtagSearch = (e: Event) => {
+            const tag = (e as CustomEvent).detail as string; // e.g. "#lonkind"
+            const clean = tag.replace(/^#/, '');
+            if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.set('hashtag', clean);
+                url.searchParams.delete('view');
+                window.history.pushState({}, '', url.toString());
+            }
+            setActiveHashtag(tag.startsWith('#') ? tag : `#${tag}`);
+            changeView('home');
+        };
+        window.addEventListener('lonkind:hashtag-search', handleHashtagSearch);
+        return () => window.removeEventListener('lonkind:hashtag-search', handleHashtagSearch);
+    }, []);
     
     useEffect(() => {
         if (!currentUser?.uid) return;
 
-        // Initialize Push Notifications
+        // Initialize Push Notifications with foreground toast callback
         requestNotificationPermission(currentUser.uid);
-        setupForegroundMessageListener();
+        setupForegroundMessageListener((title, body) => {
+            toast({ title, description: body });
+        });
 
         // Fetch user reactions
         const reactionsQuery = query(collectionGroup(db, 'reactions'), where('user.uid', '==', currentUser.uid));
@@ -358,6 +410,12 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 .filter(u => u.uid !== currentUser.uid && !(u as any).isGroup && (u as any).type !== 'group' && (u as any).accountType !== 'group');
             setFriendSuggestions(suggestions.slice(0, 5)); // Just show 5 suggestions
         });
+
+        const trendingRef = collection(db, 'trending_hashtags');
+        const unsubTrending = onSnapshot(query(trendingRef, orderBy('count', 'desc'), limit(5)), (snapshot) => {
+            const trending = snapshot.docs.map(doc => ({ tag: doc.id, count: doc.data().count as number }));
+            setTrendingHashtags(trending);
+        });
         
         return () => {
             unsubReactions();
@@ -367,6 +425,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             unsubMuted();
             unsubRequests();
             unsubSuggestions();
+            unsubTrending();
         };
     }, [currentUser?.uid]);
     
@@ -484,10 +543,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         
                         // Push Notification
                         sendPushNotification(
-                             authorUid,
-                             'New Reaction!',
-                             `${currentUser.name} reacted to your post.`
-                        ).catch(err => console.error("Push Notification error:", err));
+                            authorUid,
+                            'New Reaction!',
+                            `${currentUser.name} reacted to your post.`,
+                            { url: '/?view=home', type: 'new_reaction' }
+                        ).catch(console.error);
                     }
                 }
                 
@@ -544,8 +604,9 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 sendPushNotification(
                     authorUid,
                     `${currentUser.name} commented on your post`,
-                    commentText.length > 50 ? commentText.substring(0, 50) + '...' : commentText
-                ).catch(err => console.error("Push Notification error:", err));
+                    commentText.length > 50 ? commentText.substring(0, 50) + '...' : commentText,
+                    { url: '/?view=home', type: 'new_comment' }
+                ).catch(console.error);
             }
             
             await batch.commit();
@@ -863,6 +924,21 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
     const { openChat } = useDockedChat();
 
+    const handleJoyrideCallback = async (data: CallBackProps) => {
+        const { status } = data;
+        const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
+
+        if (finishedStatuses.includes(status) && currentUser) {
+            // Update Firestore to mark tour as complete
+            try {
+                const userDocRef = doc(db, 'users', currentUser.uid);
+                await updateDoc(userDocRef, { hasCompletedTour: true });
+            } catch (error) {
+                console.error("Error updating tour status:", error);
+            }
+        }
+    };
+
     if (!currentUser) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
@@ -876,6 +952,29 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     // Main Layout Skeleton Return
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-20 md:pb-0">
+            {isClient && !currentUser.hasCompletedTour && currentView === 'home' && (
+                <Joyride
+                    steps={[
+                        {
+                            target: '#tour-wallet',
+                            content: 'Buy coins here to support your favorite creators and unlock premium posts.',
+                            disableBeacon: true,
+                        },
+                        {
+                            target: '#tour-post',
+                            content: 'Share your first thought with the world right here.',
+                        }
+                    ]}
+                    continuous={true}
+                    showSkipButton={true}
+                    callback={handleJoyrideCallback}
+                    styles={{
+                        options: {
+                            primaryColor: '#6366f1',
+                        }
+                    }}
+                />
+            )}
             <SuperGiftOverlay />
             {/* Mobile Fullscreen Header (Only shows when in a feature like Messages, Profile, Settings) */}
             {isMobileFullscreenFeature && (
@@ -928,7 +1027,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                             <div className="mb-3">
                                                 <div className="text-xs font-semibold text-slate-400 px-2 py-1 uppercase tracking-wider">Profiles</div>
                                                 {userSearchResults.map(u => (
-                                                    <div key={u.uid} onClick={() => { setIsSearchFocused(false); setSearchQuery(''); changeView('profile'); }} className="flex items-center gap-3 p-2 hover:bg-slate-800/60 rounded-lg cursor-pointer transition-colors">
+                                                    <div key={u.uid} onClick={() => { setIsSearchFocused(false); setSearchQuery(''); window.location.href = `/profile/${u.handle}`; }} className="flex items-center gap-3 p-2 hover:bg-slate-800/60 rounded-lg cursor-pointer transition-colors">
                                                         <Avatar className="h-8 w-8 border border-slate-700">
                                                             <AvatarImage src={u.avatarUrl} alt={u.name} />
                                                             <AvatarFallback className="bg-slate-800 text-slate-300 text-xs">{u.name ? u.name.charAt(0) : 'U'}</AvatarFallback>
@@ -945,7 +1044,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                             <div>
                                                 <div className="text-xs font-semibold text-slate-400 px-2 py-1 uppercase tracking-wider">Posts</div>
                                                 {postSearchResults.map(p => (
-                                                    <div key={p.id} onClick={() => { setIsSearchFocused(false); setSearchQuery(''); changeView('home'); }} className="p-2 hover:bg-slate-800/60 rounded-lg cursor-pointer transition-colors border-b border-slate-800/40 last:border-0">
+                                                    <div key={p.id} onClick={() => { setIsSearchFocused(false); setSearchQuery(''); setSelectedPostForComments(p as any); changeView('home'); }} className="p-2 hover:bg-slate-800/60 rounded-lg cursor-pointer transition-colors border-b border-slate-800/40 last:border-0">
                                                         <div className="flex items-center gap-2 mb-1">
                                                             <span className="text-xs font-medium text-slate-300 truncate">{p.author?.name || 'Anonymous'}</span>
                                                             <span className="text-[10px] text-slate-500">@{p.author?.handle || 'user'}</span>
@@ -963,6 +1062,20 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
                     {/* Nav Actions */}
                     <div className="flex items-center gap-2">
+                        {/* AI Quick-Launch Button (visible on all screens) */}
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Lonki AI"
+                            onClick={() => changeView('personal-ai')}
+                            className={`h-9 w-9 rounded-xl transition-all border ${
+                                currentView === 'personal-ai'
+                                    ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-400'
+                                    : 'border-transparent hover:bg-accent hover:border-border/60 text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <BrainCircuit className="h-4 w-4" />
+                        </Button>
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl hover:bg-accent border border-transparent hover:border-border/60 text-muted-foreground hover:text-foreground transition-all">
@@ -972,38 +1085,103 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                     )}
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 bg-popover border-border text-popover-foreground p-2 shadow-2xl rounded-xl z-50" align="end">
+                            <PopoverContent
+                                className="w-80 bg-popover border-border text-popover-foreground p-2 shadow-2xl rounded-xl z-50"
+                                align="end"
+                                onOpenAutoFocus={() => {
+                                    // Mark all unread notifications as read when panel opens
+                                    if (currentUser?.uid && unreadNotifications > 0) {
+                                        notifications
+                                            .filter(n => !n.read)
+                                            .forEach(n => {
+                                                updateDoc(doc(db, 'users', currentUser.uid, 'notifications', n.id), { read: true }).catch(() => {});
+                                            });
+                                    }
+                                }}
+                            >
                                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800/60 mb-1">
                                     <span className="font-semibold text-sm">Notifications</span>
-                                    {unreadNotifications > 0 && <span className="text-xs text-indigo-400 font-medium">{unreadNotifications} unread</span>}
+                                    {unreadNotifications > 0 && <span className="text-xs text-indigo-400 font-medium">{unreadNotifications} new</span>}
                                 </div>
                                 <div className="max-h-[320px] overflow-y-auto space-y-1">
                                     {notifications.length === 0 ? (
-                                        <div className="text-center py-8 text-sm text-slate-500">All quiet for now</div>
+                                        <div className="text-center py-8 text-sm text-slate-500">All quiet for now 🔕</div>
                                     ) : (
-                                        notifications.map(n => (
-                                            <div key={n.id} className={cn("flex gap-3 p-2.5 rounded-lg text-xs transition-colors", !n.read ? "bg-indigo-950/30 border border-indigo-900/30" : "hover:bg-slate-800/40")}>
-                                                <Avatar className="h-7 w-7 border border-slate-800 shrink-0">
-                                                    <AvatarImage src={n.fromUser?.avatarUrl} />
-                                                    <AvatarFallback>{n.fromUser?.name ? n.fromUser.name.charAt(0) : 'U'}</AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex-1 space-y-1 min-w-0">
-                                                    <p className="text-slate-300 leading-normal">
-                                                        <span className="font-semibold text-slate-100">{n.fromUser?.name || 'Someone'}</span>{' '}
-                                                        {n.type === 'friend_request' && 'sent you a friend request.'}
-                                                        {n.type === 'friend_request_accepted' && 'accepted your friend request! 🎉'}
-                                                        {n.type === 'new_reaction' && `reacted to your post.`}
-                                                        {n.type === 'new_comment' && `commented: "${n.commentText}"`}
-                                                    </p>
-                                                    {n.type === 'friend_request' && (
-                                                        <div className="flex gap-2 pt-1">
-                                                            <Button size="sm" onClick={(e) => handleAcceptFriendRequest(n, e)} className="h-6 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-[11px] font-medium rounded-md shadow-sm">Accept</Button>
-                                                        </div>
+                                        notifications.map(n => {
+                                            // Determine where clicking should navigate
+                                            const handleNotifClick = () => {
+                                                if (n.type === 'new_comment' || n.type === 'new_reaction') {
+                                                    changeView('home');
+                                                } else if (n.type === 'friend_request' || n.type === 'friend_request_accepted' || n.type === 'new_follower') {
+                                                    changeView('friends');
+                                                } else if (n.type === 'new_message') {
+                                                    if (n.conversationId) setInitialConversationId(n.conversationId);
+                                                    changeView('messages');
+                                                } else if (n.type === 'group_post') {
+                                                    if (n.groupId) setActiveGroupId(n.groupId);
+                                                    changeView('groups');
+                                                } else if (n.type === 'payout_approved' || n.type === 'payout_rejected') {
+                                                    changeView('wallet');
+                                                } else if (n.fromUser?.handle) {
+                                                    window.location.href = `/profile/${n.fromUser.handle}`;
+                                                }
+                                            };
+
+                                            return (
+                                                <div
+                                                    key={n.id}
+                                                    onClick={n.type !== 'friend_request' ? handleNotifClick : undefined}
+                                                    className={cn(
+                                                        "flex gap-3 p-2.5 rounded-lg text-xs transition-colors",
+                                                        !n.read ? "bg-indigo-950/30 border border-indigo-900/30" : "hover:bg-slate-800/40",
+                                                        n.type !== 'friend_request' ? "cursor-pointer" : ""
                                                     )}
-                                                    <span className="text-[10px] text-slate-500 block">{n.timestamp ? formatDistanceToNow(n.timestamp.toDate(), { addSuffix: true }) : 'Just now'}</span>
+                                                >
+                                                    <Avatar className="h-7 w-7 border border-slate-800 shrink-0">
+                                                        <AvatarImage src={n.fromUser?.avatarUrl} />
+                                                        <AvatarFallback>
+                                                            {n.type === 'payout_approved' ? '💸' :
+                                                             n.type === 'payout_rejected' ? '⚠️' :
+                                                             n.fromUser?.name ? n.fromUser.name.charAt(0) : '🔔'}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-1 space-y-1 min-w-0">
+                                                        <p className="text-slate-300 leading-normal">
+                                                            {(n.type === 'payout_approved' || n.type === 'payout_rejected') ? (
+                                                                <>
+                                                                    <span className="font-semibold text-slate-100">
+                                                                        {n.type === 'payout_approved' ? '✅ Payout Approved' : '⚠️ Payout Update'}
+                                                                    </span>{' '}
+                                                                    {n.type === 'payout_approved'
+                                                                        ? `Your payout of ${n.currency || 'NGN'} ${n.amount?.toLocaleString() || ''} has been processed.`
+                                                                        : (n.reason || 'Your payout request could not be processed.')}
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="font-semibold text-slate-100">{n.fromUser?.name || 'Someone'}</span>{' '}
+                                                                    {n.type === 'friend_request' && 'sent you a friend request.'}
+                                                                    {n.type === 'friend_request_accepted' && 'accepted your friend request! 🎉'}
+                                                                    {n.type === 'new_reaction' && 'reacted to your post.'}
+                                                                    {n.type === 'new_comment' && `commented: "${n.commentText?.slice(0, 60)}${(n.commentText?.length || 0) > 60 ? '…' : ''}"`}
+                                                                    {n.type === 'new_follower' && 'started following you.'}
+                                                                    {n.type === 'new_message' && `sent you a message: "${n.messageSnippet?.slice(0, 40) || ''}…"`}
+                                                                    {n.type === 'group_post' && `posted in ${n.groupName || 'a group'}.`}
+                                                                </>
+                                                            )}
+                                                        </p>
+                                                        {n.type === 'friend_request' && (
+                                                            <div className="flex gap-2 pt-1">
+                                                                <Button size="sm" onClick={(e) => { e.stopPropagation(); handleAcceptFriendRequest(n, e); }} className="h-6 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-[11px] font-medium rounded-md shadow-sm">Accept</Button>
+                                                            </div>
+                                                        )}
+                                                        <span className="text-[10px] text-slate-500 block">
+                                                            {n.timestamp ? formatDistanceToNow(n.timestamp.toDate(), { addSuffix: true }) : 'Just now'}
+                                                        </span>
+                                                    </div>
+                                                    {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0 mt-1" />}
                                                 </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </PopoverContent>
@@ -1021,9 +1199,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <NavigationItem label="Home Feed" icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} />
                     <NavigationItem label="Explore" icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} />
                     <NavigationItem label="Friends & Requests" icon={Users} active={currentView === 'friends'} onClick={() => changeView('friends')} badgeCount={friendRequests.length} />
-                    <NavigationItem label="Channels & Groups" icon={Radio} active={currentView === 'groups'} onClick={() => changeView('groups')} />
+                    <NavigationItem label="Suggestions" icon={Sparkles} active={currentView === 'suggestions'} onClick={() => changeView('suggestions')} />
+                    <NavigationItem label="Friend Requests" icon={UserPlus} active={currentView === 'friend-requests'} onClick={() => changeView('friend-requests')} badgeCount={friendRequests.length} />
                     <NavigationItem label="Direct Messages" icon={MessageSquare} active={currentView === 'messages'} onClick={() => changeView('messages')} badgeCount={0} />
                     <NavigationItem label="Short Videos" icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} />
+                    <NavigationItem label="Go Live" icon={Radio} active={currentView === 'live'} onClick={() => changeView('live')} />
                     <NavigationItem label="Saved Content" icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} />
                     
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Ecosystem</div>
@@ -1032,11 +1212,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <NavigationItem label="Automated Storyteller" icon={Lightbulb} active={currentView === 'story-writer'} onClick={() => changeView('story-writer')} />
 
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Finance & Tools</div>
-                    <NavigationItem label="Creator Wallet" icon={Wallet} active={currentView === 'wallet'} onClick={() => changeView('wallet')} />
+                    <NavigationItem id="tour-wallet" label="Creator Wallet" icon={Wallet} active={currentView === 'wallet'} onClick={() => changeView('wallet')} />
                     <NavigationItem label="Leaderboard" icon={Trophy} active={currentView === 'leaderboard'} onClick={() => changeView('leaderboard')} />
                     <NavigationItem label="Settings" icon={Cog} active={currentView === 'settings'} onClick={() => changeView('settings')} />
                     
-                    {currentUser?.email === 'admin@lonkind.com' && (
+                    {(currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind') && (
                         <>
                             <div className="pt-4 pb-2 px-3 text-xs font-semibold text-rose-500 uppercase tracking-wider">Administration</div>
                             <NavigationItem label="System Dashboard" icon={ShieldAlert} active={currentView === 'admin'} onClick={() => changeView('admin')} />
@@ -1058,6 +1238,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onDeletePost={handleDeletePost}
                                 onReportPost={handleReportPost}
                                 onMuteUser={handleMuteUser}
+                                activeHashtag={activeHashtag}
+                                onClearHashtag={handleClearHashtag}
                             />
                         )}
                         {currentView === 'explore' && (
@@ -1072,6 +1254,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                             />
                         )}
                         {currentView === 'groups' && <GroupsView currentUser={currentUser} onGroupSelect={(id: string) => changeView('group-details', id)} />}
+                        {currentView === 'suggestions' && <SuggestionsPage />}
+                        {currentView === 'friend-requests' && <FriendRequestsPage currentUser={currentUser} friendRequests={friendRequests} friendSuggestions={friendSuggestions} onAcceptRequest={handleAcceptFriendRequest} onAddFriend={handleAddFriend} sentRequests={sentFriendRequests} />}
                         {currentView === 'friends' && <FriendsView currentUser={currentUser} friendRequests={friendRequests} friendSuggestions={friendSuggestions} onAcceptRequest={handleAcceptFriendRequest} onAddFriend={handleAddFriend} sentRequests={sentFriendRequests} />}
                         {currentView === 'group-details' && activeGroupId && (
                             <GroupDetailsView 
@@ -1123,13 +1307,53 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onDeleteAccount={handleDeleteAccount}
                             />
                         )}
-                        {currentView === 'admin' && currentUser?.email === 'admin@lonkind.com' && <AdminDashboardView />}
+                        {currentView === 'admin' && (currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind') && <AdminDashboardView />}
+                        {currentView === 'live' && (
+                            <LiveStreamView
+                                hostUid={currentUser?.uid || ''}
+                                userId={currentUser?.uid || ''}
+                                userName={currentUser?.name || 'User'}
+                                userAvatar={currentUser?.avatarUrl || ''}
+                                isHost={true}
+                                onLeave={() => changeView('home')}
+                            />
+                        )}
                     </Suspense>
                 </main>
 
                 {/* Right Side Social Graph Panel */}
                 <aside className="hidden lg:block lg:col-span-3 space-y-6 sticky top-24">
                     
+                    {/* Trending Hashtags Section */}
+                    {trendingHashtags.length > 0 && (
+                        <div>
+                            <div className="flex items-center justify-between px-2 text-slate-500 border-b border-border/40 pb-2">
+                                <h3 className="font-semibold text-sm flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-indigo-500" /> Trending Topics</h3>
+                            </div>
+                            <div className="space-y-2 mt-4">
+                                {trendingHashtags.map((item, i) => (
+                                    <div key={i} className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/30 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/70 cursor-pointer transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700" onClick={() => {
+                                        const clean = item.tag.replace(/^#/, '');
+                                        if (typeof window !== 'undefined') {
+                                            const url = new URL(window.location.href);
+                                            url.searchParams.set('hashtag', clean);
+                                            url.searchParams.delete('view');
+                                            window.history.pushState({}, '', url.toString());
+                                        }
+                                        setActiveHashtag(item.tag.startsWith('#') ? item.tag : `#${item.tag}`);
+                                        changeView('home');
+                                    }}>
+                                        <div className="flex flex-col">
+                                            <span className="font-semibold text-sm text-slate-700 dark:text-slate-300">{item.tag}</span>
+                                            <span className="text-xs text-muted-foreground">{item.count} {item.count === 1 ? 'post' : 'posts'}</span>
+                                        </div>
+                                        <div className="text-xs font-medium text-slate-400">#{i + 1}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Friend Requests Section */}
                     {friendRequests.length > 0 && (
                         <div>
@@ -1255,6 +1479,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 <DropdownMenuItem onClick={() => changeView('personal-ai')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><BrainCircuit className="mr-2 h-4 w-4" /> Lonki Personal AI</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => changeView('story-writer')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Lightbulb className="mr-2 h-4 w-4" /> Automated Storyteller</DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-slate-800" />
+                                <DropdownMenuItem onClick={() => changeView('leaderboard')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Trophy className="mr-2 h-4 w-4 text-amber-400" /> Leaderboard</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => changeView('settings')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Cog className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

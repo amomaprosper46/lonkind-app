@@ -188,7 +188,7 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, friendStatus, on
                     <div className="flex-1 text-center md:text-left">
                         <div className="flex items-center justify-center md:justify-start gap-2">
                            <CardTitle className="text-3xl font-bold">{user.name}</CardTitle>
-                           {user.isProfessional && <BadgeCheck className="h-8 w-8 text-primary" />}
+                           {(user.isProfessional || user.handle === 'admin_lonkind') && <BadgeCheck className="h-8 w-8 text-primary" />}
                            {user.badges?.includes('Top Creator') && <span title="Top Creator"><Star className="h-8 w-8 fill-yellow-500 text-yellow-500" /></span>}
                            {user.badges?.includes('Top Supporter') && <span title="Top Supporter"><Heart className="h-8 w-8 fill-pink-500 text-pink-500" /></span>}
                            {user.badges?.includes('Whale') && <span title="Whale"><Medal className="h-8 w-8 fill-amber-600 text-amber-600" /></span>}
@@ -216,8 +216,6 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, friendStatus, on
                         {!isCurrentUser && (
                             <>
                                 <Button variant="outline" onClick={onMessage}><MessageSquare className="mr-2 h-4 w-4"/> Message</Button>
-                                <Button variant="outline" size="icon" onClick={() => onStartCall('video')}><Video className="h-4 w-4" /></Button>
-                                <Button variant="outline" size="icon" onClick={() => onStartCall('audio')}><Phone className="h-4 w-4" /></Button>
                             </>
                         )}
                         <RelationshipButton />
@@ -272,9 +270,11 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, friendStatus, on
                     <TabsTrigger value="likes">Likes</TabsTrigger>
                     <TabsTrigger value="ai" className="text-orange-500 font-bold">✨ AI</TabsTrigger>
                 </TabsList>
-                <TabsContent value="posts" className="space-y-4 mt-4">
+                <TabsContent value="posts" className="mt-4">
                     {posts.length > 0 ? (
-                         posts.map(post => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={onReact} onCommentClick={onComment} onSavePost={onSavePost} onDeletePost={onDeletePost} userReaction={userReactions.get(post.id)} isSaved={savedPostIds.has(post.id)}/>)
+                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                             {posts.map(post => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={onReact} onCommentClick={onComment} onSavePost={onSavePost} onDeletePost={onDeletePost} userReaction={userReactions.get(post.id)} isSaved={savedPostIds.has(post.id)}/>)}
+                         </div>
                     ) : (
                         <Card>
                             <CardContent className="p-8 text-center text-muted-foreground">

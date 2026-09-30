@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 import * as logger from "firebase-functions/logger";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 
 // 1. Core Firebase Initialization (Unified for all features)
 if (!admin.apps.length) {
@@ -71,7 +72,7 @@ export const autonomousNewsReporter = ai.defineFlow(
     
     // B. Call Gemini using production naming syntax
     const llmResponse = await ai.generate({
-      model: 'googleai/gemini-2.5-flash',
+      model: 'googleai/gemini-3.5-flash-lite',
       prompt: `
         You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
         ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}
@@ -317,6 +318,47 @@ export const paystackWebhook = onRequest(
     res.status(200).send("OK");
   }
 );
+
+// ============================================
+// 📈 FEATURE D: TRENDING HASHTAGS AGGREGATION
+// ============================================
+
+/**
+ * Triggered when a new post is created.
+ * Extracts the hashtags array and increments counters in trending_hashtags.
+ */
+export const aggregateTrendingHashtags = onDocumentCreated("posts/{postId}", async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+
+  const data = snapshot.data();
+  const hashtags: string[] = data.hashtags || [];
+
+  if (hashtags.length === 0) return;
+
+  const batch = db.batch();
+  
+  hashtags.forEach(tag => {
+    // tag should already be lowercased from frontend, but we ensure it here
+    const tagId = tag.replace(/^#/, '').toLowerCase();
+    
+    if (tagId) {
+      const tagRef = db.collection('trending_hashtags').doc(tagId);
+      batch.set(tagRef, {
+        tag: tagId,
+        count: FieldValue.increment(1),
+        lastUsed: FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+  });
+
+  try {
+    await batch.commit();
+    logger.info(`[Trending Hashtags] Aggregated ${hashtags.length} hashtags for post ${event.params.postId}`);
+  } catch (error) {
+    logger.error(`[Trending Hashtags] Failed to aggregate hashtags for post ${event.params.postId}:`, error);
+  }
+});
 
 // ============================================
 // 🌍 FEATURE C: FLUTTERWAVE GLOBAL WEBHOOK

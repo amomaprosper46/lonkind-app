@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Gem, Coins, Sparkles, PlusCircle, ArrowDown, ArrowUp, Globe } from 'lucide-react';
 import { type CurrentUser } from './social-dashboard';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,7 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const MINIMUM_PAYOUT_DIAMONDS = 350;
+const MINIMUM_PAYOUT_DIAMONDS = 1;
 
 interface WalletViewProps {
     currentUser: CurrentUser;
@@ -97,7 +97,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
 
     useEffect(() => {
         setBanks([]);
-        fetch(`/api/paystack/payout?country=${selectedCountry}`)
+        fetch(`/api/flutterwave/payout?country=${selectedCountry}`)
             .then(res => res.json())
             .then(data => {
                 if (data.banks) setBanks(data.banks);
@@ -174,7 +174,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                 });
                 window.history.replaceState({}, document.title, window.location.pathname);
             } else if (ref && !payment) {
-                fetch('/api/paystack/verify', {
+                fetch('/api/flutterwave/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ reference: ref }),
@@ -207,7 +207,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
             const pkg = coinPackages.find(p => p.coins === coinAmount);
             if (pkg) priceLocal = Number((pkg.priceMult * currentGeo.coinRate).toFixed(2));
 
-            const res = await fetch('/api/paystack/initialize', {
+            const res = await fetch('/api/flutterwave/initialize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -220,18 +220,18 @@ export default function WalletView({ currentUser }: WalletViewProps) {
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to initialize payment with Paystack');
+            if (!res.ok) throw new Error(data.error || 'Failed to initialize payment with Flutterwave');
 
             if (data.authorizationUrl) {
                 window.location.href = data.authorizationUrl;
             } else {
-                throw new Error("No authorization URL returned from Paystack gateway");
+                throw new Error("No authorization URL returned from Flutterwave gateway");
             }
         } catch (error: any) {
             console.error("Purchase error:", error);
             toast({
                 title: 'Checkout Error',
-                description: error.message || 'There was an error initiating the Paystack checkout.',
+                description: error.message || 'There was an error initiating the Flutterwave checkout.',
                 variant: 'destructive',
             });
             setIsPurchasing(null);
@@ -244,7 +244,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
     useEffect(() => {
         if (watchAccountNumber?.length >= 6 && watchBankCode) {
             setIsResolving(true);
-            fetch(`/api/paystack/resolve-account?account_number=${watchAccountNumber}&bank_code=${watchBankCode}&country=${selectedCountry}`)
+            fetch(`/api/flutterwave/resolve-account?account_number=${watchAccountNumber}&bank_code=${watchBankCode}&country=${selectedCountry}`)
                 .then(res => res.json())
                 .then(data => {
                     setIsResolving(false);
@@ -267,9 +267,25 @@ export default function WalletView({ currentUser }: WalletViewProps) {
     const onSubmitPayout = async (values: z.infer<typeof payoutFormSchema>) => {
         setIsPurchasing(-1);
         try {
-            const res = await fetch('/api/paystack/payout', {
+            // Wait for auth to initialize if it hasn't already
+            await new Promise(resolve => {
+                const unsub = auth.onAuthStateChanged(user => {
+                    unsub();
+                    resolve(user);
+                });
+            });
+
+            const token = await auth.currentUser?.getIdToken();
+            if (!token) {
+                throw new Error("Your session could not be verified. Please reload the page or sign in again.");
+            }
+
+            const res = await fetch('/api/flutterwave/payout', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     userId: currentUser.uid,
                     diamondAmount: values.diamondAmount,
@@ -360,10 +376,10 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                             <CardTitle className="flex items-center gap-2">
                                 <Sparkles className="h-5 w-5 text-primary" /> Purchase Coins ({currentGeo.currency})
                             </CardTitle>
-                            <CardDescription>Select a package or enter a custom amount to checkout globally via Paystack.</CardDescription>
+                            <CardDescription>Select a package or enter a custom amount to checkout globally via Flutterwave.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                                 {coinPackages.map(pkg => {
                                     const priceLocal = Number((pkg.priceMult * currentGeo.coinRate).toFixed(2));
                                     return (
@@ -426,7 +442,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                      <Card>
                         <CardHeader>
                             <CardTitle>Recent Purchases</CardTitle>
-                            <CardDescription>Your recent coin purchases via Paystack.</CardDescription>
+                            <CardDescription>Your recent coin purchases via Flutterwave.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {isLoading ? <Loader2 className="h-6 w-6 animate-spin"/> : purchaseTxs.length > 0 ? (

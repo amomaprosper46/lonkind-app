@@ -22,7 +22,7 @@ export default function TermsPage() {
           <CardHeader>
             <CardTitle className="text-4xl font-extrabold tracking-tight">Terms and Conditions</CardTitle>
             <CardDescription className="text-lg text-muted-foreground">
-              Last updated: July 27, 2024
+              Last updated: August 4, 2026
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 text-base prose prose-sm max-w-none">

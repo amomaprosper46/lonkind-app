@@ -1,46 +1,41 @@
-import withPWAInit from '@ducanh2912/next-pwa';
 
-const withPWA = withPWAInit({
-  dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
-  register: true,
-  skipWaiting: true,
-});
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Next 14 still uses experimental.serverComponentsExternalPackages
-
   images: {
     unoptimized: true,
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "picsum.photos",
-        port: "",
-        pathname: "/**",
+        protocol: 'https',
+        hostname: 'picsum.photos',
+        pathname: '/**',
       },
       {
-        protocol: "https",
-        hostname: "placehold.co",
-        port: "",
-        pathname: "/**",
+        protocol: 'https',
+        hostname: 'placehold.co',
+        pathname: '/**',
       },
     ],
   },
 
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true, // Consider removing this later
   },
 
-  // serverActions now lives inside experimental
+  serverExternalPackages: [
+    '@genkit-ai/core',
+    '@genkit-ai/google-genai',
+    'genkit',
+    '@opentelemetry/instrumentation',
+    'require-in-the-middle',
+  ],
+
   experimental: {
-    serverComponentsExternalPackages: ["@genkit-ai/core", "@genkit-ai/google-genai", "genkit", "@opentelemetry/instrumentation", "require-in-the-middle"],
     serverActions: {
-      bodySizeLimit: "4.5mb",
+      bodySizeLimit: '4.5mb',
     },
   },
 };
 
-export default withPWA(nextConfig);
+export default nextConfig;
 

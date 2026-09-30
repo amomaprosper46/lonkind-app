@@ -14,6 +14,7 @@ import { errorEmitter } from '@/lib/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/lib/errors';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import Link from 'next/link';
 import ngeohash from 'ngeohash';
 import { compressImage } from '@/lib/image-compression';
@@ -36,6 +37,8 @@ interface HomeFeedProps {
     onMuteUser?: (user: any) => void;
     mutedUids?: Set<string>;
     blockedUids?: Set<string>;
+    activeHashtag?: string | null;
+    onClearHashtag?: () => void;
 }
 
 const getUserLocation = (): Promise<GeolocationPosition> => {
@@ -57,15 +60,34 @@ export default function HomeFeed({
     onSavePost,
     onDeletePost,
     userReactions,
-    savedPostIds
+    savedPostIds,
+    activeHashtag,
+    onClearHashtag
 }: HomeFeedProps) {
-    const [posts, setPosts] = useState<Post[]>([]);
+    const [followingPosts, setFollowingPosts] = useState<Post[]>([]);
+    const [forYouPosts, setForYouPosts] = useState<Post[]>([]);
+    const [feedType, setFeedType] = useState<'foryou' | 'following'>('foryou');
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
     const [isCreatingPost, setIsCreatingPost] = useState(false);
     const [newPostContent, setNewPostContent] = useState('');
     const [newPostMedia, setNewPostMedia] = useState<NewPostMedia | null>(null);
     const [newPostMusic, setNewPostMusic] = useState<{title: string, url: string} | null>(null);
     const [followingUids, setFollowingUids] = useState<string[] | null>(null);
+
+    const calculateScore = useCallback((post: Post) => {
+        const reactionsScore = Object.values(post.reactions || {}).reduce((a, b) => a + (b || 0), 0) * 2;
+        const commentsScore = (post.comments || 0) * 3;
+        
+        let hoursSincePosted = 0;
+        if (post.timestamp && typeof (post.timestamp as any).toDate === 'function') {
+            const msSince = Date.now() - (post.timestamp as any).toDate().getTime();
+            hoursSincePosted = msSince / (1000 * 60 * 60);
+        }
+        
+        // Add random jitter to break ties
+        const jitter = Math.random() * 0.1;
+        return reactionsScore + commentsScore - (hoursSincePosted * 0.5) + jitter;
+    }, []);
 
     useEffect(() => {
         if (!currentUser) return;
@@ -99,48 +121,114 @@ export default function HomeFeed({
         setIsLoadingPosts(true);
         const postsCollection = collection(db, "posts");
         
-        let q;
-
-        // If the user isn't following anyone (just themself in the array), show the global explore feed instead.
+        // 1. Listen for "Following" Posts (Chronological)
+        let followingQuery;
         if (followingUids.length <= 1) {
-            q = query(
+             followingQuery = query(
                 postsCollection,
-                where('groupId', '==', null), // Only show non-group posts on main feeds
+                where("author.uid", "==", currentUser.uid),
+                where('groupId', '==', null),
                 orderBy("timestamp", "desc")
             );
         } else {
-            // Firestore 'in' query is limited to 30 values. For larger-scale apps,
-            // a different data model (e.g., fanning out posts to follower feeds) would be needed.
-            q = query(
+            followingQuery = query(
                 postsCollection, 
                 where("author.uid", "in", followingUids.slice(0, 30)),
-                where('groupId', '==', null), // Only show non-group posts
+                where('groupId', '==', null),
                 orderBy("timestamp", "desc")
             );
         }
         
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const unsubFollowing = onSnapshot(followingQuery, (querySnapshot) => {
             const postList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-            setPosts(postList);
-            setIsLoadingPosts(false);
+            setFollowingPosts(postList);
+            setIsLoadingPosts(false); // We consider it loaded when following loads
         }, (serverError: any) => {
-            console.error("Posts listener error:", serverError);
-            // Only emit permission error if it is genuinely a permission-denied error from Firestore
-            if (serverError.code === 'permission-denied') {
-                const permissionError = new FirestorePermissionError({
-                    path: 'posts',
-                    operation: 'list',
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
-            } else if (serverError.code === 'failed-precondition') {
-                // If it's an index building error, do not throw permission denied.
-                console.warn("Index is currently building. Please wait a few minutes.");
-            }
+            console.error("Following listener error:", serverError);
             setIsLoadingPosts(false);
         });
 
-        return () => unsubscribe();
-    }, [followingUids]);
+        // 2. Listen for "For You" Posts (Algorithmic)
+        // We pull the most recent 100 global posts and sort them client-side by our Engagement Algorithm
+        const forYouQuery = query(
+            postsCollection,
+            where('groupId', '==', null), // Only show non-group posts on main feeds
+            orderBy("timestamp", "desc"),
+            // Limit to recent to avoid massive client-side load, in production this would be a Cloud Function
+            where("timestamp", ">=", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)) // Last 14 days
+        );
+
+        const unsubForYou = onSnapshot(forYouQuery, (querySnapshot) => {
+            const postList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+            // Sort by algorithm
+            const sortedList = postList.sort((a, b) => calculateScore(b) - calculateScore(a));
+            setForYouPosts(sortedList);
+        }, (serverError: any) => {
+             console.error("For You listener error:", serverError);
+        });
+
+
+        return () => {
+            unsubFollowing();
+            unsubForYou();
+        };
+    }, [followingUids, currentUser.uid, calculateScore]);
+
+    const [hashtagDbPosts, setHashtagDbPosts] = useState<Post[]>([]);
+    const [isLoadingHashtag, setIsLoadingHashtag] = useState(false);
+
+    const cleanTag = activeHashtag ? activeHashtag.replace(/^#/, '').toLowerCase() : null;
+    const normalizedTag = cleanTag ? `#${cleanTag}` : null;
+
+    useEffect(() => {
+        if (!cleanTag) {
+            setHashtagDbPosts([]);
+            setIsLoadingHashtag(false);
+            return;
+        }
+
+        setIsLoadingHashtag(true);
+        const postsCollection = collection(db, "posts");
+        const q = query(
+            postsCollection,
+            where("searchKeywords", "array-contains", cleanTag),
+            orderBy("timestamp", "desc")
+        );
+
+        const unsub = onSnapshot(q, (snapshot) => {
+            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+            setHashtagDbPosts(list);
+            setIsLoadingHashtag(false);
+        }, (err) => {
+            console.warn("Hashtag query fallback to local feed filter:", err);
+            setIsLoadingHashtag(false);
+        });
+
+        return () => unsub();
+    }, [cleanTag]);
+
+    // Local filter fallback to guarantee instantaneous results
+    const localHashtagPosts = React.useMemo(() => {
+        if (!cleanTag) return [];
+        const combined = [...forYouPosts, ...followingPosts];
+        const seen = new Set<string>();
+        return combined.filter(post => {
+            if (seen.has(post.id)) return false;
+            seen.add(post.id);
+            const inHashtags = post.hashtags?.some(h => h.replace(/^#/, '').toLowerCase() === cleanTag);
+            const inKeywords = post.searchKeywords?.some(k => k.replace(/^#/, '').toLowerCase() === cleanTag);
+            const inContent = post.content?.toLowerCase().includes(`#${cleanTag}`);
+            return inHashtags || inKeywords || inContent;
+        });
+    }, [cleanTag, forYouPosts, followingPosts]);
+
+    const activeDisplayPosts = React.useMemo(() => {
+        if (cleanTag) {
+            if (hashtagDbPosts.length > 0) return hashtagDbPosts;
+            return localHashtagPosts;
+        }
+        return feedType === 'foryou' ? forYouPosts : followingPosts;
+    }, [cleanTag, hashtagDbPosts, localHashtagPosts, feedType, forYouPosts, followingPosts]);
 
     const handleCreatePost = async (extraSettings?: any) => {
         if (!currentUser || (!newPostContent.trim() && !newPostMedia)) return;
@@ -203,9 +291,36 @@ export default function HomeFeed({
                 postData.raisedCoins = 0;
             }
 
+            // ── Auto-index for search ─────────────────────────────────────
+            // Extract hashtags (#word) from the post content
+            const hashtagMatches = newPostContent.match(/#\w+/g) || [];
+            const hashtags = hashtagMatches.map((h: string) => h.toLowerCase());
+
+            // Build searchKeywords: tokenize content + author name/handle + hashtags
+            const contentTokens = newPostContent.toLowerCase()
+                .split(/\s+/)
+                .map((t: string) => t.replace(/[^a-z0-9#]/g, ''))
+                .filter((t: string) => t.length > 1);
+            const authorTokens = [
+                currentUser.name.toLowerCase(),
+                currentUser.handle.toLowerCase(),
+                ...currentUser.name.toLowerCase().split(' '),
+            ];
+            const searchKeywords = Array.from(new Set([
+                ...contentTokens,
+                ...authorTokens,
+                ...hashtags,
+            ])).slice(0, 40); // Firestore array-contains-any limit safety
+
+            postData.hashtags = hashtags;
+            postData.searchKeywords = searchKeywords;
+            // ─────────────────────────────────────────────────────────────
+
             const newPostRef = await addDoc(collection(db, 'posts'), postData);
             const completePost = { ...postData, id: newPostRef.id };
-            setPosts([completePost, ...posts]);
+            // Optimistically add to top of both feeds
+            setFollowingPosts(prev => [completePost, ...prev]);
+            setForYouPosts(prev => [completePost, ...prev]);
             setNewPostContent('');
             setNewPostMedia(null);
             setNewPostMusic(null);
@@ -243,25 +358,75 @@ export default function HomeFeed({
                 isCreatingPost={isCreatingPost}
             />
             
-            <div className="space-y-6 mt-8">
-                {isLoadingPosts ? (
+            <div className="space-y-6 mt-6">
+                {cleanTag ? (
+                    <div className="flex items-center justify-between p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl mb-4 backdrop-blur-md shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-extrabold text-xl">
+                                #
+                            </div>
+                            <div>
+                                <h2 className="text-base font-bold text-foreground">{normalizedTag}</h2>
+                                <p className="text-xs text-muted-foreground">
+                                    {activeDisplayPosts.length} {activeDisplayPosts.length === 1 ? 'post' : 'posts'} found
+                                </p>
+                            </div>
+                        </div>
+                        {onClearHashtag && (
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={onClearHashtag}
+                                className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-1.5 transition-colors"
+                            >
+                                Clear filter ✕
+                            </Button>
+                        )}
+                    </div>
+                ) : (
+                    <Tabs value={feedType} onValueChange={(v) => setFeedType(v as any)} className="w-full mb-4">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="foryou" className="font-bold">✨ For You</TabsTrigger>
+                            <TabsTrigger value="following" className="font-bold">Following</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                )}
+
+                {(isLoadingPosts || (cleanTag && isLoadingHashtag && activeDisplayPosts.length === 0)) ? (
                     <div className="flex justify-center items-center p-8">
                         <Loader2 className="h-8 w-8 animate-spin text-primary"/>
                     </div>
-                ) : posts.length > 0 ? (
-                    posts.map(post => (
-                        <PostCard 
-                            key={post.id} 
-                            post={post}
-                            currentUser={currentUser}
-                            onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
-                            onCommentClick={onComment} 
-                            onSavePost={onSavePost} 
-                            onDeletePost={onDeletePost}
-                            userReaction={userReactions.get(post.id)} 
-                            isSaved={savedPostIds.has(post.id)}
-                        />
-                    ))
+                ) : activeDisplayPosts.length > 0 ? (
+                    <div className="flex flex-col space-y-6">
+                        {activeDisplayPosts.map(post => (
+                            <PostCard 
+                                key={post.id} 
+                                post={post}
+                                currentUser={currentUser}
+                                onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
+                                onCommentClick={onComment} 
+                                onSavePost={onSavePost} 
+                                onDeletePost={onDeletePost}
+                                userReaction={userReactions.get(post.id)} 
+                                isSaved={savedPostIds.has(post.id)}
+                            />
+                        ))}
+                    </div>
+                ) : cleanTag ? (
+                    <Card>
+                        <CardContent className="p-8 text-center text-muted-foreground">
+                            <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-extrabold text-2xl mx-auto mb-4">
+                                #
+                            </div>
+                            <h3 className="text-xl font-semibold">No posts found with {normalizedTag}</h3>
+                            <p className="mt-1">Be the first to share a post with this hashtag!</p>
+                            {onClearHashtag && (
+                                <Button variant="outline" className="mt-4" onClick={onClearHashtag}>
+                                    View All Posts
+                                </Button>
+                            )}
+                        </CardContent>
+                    </Card>
                 ) : (
                     <Card>
                         <CardContent className="p-8 text-center text-muted-foreground">

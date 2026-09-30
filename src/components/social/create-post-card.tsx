@@ -107,7 +107,7 @@ export default function CreatePostCard({
     }
 
     return (
-        <Card className="mb-6 shadow-sm border-border/40">
+        <Card id="tour-post" className="mb-6 shadow-sm border-border/40">
             <CardContent className="p-4">
                 <div className="flex gap-3 items-center mb-3">
                     <Avatar className="h-10 w-10">

@@ -70,7 +70,7 @@ Respond ONLY in valid JSON matching the schema:
       `;
 
       const response = await ai.generate({
-        model: 'googleai/gemini-2.5-flash',
+        model: 'googleai/gemini-3.5-flash-lite',
         prompt: promptText,
         output: {
           schema: ModeratorOutputSchema,

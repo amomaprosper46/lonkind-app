@@ -87,6 +87,15 @@ function UserProfilePageInner() {
                     const userDoc = userSnapshot.docs[0];
                     const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
                     setProfileUser(userData);
+
+                    // ── Automatic Verification System ──────────────────────────
+                    // Silently grant verified badge when followers reach 800k+.
+                    // This runs in the background — never shown or explained to users.
+                    const followersCount = (userData as any).followersCount || 0;
+                    if (followersCount >= 800000 && !userData.isProfessional) {
+                        updateDoc(doc(db, 'users', userDoc.id), { isProfessional: true })
+                            .catch(() => {}); // Silent — no error shown to user
+                    }
     
                     // Kill previous posts listener if profile changes
                     if (postsUnsubscribe) postsUnsubscribe();

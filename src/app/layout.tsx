@@ -4,6 +4,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import ConnectivityProvider from '@/components/connectivity-provider';
+import { NotificationPermission } from '@/components/NotificationPermission';
 import '@/ai/genkit';
 
 export const metadata: Metadata = {
@@ -28,20 +30,18 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >
           <FirebaseErrorListener />
 
-          {/* 🔥 THIS IS THE FIX */}
-          <div className="min-h-screen flex flex-col">
-            <main className="flex-1 flex justify-center">
-              <div className="w-full max-w-6xl px-4">
-                {children}
-              </div>
-            </main>
-          </div>
+          <ConnectivityProvider>
+            <div className="min-h-screen flex flex-col bg-background text-foreground">
+              <NotificationPermission />
+              {children}
+            </div>
+          </ConnectivityProvider>
 
           <Toaster />
         </ThemeProvider>

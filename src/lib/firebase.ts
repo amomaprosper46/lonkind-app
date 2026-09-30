@@ -4,7 +4,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database";
-import { getMessaging, isSupported } from "firebase/messaging";
+import { getMessaging, isSupported, type Messaging } from "firebase/messaging";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 // Your web app's Firebase configuration
@@ -41,30 +41,38 @@ export const auth = (app ? getAuth(app) : null) as unknown as ReturnType<typeof 
 export const storage = (app ? getStorage(app) : null) as unknown as ReturnType<typeof getStorage>;
 export const rtdb = (app ? getDatabase(app) : null) as unknown as ReturnType<typeof getDatabase>;
 
-let messagingInstance: any = null;
-if (typeof window !== "undefined" && typeof navigator !== "undefined") {
-    // 1. Initialize App Check
-    if (app) {
-        try {
-            // In development, automatically generate a debug token in the browser console
-            if (process.env.NODE_ENV === 'development') {
-                (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN || true;
-            }
-            
-            initializeAppCheck(app, {
-                provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || 'missing-recaptcha-key'),
-                isTokenAutoRefreshEnabled: true
-            });
-        } catch (e) {
-            console.error("Firebase App Check failed to initialize", e);
+// Initialize App Check (browser-only)
+if (typeof window !== "undefined" && app) {
+    try {
+        if (process.env.NODE_ENV === 'development') {
+            (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN || true;
         }
+        initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || 'missing-recaptcha-key'),
+            isTokenAutoRefreshEnabled: true
+        });
+    } catch (e) {
+        console.error("Firebase App Check failed to initialize", e);
     }
-
-    // 2. Initialize Messaging
-    isSupported().then((supported) => {
-        if (supported && app) {
-            messagingInstance = getMessaging(app);
-        }
-    });
 }
-export const messaging = messagingInstance;
+
+/**
+ * Returns the Firebase Messaging instance, lazily initializing it on first call.
+ * Properly handles the async `isSupported()` check.
+ * Call this instead of importing `messaging` directly.
+ */
+let _messagingInstance: Messaging | null = null;
+export async function getMessagingInstance(): Promise<Messaging | null> {
+    if (typeof window === "undefined" || !app) return null;
+    if (_messagingInstance) return _messagingInstance;
+    try {
+        const supported = await isSupported();
+        if (supported) {
+            _messagingInstance = getMessaging(app);
+            return _messagingInstance;
+        }
+    } catch (e) {
+        // Browser doesn't support FCM (e.g., Safari without permission)
+    }
+    return null;
+}

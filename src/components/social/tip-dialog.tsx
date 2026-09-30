@@ -9,6 +9,7 @@ import { Loader2, Gem, Coins, Sparkles } from 'lucide-react';
 import { type CurrentUser } from './social-dashboard';
 import { Card, CardContent } from '../ui/card';
 import { sendPushNotification } from '@/app/actions/sendNotification';
+import confetti from 'canvas-confetti';
 
 interface TipDialogProps {
     isOpen: boolean;
@@ -95,6 +96,31 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
                 description: `You sent ${tip.coins} coins (${tip.label} ${tip.emoji}) to ${recipient.name}.`,
             });
             onOpenChange(false);
+
+            // 🎉 Fire Confetti!
+            const duration = 3 * 1000;
+            const animationEnd = Date.now() + duration;
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
+
+            const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+            const interval: any = setInterval(function() {
+                const timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                const particleCount = 50 * (timeLeft / duration);
+                confetti({
+                    ...defaults, particleCount,
+                    origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+                });
+                confetti({
+                    ...defaults, particleCount,
+                    origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+                });
+            }, 250);
 
             if (tip.coins >= 100 && typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('super-gift', {

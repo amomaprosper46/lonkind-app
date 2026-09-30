@@ -9,20 +9,29 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft, BadgeCheck, Star, Heart, Medal } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { formatDistanceToNow } from 'date-fns';
+import { collection, query, where, onSnapshot, doc, addDoc, serverTimestamp, orderBy, limit, getDoc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
+// duplicate arrayUnion import removed
+import { CallButton } from '@/components/social/CallButton';
+import { initUserKeys, encryptMessage, decryptMessage, getPublicKey } from '@/lib/e2ee';
 import { cn } from '@/lib/utils';
 import { sendPushNotification } from '@/app/actions/sendNotification';
 import Link from 'next/link';
+import { MessageActionMenu } from '@/components/social/MessageActionMenu';
+import { useLongPress } from '@/hooks/useLongPress';
+
+const conversationsRef = collection(db, 'conversations');
 
 export interface Conversation {
     id: string;
     participants: { uid: string; name: string; avatarUrl: string; handle?: string; isProfessional?: boolean; badges?: string[]; }[];
     participantUids: string[];
-    lastMessage: { text?: string; type: 'text' | 'audio', timestamp: any; } | null;
+    lastMessage: { text?: string; type: 'text' | 'audio', timestamp: any;
+    deletedFor?: string[]; } | null;
     unreadCount?: number; 
+    typingIndicator?: { [key: string]: boolean };
 }
 
 interface Message {
@@ -39,21 +48,67 @@ interface MessagingViewProps {
     currentUser?: any;
 }
 
+
+function MessageBubble({ msg, user, setSelectedMessage, setActionMenuOpen, handleCopyMessage, copiedMessageId }: any) {
+  const isOwn = msg.senderId === user?.uid;
+  const longPressHandlers = useLongPress(() => {
+    setSelectedMessage(msg);
+    setActionMenuOpen(true);
+  }, 3000);
+
+  return (
+    <div className={`group flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`} {...longPressHandlers}>
+      {msg.senderId !== user?.uid && msg.type === 'text' && (
+        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyMessage(msg.text, msg.id)}>
+          {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
+      )}
+      <div className={cn(
+        `max-w-xs lg:max-w-md p-3 rounded-xl ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-background shadow-sm'} ${msg.type === 'audio' ? 'p-2' : ''}`
+      )}>
+        {msg.type === 'text' ? (
+          <p>{msg.text}</p>
+        ) : (
+          <audio controls src={msg.audioUrl} className="h-10" />
+        )}
+        {msg.timestamp && (
+          <p className={`text-xs mt-1 text-right ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+            {new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        )}
+        {'editedAt' in msg && (
+          <p className="text-xs text-muted-foreground italic">(edited)</p>
+        )}
+      </div>
+      {isOwn && msg.type === 'text' && (
+        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyMessage(msg.text, msg.id)}>
+          {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function MessagingView({ initialConversationId }: MessagingViewProps) {
     const [user, loadingAuth] = useAuthState(auth);
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
+    const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+    const [actionMenuOpen, setActionMenuOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+    const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
 
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -66,8 +121,9 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
     useEffect(() => {
         if (!user) return;
 
-        setIsLoading(true);
-        const conversationsRef = collection(db, 'conversations');
+        if (user) {
+        initUserKeys(user.uid, db).catch(console.error);
+      }
         const q = query(conversationsRef, where('participantUids', 'array-contains', user.uid));
 
         let messageUnsubscribes: (() => void)[] = [];
@@ -114,6 +170,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                     participants,
                     participantUids: data.participantUids,
                     lastMessage: null,
+                    typingIndicator: data.typingIndicator || {},
                 };
                 convosMap.set(docSnap.id, convoBase);
 
@@ -173,36 +230,120 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
         };
     }, [user, initialConversationId]);
 
+    // Duplicate long‑press state removed – already defined earlier
+
+    // Decrypt incoming messages
     useEffect(() => {
         if (!selectedConversation) return;
-
         const messagesRef = collection(db, 'conversations', selectedConversation.id, 'messages');
         const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const msgs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-            setMessages(msgs);
+        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+            const rawMsgs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+            // Decrypt text messages
+            const decryptedMsgs = await Promise.all(
+                rawMsgs.map(async (msg) => {
+                    if (msg.type === 'text' && msg.text) {
+                        try {
+                            const otherUid = msg.senderId === user?.uid ? selectedConversation.participantUids.find(id => id !== user?.uid) : msg.senderId;
+                            const pubKey = await getPublicKey(otherUid!);
+                            const plain = await decryptMessage(msg.text, pubKey);
+                            return { ...msg, text: plain };
+                        } catch (e) {
+                            console.error('Decryption failed', e);
+                            return msg;
+                        }
+                    }
+                    return msg;
+                })
+            );
+            setMessages(decryptedMsgs);
         });
 
         return () => unsubscribe();
-    }, [selectedConversation]);
+    }, [selectedConversation, user]);
 
     const handleSelectConversation = (conversation: Conversation) => {
         setSelectedConversation(conversation);
     };
     
-    const handleSendMessage = async () => {
+    const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setNewMessage(e.target.value);
+        if (!selectedConversation || !user) return;
+
+        updateDoc(doc(db, 'conversations', selectedConversation.id), {
+            [`typingIndicator.${user.uid}`]: true
+        }).catch(console.error);
+
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+        typingTimeoutRef.current = setTimeout(() => {
+            updateDoc(doc(db, 'conversations', selectedConversation.id), {
+                [`typingIndicator.${user.uid}`]: false
+            }).catch(console.error);
+        }, 2000);
+    };
+
+    
+    const handleEditMessage = (msg: any) => {
+        if (msg.senderId !== user?.uid) return;
+        setEditingMessageId(msg.id);
+        setNewMessage(msg.text || '');
+    };
+
+    const handleDeleteMessageForMe = async (msgId: string) => {
+        if (!selectedConversation) return;
+        try {
+            const msgRef = doc(db, 'conversations', selectedConversation.id, 'messages', msgId);
+            await updateDoc(msgRef, {
+                deletedFor: arrayUnion(user?.uid)
+            });
+        } catch(e) { console.error('Error deleting for me:', e); }
+    };
+
+    const handleDeleteMessageForAll = async (msgId: string) => {
+        if (!selectedConversation) return;
+        try {
+            const msgRef = doc(db, 'conversations', selectedConversation.id, 'messages', msgId);
+            await deleteDoc(msgRef);
+        } catch(e) { console.error('Error deleting for all:', e); }
+    };
+
+const handleSendMessage = async () => {
         if (!newMessage.trim() || !user || !selectedConversation) return;
         
         setIsSending(true);
         
         try {
-            await addDoc(collection(db, 'conversations', selectedConversation.id, 'messages'), {
-                senderId: user.uid,
-                text: newMessage,
-                type: 'text',
-                timestamp: serverTimestamp(),
-            });
+            const encryptionRecipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
+            let encryptedText = newMessage;
+            if (encryptionRecipientUid) {
+                const recipientPublicKeyHex = await getPublicKey(encryptionRecipientUid, db);
+                if (recipientPublicKeyHex) {
+                    encryptedText = await encryptMessage(newMessage, recipientPublicKeyHex);
+                }
+            }
+            if (editingMessageId) {
+                await updateDoc(doc(db, 'conversations', selectedConversation.id, 'messages', editingMessageId), {
+                    text: encryptedText,
+                    editedAt: serverTimestamp(),
+                });
+                setEditingMessageId(null);
+            } else {
+                await addDoc(collection(db, 'conversations', selectedConversation.id, 'messages'), {
+                    senderId: user.uid,
+                    text: encryptedText,
+                    type: 'text',
+                    timestamp: serverTimestamp(),
+                });
+            }
+            
+            // Clear typing state immediately
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            updateDoc(doc(db, 'conversations', selectedConversation.id), {
+                [`typingIndicator.${user.uid}`]: false
+            }).catch(console.error);
+
             setNewMessage('');
             
             const recipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
@@ -210,8 +351,9 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                  sendPushNotification(
                      recipientUid,
                      `${user.displayName || 'Someone'} sent you a message`,
-                     newMessage.length > 50 ? newMessage.substring(0, 50) + '...' : newMessage
-                 ).catch(err => console.error("Push Notification error:", err));
+                     newMessage.length > 50 ? newMessage.substring(0, 50) + '...' : newMessage,
+                     { url: `/?view=messages&conversationId=${selectedConversation.id}`, type: 'new_message', conversationId: selectedConversation.id }
+                 ).catch(console.error);
             }
             
         } catch(e) {
@@ -243,8 +385,9 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                  sendPushNotification(
                      recipientUid,
                      `${user.displayName || 'Someone'} sent you a voice message`,
-                     '🎤 New voice message received.'
-                 ).catch(err => console.error("Push Notification error:", err));
+                     '🎙️ New voice message received.',
+                     { url: `/?view=messages&conversationId=${selectedConversation.id}`, type: 'new_message', conversationId: selectedConversation.id }
+                 ).catch(console.error);
             }
 
         } catch (e) {
@@ -351,7 +494,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
 
                                 return (
                                 <div key={convo.id} 
-                                    className={`flex items-center p-4 cursor-pointer hover:bg-accent/50 ${selectedConversation?.id === convo.id ? 'bg-accent' : ''}`}
+                                    className={`flex items-center p-4 cursor-pointer border-b border-border/50 hover:bg-accent/50 transition-colors ${selectedConversation?.id === convo.id ? 'bg-accent' : ''}`}
                                     onClick={() => handleSelectConversation(convo)}>
                                     <Avatar className="h-12 w-12">
                                         <AvatarImage src={otherUser.avatarUrl} alt={otherUser.name || 'User'} />
@@ -368,7 +511,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                                 ) : (
                                                     <p className="font-semibold truncate">{otherUser.name || 'Unknown'}</p>
                                                 )}
-                                                {otherUser.isProfessional && <BadgeCheck className="h-4 w-4 text-primary shrink-0" />}
+                                                {(otherUser.isProfessional || otherUser.handle === 'admin_lonkind') && <BadgeCheck className="h-4 w-4 text-primary shrink-0" />}
                                             </div>
                                             {convo.lastMessage?.timestamp && (
                                                  <p className="text-xs text-muted-foreground whitespace-nowrap">
@@ -415,40 +558,71 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                     ) : (
                                         <h2 className="text-xl font-bold truncate">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
                                     )}
-                                     {getOtherParticipant(selectedConversation)?.isProfessional && <BadgeCheck className="h-5 w-5 text-primary shrink-0" />}
+                                     {(getOtherParticipant(selectedConversation)?.isProfessional || getOtherParticipant(selectedConversation)?.handle === 'admin_lonkind') && <BadgeCheck className="h-5 w-5 text-primary shrink-0" />}
                                  </div>
+                                 <CallButton targetUserId={getOtherParticipant(selectedConversation)?.uid} />
                             </CardHeader>
                             <ScrollArea className="flex-1 p-4">
                                 <div className="space-y-2">
-                                {messages.map(msg => (
-                                     <div key={msg.id} className={`group flex items-end gap-2 ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}>
-                                        {msg.senderId !== user?.uid && msg.type === 'text' && (
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyMessage(msg.text!, msg.id)}>
-                                                {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                                            </Button>
-                                        )}
-                                        <div className={cn(`max-w-xs lg:max-w-md p-3 rounded-xl`, 
-                                          msg.senderId === user?.uid ? 'bg-primary text-primary-foreground' : 'bg-background shadow-sm',
-                                          msg.type === 'audio' && 'p-2'
-                                        )}>
-                                            {msg.type === 'text' ? (
-                                                <p>{msg.text}</p>
-                                            ) : (
-                                                <audio controls src={msg.audioUrl} className="h-10"></audio>
-                                            )}
-                                            {msg.timestamp && (
-                                                <p className={`text-xs mt-1 text-right ${msg.senderId === user?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                                                    {new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
-                                            )}
-                                        </div>
-                                         {msg.senderId === user?.uid && msg.type === 'text' && (
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyMessage(msg.text!, msg.id)}>
-                                                {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                                            </Button>
-                                        )}
-                                    </div>
-                                ))}
+                                                    {messages
+                      // Filter out messages the user has deleted
+                      .filter(msg => !(msg.deletedFor?.includes(user?.uid)))
+                      .map(msg => {
+                        return (
+                          <MessageBubble
+                            key={msg.id}
+                            msg={msg}
+                            user={user}
+                            setSelectedMessage={setSelectedMessage}
+                            setActionMenuOpen={setActionMenuOpen}
+                            handleCopyMessage={handleCopyMessage}
+                            copiedMessageId={copiedMessageId}
+                          />
+                        );
+                      })}
+                    {/* Action menu */}
+                    <MessageActionMenu
+                      isOpen={actionMenuOpen}
+                      isSender={selectedMessage?.senderId === user?.uid}
+                      onClose={() => setActionMenuOpen(false)}
+                      onCopy={() => {
+                        if (selectedMessage) {
+                          handleCopyMessage(selectedMessage.text!, selectedMessage.id);
+                        }
+                        setActionMenuOpen(false);
+                      }}
+                      onDeleteForMe={() => {
+                        if (selectedMessage) {
+                          handleDeleteMessageForMe(selectedMessage.id);
+                        }
+                        setActionMenuOpen(false);
+                      }}
+                      onDeleteForAll={() => {
+                        if (selectedMessage) {
+                          handleDeleteMessageForAll(selectedMessage.id);
+                        }
+                        setActionMenuOpen(false);
+                      }}
+                      onEdit={() => {
+                        if (selectedMessage) {
+                          handleEditMessage(selectedMessage);
+                        }
+                        setActionMenuOpen(false);
+                      }}
+                      onMore={() => {
+                        // placeholder for future actions
+                        setActionMenuOpen(false);
+                      }}
+                    />
+                                {selectedConversation && user && getOtherParticipant(selectedConversation) && selectedConversation.typingIndicator?.[getOtherParticipant(selectedConversation)!.uid] && (
+                                     <div className="flex items-center gap-2 text-muted-foreground p-3 max-w-[80px] bg-background shadow-sm rounded-xl">
+                                         <div className="flex space-x-1 mx-auto">
+                                           <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                           <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                           <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                         </div>
+                                     </div>
+                                 )}
                                 <div ref={messagesEndRef} />
                                 </div>
                             </ScrollArea>
@@ -481,7 +655,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                                         <Input 
                                             placeholder="Type a message..." 
                                             value={newMessage}
-                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            onChange={handleTyping}
                                             onKeyPress={(e) => e.key === 'Enter' && !isSending && handleSendMessage()}
                                             disabled={isSending}
                                         />

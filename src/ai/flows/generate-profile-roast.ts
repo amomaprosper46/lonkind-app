@@ -94,7 +94,7 @@ export const generateProfileRoast = ai.defineFlow(
 
       // 5. Fire Genkit generation
       const { output } = await ai.generate({
-        model: 'googleai/gemini-2.5-flash',
+        model: 'googleai/gemini-3.5-flash-lite',
         prompt: `You are the funniest bio writer on the internet. Your roast bios go viral on Twitter and TikTok because they are hilariously accurate and quotable.
 
 Generate a ROAST BIO for this user's social media profile:

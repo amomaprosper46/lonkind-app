@@ -167,7 +167,7 @@ export default function CommentSheet({ post, onOpenChange, onCommentSubmit, curr
                                                     <div className="flex justify-between items-center">
                                                         <div className="flex items-center gap-1">
                                                             <Link href={`/profile/${comment.author.handle}`} className="font-semibold text-sm hover:underline">{comment.author.name}</Link>
-                                                            {comment.author.isProfessional && <BadgeCheck className="h-4 w-4 text-primary" />}
+                                                            {(comment.author.isProfessional || comment.author.handle === 'admin_lonkind') && <BadgeCheck className="h-4 w-4 text-primary" />}
                                                         </div>
                                                         <p className="text-xs text-muted-foreground">
                                                             {comment.timestamp ? formatDistanceToNow(comment.timestamp.toDate(), { addSuffix: true }) : ''}

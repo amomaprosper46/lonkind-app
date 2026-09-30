@@ -55,6 +55,8 @@ export interface Post {
     raisedCoins?: number;
     isHidden?: boolean;
     moderationStatus?: string;
+    hashtags?: string[];
+    searchKeywords?: string[];
 }
 
 interface PostCardProps {
@@ -255,7 +257,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                     <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                             <Link href={`/profile/${author.handle}`} className="font-semibold hover:underline">{author.name}</Link>
-                            {author.isProfessional && <BadgeCheck className="h-5 w-5 text-primary" />}
+                            {(author.isProfessional || author.handle === 'admin_lonkind') && <BadgeCheck className="h-5 w-5 text-primary" />}
                             {(author as any).badges?.includes('Top Creator') && <span title="Top Creator" className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">👑 Top Creator</span>}
                             {(author as any).badges?.includes('Whale') && <span title="Whale" className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/30">🐋 Whale</span>}
                             {(author as any).badges?.includes('Top Supporter') && <span title="Top Supporter" className="inline-flex items-center rounded-full bg-pink-500/15 px-2 py-0.5 text-[10px] font-bold text-pink-600 dark:text-pink-400 border border-pink-500/30">💖 Top Supporter</span>}
@@ -349,7 +351,34 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                     <>
                         {content && (
                             <div className="mb-4">
-                                <p className="whitespace-pre-wrap">{showOriginal || !translatedContent ? content : translatedContent}</p>
+                                <p className="whitespace-pre-wrap leading-relaxed">
+                                    {(showOriginal || !translatedContent ? content : translatedContent)
+                                        .split(/(#\w+)/g)
+                                        .map((part: string, i: number) =>
+                                            part.startsWith('#') ? (
+                                                <a
+                                                    key={i}
+                                                    href={`/?hashtag=${encodeURIComponent(part.slice(1))}`}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        const cleanTag = part.slice(1);
+                                                        if (typeof window !== 'undefined') {
+                                                            const url = new URL(window.location.href);
+                                                            url.searchParams.set('hashtag', cleanTag);
+                                                            url.searchParams.delete('view');
+                                                            window.history.pushState({}, '', url.toString());
+                                                        }
+                                                        window.dispatchEvent(new CustomEvent('lonkind:hashtag-search', { detail: part }));
+                                                    }}
+                                                    className="text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer transition-colors hover:underline"
+                                                >
+                                                    {part}
+                                                </a>
+                                            ) : (
+                                                <span key={i}>{part}</span>
+                                            )
+                                        )}
+                                </p>
                                 {isTranslating && <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2"><Loader2 className="h-4 w-4 animate-spin" /> Translating...</div>}
                                 {translatedContent && (
                                      <Button variant="link" size="sm" className="p-0 h-auto mt-1" onClick={() => setShowOriginal(!showOriginal)}>
