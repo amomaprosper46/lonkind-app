@@ -246,7 +246,7 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
                     if (msg.type === 'text' && msg.text) {
                         try {
                             const otherUid = msg.senderId === user?.uid ? selectedConversation.participantUids.find(id => id !== user?.uid) : msg.senderId;
-                            const pubKey = await getPublicKey(otherUid!);
+                            const pubKey = otherUid ? await getPublicKey(otherUid, db) : null;
                             const plain = await decryptMessage(msg.text, pubKey);
                             return { ...msg, text: plain };
                         } catch (e) {

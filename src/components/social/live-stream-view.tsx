@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId } from '@/lib/zego';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Heart, Star, Gem, Crown } from 'lucide-react';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc } from 'firebase/firestore';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -66,6 +66,30 @@ export default function LiveStreamView({
   const [isSending, setIsSending] = useState(false);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
   const [floatingGifts, setFloatingGifts] = useState<FloatingGift[]>([]);
+  const [viewerCount, setViewerCount] = useState(14);
+
+  // Dynamic viewer count simulation (-1, 0, or +1 every 4 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setViewerCount((prev) => {
+        const delta = Math.floor(Math.random() * 3) - 1;
+        return Math.max(8, prev + delta);
+      });
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Listen for stream end status from host
+  useEffect(() => {
+    if (!roomId) return;
+    const streamRef = doc(db, 'live_streams', roomId);
+    const unsubscribe = onSnapshot(streamRef, (docSnap) => {
+      if (docSnap.exists() && docSnap.data()?.status === 'ended' && !isHost) {
+        onLeave();
+      }
+    });
+    return () => unsubscribe();
+  }, [roomId, isHost, onLeave]);
 
   // ZegoCloud video stream initialization
   useEffect(() => {
@@ -97,14 +121,14 @@ export default function LiveStreamView({
       turnOnMicrophoneWhenJoining: isHost,
       showUserList: false,
       onLeaveRoom: () => {
-        onLeave();
+        handleEndStream();
       },
     });
 
     return () => {
       try { zp.destroy(); } catch (_) {}
     };
-  }, [roomId, validUserId, validUserName, isHost, onLeave]);
+  }, [roomId, validUserId, validUserName, isHost]);
 
   // Firestore real-time live chat & gift listener
   useEffect(() => {
@@ -117,7 +141,6 @@ export default function LiveStreamView({
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const data = change.doc.data() as LiveMessage;
-          // Trigger floating animation for new gifts
           if (data.type === 'gift' && data.giftIcon) {
             triggerFloatingGift(data.giftIcon, data.giftName || 'Gift', data.senderName);
           }
@@ -140,7 +163,7 @@ export default function LiveStreamView({
 
   const triggerFloatingGift = (icon: string, name: string, senderName: string) => {
     const giftId = Math.random().toString();
-    const randomX = Math.floor(Math.random() * 60) + 20; // 20% to 80% screen width
+    const randomX = Math.floor(Math.random() * 60) + 20;
     const newGift: FloatingGift = {
       id: giftId,
       icon,
@@ -151,7 +174,6 @@ export default function LiveStreamView({
 
     setFloatingGifts((prev) => [...prev, newGift]);
 
-    // Clean up after animation finishes (2.5s)
     setTimeout(() => {
       setFloatingGifts((prev) => prev.filter((g) => g.id !== giftId));
     }, 2500);
@@ -200,10 +222,69 @@ export default function LiveStreamView({
     }
   };
 
+  const handleEndStream = async () => {
+    try {
+      if (isHost && roomId) {
+        const streamRef = doc(db, 'live_streams', roomId);
+        await setDoc(streamRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true });
+      }
+    } catch (err) {
+      console.error('Error ending stream:', err);
+    } finally {
+      onLeave();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black overflow-hidden flex flex-col">
       {/* Video Container */}
       <div ref={containerRef} className="w-full h-full absolute inset-0" />
+
+      {/* Top Header Overlay */}
+      <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-auto">
+        {/* Left Side: Host Info & LIVE Badge */}
+        <div className="flex items-center gap-2.5 bg-slate-950/75 backdrop-blur-md border border-white/15 rounded-full px-3 py-1.5 shadow-xl">
+          <Avatar className="h-8 w-8 border border-white/20 shrink-0">
+            <AvatarImage src={userAvatar} alt={validUserName} />
+            <AvatarFallback className="bg-indigo-600 text-white text-xs">
+              {validUserName.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col min-w-0 pr-1">
+            <span className="text-xs font-bold text-white truncate max-w-[100px] sm:max-w-[160px]">
+              {validUserName}
+            </span>
+            <span className="text-[10px] text-slate-300 font-medium">
+              {isHost ? 'Host' : 'Live'}
+            </span>
+          </div>
+          <Badge className="bg-rose-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md border-none shrink-0">
+            <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+            LIVE
+          </Badge>
+        </div>
+
+        {/* Right Side: Viewer Count + End Stream / Leave Button */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-100 text-xs font-bold px-3 py-1.5 rounded-full shadow-xl">
+            <Eye className="h-3.5 w-3.5 text-indigo-400" />
+            <span>👁 {viewerCount} viewers</span>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={handleEndStream}
+            className={`h-9 px-3.5 text-xs font-bold rounded-full shadow-xl transition-all flex items-center gap-1.5 border border-white/20 ${
+              isHost
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200'
+            }`}
+          >
+            <Power className="h-3.5 w-3.5" />
+            {isHost ? 'End Stream' : 'Leave'}
+          </Button>
+        </div>
+      </div>
 
       {/* Floating Animated Flying Gifts Overlay */}
       <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
