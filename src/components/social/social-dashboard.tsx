@@ -45,8 +45,14 @@ import { Separator } from '../ui/separator';
 import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { compressImage } from '@/lib/image-compression';
+import SkeletonCard from './skeleton-card';
 
-const LoadingComponent = () => <div className="col-span-12 md:col-span-9 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+const LoadingComponent = () => (
+    <div className="w-full space-y-4">
+        <SkeletonCard />
+        <SkeletonCard />
+    </div>
+);
 
 const MobileNavItem = ({ icon: Icon, active, onClick, title }: { icon: any, active: boolean, onClick: () => void, title?: string }) => (
     <button onClick={onClick} title={title} className={cn("h-10 w-10 flex flex-col items-center justify-center rounded-full transition-all duration-300 shrink-0", active ? "text-indigo-400 bg-indigo-500/10 font-bold" : "text-slate-500 hover:text-slate-300")}>

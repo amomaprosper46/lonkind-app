@@ -6,6 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import CreatePostCard from './create-post-card';
 import PostCard from './post-card';
+import SkeletonCard from './skeleton-card';
 import { Loader2, Users } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Post, ReactionType } from './post-card';
@@ -393,8 +394,10 @@ export default function HomeFeed({
                 )}
 
                 {(isLoadingPosts || (cleanTag && isLoadingHashtag && activeDisplayPosts.length === 0)) ? (
-                    <div className="flex justify-center items-center p-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                    <div className="flex flex-col space-y-4">
+                        <SkeletonCard />
+                        <SkeletonCard />
+                        <SkeletonCard />
                     </div>
                 ) : activeDisplayPosts.length > 0 ? (
                     <div className="flex flex-col space-y-6">
