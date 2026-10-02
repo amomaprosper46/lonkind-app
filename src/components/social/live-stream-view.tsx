@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId } from '@/lib/zego';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power } from 'lucide-react';
+import { db, auth } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, increment } from 'firebase/firestore';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Coins, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 
 interface LiveMessage {
   id: string;
@@ -45,6 +46,8 @@ interface LiveStreamViewProps {
   userAvatar?: string;
   isHost: boolean;
   onLeave: () => void;
+  userCoins?: number;
+  onGoToWallet?: () => void;
 }
 
 export default function LiveStreamView({
@@ -54,6 +57,8 @@ export default function LiveStreamView({
   userAvatar,
   isHost,
   onLeave,
+  userCoins: initialCoins = 0,
+  onGoToWallet,
 }: LiveStreamViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,8 +70,25 @@ export default function LiveStreamView({
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [rechargeModalGift, setRechargeModalGift] = useState<typeof GIFT_CATALOG[0] | null>(null);
   const [floatingGifts, setFloatingGifts] = useState<FloatingGift[]>([]);
   const [viewerCount, setViewerCount] = useState(14);
+  const [userCoins, setUserCoins] = useState(initialCoins);
+
+  // Subscribe to real-time user coin balance updates
+  useEffect(() => {
+    if (!validUserId) return;
+    const userRef = doc(db, 'users', validUserId);
+    const unsubscribe = onSnapshot(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (typeof data.coins === 'number') {
+          setUserCoins(data.coins);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [validUserId]);
 
   // Dynamic viewer count simulation (-1, 0, or +1 every 4 seconds)
   useEffect(() => {
@@ -203,7 +225,41 @@ export default function LiveStreamView({
   };
 
   const handleSendGift = async (gift: typeof GIFT_CATALOG[0]) => {
+    // 1. Check if user has enough coins
+    if (userCoins < gift.price) {
+      setRechargeModalGift(gift);
+      return;
+    }
+
+    setIsSending(true);
+
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (idToken && hostUid && hostUid !== validUserId) {
+        const res = await fetch('/api/gift-coins', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            toUserId: hostUid,
+            coinAmount: gift.price,
+            giftName: gift.name,
+            giftEmoji: gift.icon,
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Failed to send gift');
+        }
+      } else {
+        // Fallback local update for self-testing
+        const userRef = doc(db, 'users', validUserId);
+        await updateDoc(userRef, { coins: increment(-gift.price) });
+      }
+
+      // Log gift to Firestore chat stream
       const chatRef = collection(db, 'live_streams', roomId, 'chat');
       await addDoc(chatRef, {
         senderId: validUserId,
@@ -216,9 +272,24 @@ export default function LiveStreamView({
         timestamp: serverTimestamp(),
       });
 
+      // Trigger flying animation
+      triggerFloatingGift(gift.icon, gift.name, validUserName);
+
+      toast({
+        title: `Sent ${gift.name} ${gift.icon}!`,
+        description: `Successfully sent gift worth ${gift.price} coins.`,
+      });
+
       setIsGiftModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send gift:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Gift Error',
+        description: err.message || 'Could not send gift. Please try again.',
+      });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -387,6 +458,13 @@ export default function LiveStreamView({
                 <Gift className="h-5 w-5 text-amber-400" />
                 <h3 className="font-bold text-white text-base">Send Virtual Gift</h3>
               </div>
+              
+              {/* Coin Balance Badge */}
+              <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full text-xs font-bold text-amber-300">
+                <Coins className="h-3.5 w-3.5 text-amber-400" />
+                <span>{userCoins.toLocaleString()} Coins</span>
+              </div>
+
               <Button
                 variant="ghost"
                 size="icon"
@@ -402,14 +480,15 @@ export default function LiveStreamView({
               {GIFT_CATALOG.map((gift) => (
                 <button
                   key={gift.id}
+                  disabled={isSending}
                   onClick={() => handleSendGift(gift)}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/50 transition-all group text-center transform hover:scale-105 active:scale-95"
+                  className="flex flex-col items-center p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/50 transition-all group text-center transform hover:scale-105 active:scale-95 disabled:opacity-50"
                 >
                   <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
                     {gift.icon}
                   </span>
                   <span className="font-bold text-white text-xs mb-1">{gift.name}</span>
-                  <Badge className={`bg-gradient-to-r ${gift.color} text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full border-none shadow-sm`}>
+                  <Badge className={`bg-gradient-to-r ${gift.color} text-white font-extrabold text-[10px] px-2.5 py-0.5 rounded-full border-none shadow-sm`}>
                     🪙 {gift.price} Coins
                   </Badge>
                 </button>
@@ -419,6 +498,47 @@ export default function LiveStreamView({
             <p className="text-[11px] text-center text-slate-400">
               Gifts send a flying animation on screen & alert everyone in chat! ✨
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Insufficient Coins / Recharge Prompt Modal */}
+      {rechargeModalGift && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-slate-950 border border-white/15 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
+            <div className="h-14 w-14 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
+              <Coins className="h-7 w-7 text-amber-400" />
+            </div>
+
+            <h3 className="font-extrabold text-white text-lg mb-2">Insufficient Coins</h3>
+            <p className="text-slate-300 text-xs leading-relaxed mb-6">
+              You need <strong className="text-amber-400">{rechargeModalGift.price} Coins</strong> to send <span className="text-white font-bold">{rechargeModalGift.name} {rechargeModalGift.icon}</span>, but you currently have <strong className="text-white">{userCoins.toLocaleString()} Coins</strong>.
+              Would you like to recharge your balance now?
+            </p>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setRechargeModalGift(null)}
+                className="w-1/2 border-white/15 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl text-xs font-bold h-10"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setRechargeModalGift(null);
+                  setIsGiftModalOpen(false);
+                  if (onGoToWallet) {
+                    onGoToWallet();
+                  } else {
+                    window.location.href = '/?view=wallet';
+                  }
+                }}
+                className="w-1/2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold rounded-xl text-xs h-10 shadow-lg shadow-amber-500/20"
+              >
+                Buy Coins
+              </Button>
+            </div>
           </div>
         </div>
       )}

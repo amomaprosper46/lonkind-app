@@ -1322,6 +1322,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 userAvatar={currentUser?.avatarUrl || ''}
                                 isHost={true}
                                 onLeave={() => changeView('home')}
+                                userCoins={currentUser?.coins || 0}
+                                onGoToWallet={() => changeView('wallet')}
                             />
                         )}
                     </Suspense>
