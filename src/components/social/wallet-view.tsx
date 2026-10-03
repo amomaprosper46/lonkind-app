@@ -25,20 +25,21 @@ interface WalletViewProps {
 }
 
 const SUPPORTED_COUNTRIES = [
-    { country: 'NG', name: 'Nigeria', currency: 'NGN', flag: '🇳🇬', coinRate: 20, diamondRate: 15, symbol: '₦' },
-    { country: 'US', name: 'United States', currency: 'USD', flag: '🇺🇸', coinRate: 0.02, diamondRate: 0.015, symbol: '$' },
-    { country: 'GH', name: 'Ghana', currency: 'GHS', flag: '🇬🇭', coinRate: 0.30, diamondRate: 0.22, symbol: 'GHS ' },
-    { country: 'KE', name: 'Kenya', currency: 'KES', flag: '🇰🇪', coinRate: 3.00, diamondRate: 2.25, symbol: 'KES ' },
-    { country: 'GB', name: 'United Kingdom', currency: 'GBP', flag: '🇬🇧', coinRate: 0.016, diamondRate: 0.012, symbol: '£' },
-    { country: 'EU', name: 'Europe', currency: 'EUR', flag: '🇪🇺', coinRate: 0.018, diamondRate: 0.014, symbol: '€' },
-    { country: 'ZA', name: 'South Africa', currency: 'ZAR', flag: '🇿🇦', coinRate: 0.36, diamondRate: 0.27, symbol: 'R ' },
+    { country: 'NG', name: 'Nigeria', currency: 'NGN', flag: '🇳🇬', coinRate: 10, diamondRate: 10, symbol: '₦' },
+    { country: 'US', name: 'United States', currency: 'USD', flag: '🇺🇸', coinRate: 0.01, diamondRate: 0.01, symbol: '$' },
+    { country: 'GH', name: 'Ghana', currency: 'GHS', flag: '🇬🇭', coinRate: 0.15, diamondRate: 0.15, symbol: 'GHS ' },
+    { country: 'KE', name: 'Kenya', currency: 'KES', flag: '🇰🇪', coinRate: 1.5, diamondRate: 1.5, symbol: 'KES ' },
+    { country: 'GB', name: 'United Kingdom', currency: 'GBP', flag: '🇬🇧', coinRate: 0.008, diamondRate: 0.008, symbol: '£' },
+    { country: 'EU', name: 'Europe', currency: 'EUR', flag: '🇪🇺', coinRate: 0.009, diamondRate: 0.009, symbol: '€' },
+    { country: 'ZA', name: 'South Africa', currency: 'ZAR', flag: '🇿🇦', coinRate: 0.18, diamondRate: 0.18, symbol: 'R ' },
 ];
 
 const coinPackages = [
-    { coins: 100, priceMult: 100 },
-    { coins: 550, priceMult: 500, bonus: '10% bonus' },
-    { coins: 1200, priceMult: 1000, bonus: '20% bonus' },
-    { coins: 3000, priceMult: 2500, bonus: '25% bonus' },
+    { coins: 500, priceMult: 500, bonus: 'Cheap Starter' },
+    { coins: 1200, priceMult: 1000, bonus: '20% Extra Coins' },
+    { coins: 3000, priceMult: 2500, bonus: '25% Extra Coins' },
+    { coins: 10000, priceMult: 7500, bonus: '33% Extra Coins' },
+    { coins: 25000, priceMult: 18000, bonus: 'Super Value' },
 ];
 
 interface PurchaseTransaction { id: string; coinsAdded: number; amount: number; amountNaira?: number; currency?: string; status: string; time: Timestamp; }

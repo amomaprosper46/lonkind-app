@@ -3,8 +3,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 
-const COIN_TO_DIAMOND_CONVERSION_RATE = 1; // 1 Coin = 1 Diamond
-
 const InputSchema = z.object({
   toUserId: z.string().trim().min(1, 'Recipient target UID required.'),
   coinAmount: z.number().int().positive('Gift quantity must be a positive integer.'),
@@ -17,6 +15,7 @@ const InputSchema = z.object({
 
 /**
  * POST: Authenticated, High-Security Ledger Gifting Engine
+ * Directly credits the creator's Lonkind Account Balance (withdrawable cash).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -33,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const decodedToken = await adminAuth.verifyIdToken(idToken);
-      verifiedSenderUid = decodedToken.uid; // Securely lock identity using cryptographically extracted server token data
+      verifiedSenderUid = decodedToken.uid;
     } catch (authError) {
       return NextResponse.json({ error: 'Unauthorized credentials verification rejected.' }, { status: 403 });
     }
@@ -52,13 +51,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Transaction aborted. You cannot gift yourself.' }, { status: 400 });
     }
 
-    const diamondValue = Math.floor(coinAmount * COIN_TO_DIAMOND_CONVERSION_RATE);
+    // 1 Lonkind Coin (L) = ₦10 Naira (or $0.01 USD equivalent)
+    const cashEarningsNaira = coinAmount * 10; 
+    const cashEarningsUSD = coinAmount * 0.01; 
+
     const senderRef = db.collection('users').doc(verifiedSenderUid);
     const receiverRef = db.collection('users').doc(toUserId);
 
     /**
      * 2. ACID Transaction Settlement Thread
-     * Validates balance constraints and processes state transformations atomically on the server.
      */
     await db.runTransaction(async (transaction) => {
       const [senderDoc, receiverDoc] = await Promise.all([
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
         throw new Error(`INSUFFICIENT_SOLVENCY_${senderCoins}`);
       }
 
-      // Calculate milestone badges for sender
+      // Sender Badges
       const newLifetimeTipsGiven = (senderDoc.data()?.lifetimeTipsGiven || 0) + coinAmount;
       let senderBadges: string[] = senderDoc.data()?.badges || [];
       if (newLifetimeTipsGiven >= 1000 && !senderBadges.includes('Top Supporter')) {
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
         senderBadges.push('Whale');
       }
 
-      // Calculate milestone badges for receiver
+      // Receiver Badges
       const newLifetimeTipsReceived = (receiverDoc.data()?.lifetimeTipsReceived || 0) + coinAmount;
       let receiverBadges: string[] = receiverDoc.data()?.badges || [];
       if (newLifetimeTipsReceived >= 1000 && !receiverBadges.includes('Rising Star')) {
@@ -102,7 +103,8 @@ export async function POST(req: NextRequest) {
         toUserId,
         toUserName: receiverDoc.data()?.name || 'Unknown User',
         coins: coinAmount,
-        diamonds: diamondValue,
+        cashValueNaira: cashEarningsNaira,
+        cashValueUSD: cashEarningsUSD,
         giftName: giftName || 'Tip',
         giftEmoji: giftEmoji || '🎁',
         postId: postId || null,
@@ -110,7 +112,7 @@ export async function POST(req: NextRequest) {
         time: FieldValue.serverTimestamp(),
       });
 
-      // B. Deduct virtual coins from verified sender identity
+      // B. Deduct virtual Lonkind coins (L) from sender
       transaction.update(senderRef, {
         coins: FieldValue.increment(-coinAmount),
         lifetimeTipsGiven: FieldValue.increment(coinAmount),
@@ -118,15 +120,17 @@ export async function POST(req: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // C. Credit diamond balance to recipient creator
+      // C. Credit REAL WITHDRAWABLE BALANCE directly to recipient creator account
       transaction.update(receiverRef, {
-        diamonds: FieldValue.increment(diamondValue),
+        balance: FieldValue.increment(cashEarningsUSD),
+        earningsNaira: FieldValue.increment(cashEarningsNaira),
+        diamonds: FieldValue.increment(coinAmount), // synced for legacy counter
         lifetimeTipsReceived: FieldValue.increment(coinAmount),
         badges: receiverBadges,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // D. If this is a donation to a Lonkind Cause post, increment raisedCoins atomically
+      // D. If donation to Cause post, update raisedCoins
       if (postId && isCauseDonation) {
         const postRef = db.collection('posts').doc(postId);
         transaction.update(postRef, {
@@ -134,58 +138,37 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // D. Update Live Space recentGifts stream feed if applicable
+      // E. Update Live Space recentGifts stream feed if applicable
       if (spaceId) {
         const spaceRef = db.collection('spaces').doc(spaceId);
         const spaceDoc = await transaction.get(spaceRef);
         if (spaceDoc.exists) {
-          const newGift = {
-            senderName: senderDoc.data()?.name || 'Someone',
-            giftName: giftName || 'Tip',
-            giftEmoji: giftEmoji || '🎁',
-            timestamp: Date.now(),
-            id: Math.random().toString(36).substring(7),
-          };
-          const currentGifts = spaceDoc.data()?.recentGifts || [];
-          const updatedGifts = [...currentGifts, newGift].slice(-10);
+          const currentRecent = spaceDoc.data()?.recentGifts || [];
+          const updatedGifts = [
+            {
+              id: giftRef.id,
+              fromUserName: senderDoc.data()?.name || 'User',
+              giftName: giftName || 'Tip',
+              giftEmoji: giftEmoji || '🎁',
+              coins: coinAmount,
+              timestamp: new Date().toISOString(),
+            },
+            ...currentRecent,
+          ].slice(0, 20);
           transaction.update(spaceRef, { recentGifts: updatedGifts });
         }
       }
-
-      // E. Issue Real-Time Transaction Notification Record
-      const notifRef = receiverRef.collection('notifications').doc();
-      transaction.set(notifRef, {
-        type: 'new_gift',
-        fromUser: { uid: verifiedSenderUid, name: senderDoc.data()?.name || 'Someone' },
-        coinAmount,
-        diamondsEarned: diamondValue,
-        giftName: giftName || 'Tip',
-        giftEmoji: giftEmoji || '🎁',
-        timestamp: FieldValue.serverTimestamp(),
-        read: false,
-      });
     });
 
     return NextResponse.json({
       success: true,
-      message: `Tip sent! The creator earned ${diamondValue.toLocaleString()} diamonds.`,
-      diamondsEarned: diamondValue,
+      message: `Successfully sent ${coinAmount} Lonkind Coins (L) (${giftName || 'Gift'} ${giftEmoji || '🎁'}). Recipient earned ₦${cashEarningsNaira.toLocaleString()} ($${cashEarningsUSD.toFixed(2)} USD).`,
     });
-
   } catch (error: any) {
-    console.error('Critical currency processing exception:', error);
-
-    if (error.message === 'SENDER_NOT_FOUND') {
-      return NextResponse.json({ error: 'Origin profile context validation failed.' }, { status: 404 });
+    console.error('Error processing gift transaction:', error);
+    if (error.message?.startsWith('INSUFFICIENT_SOLVENCY')) {
+      return NextResponse.json({ error: 'Insufficient Lonkind Coins (L) balance. Please top up your wallet.' }, { status: 400 });
     }
-    if (error.message === 'RECIPIENT_NOT_FOUND') {
-      return NextResponse.json({ error: 'Recipient location mapping failed.' }, { status: 404 });
-    }
-    if (error.message.startsWith('INSUFFICIENT_SOLVENCY')) {
-      const balance = error.message.split('_')[2];
-      return NextResponse.json({ error: `Insufficient coins. Your wallet balance is currently ${balance} units.` }, { status: 400 });
-    }
-
-    return NextResponse.json({ error: error.message || 'An unexpected internal ledger exception occurred.' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Gift processing transaction failed.' }, { status: 500 });
   }
 }

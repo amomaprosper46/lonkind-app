@@ -1,11 +1,11 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId } from '@/lib/zego';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, increment } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Coins, Loader2 } from 'lucide-react';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -32,11 +32,17 @@ interface FloatingGift {
   xPercent: number;
 }
 
-const GIFT_CATALOG = [
-  { id: 'star', name: 'Star', icon: '⭐', price: 10, color: 'from-amber-400 to-yellow-500' },
-  { id: 'heart', name: 'Heart', icon: '❤️', price: 50, color: 'from-rose-500 to-pink-500' },
-  { id: 'diamond', name: 'Diamond', icon: '💎', price: 100, color: 'from-cyan-400 to-blue-500' },
-  { id: 'crown', name: 'Crown', icon: '👑', price: 500, color: 'from-amber-300 to-amber-600' },
+export const GIFT_CATALOG = [
+  { id: 'rose', name: 'Rose', icon: '🌹', price: 10, color: 'from-pink-500 to-rose-600' },
+  { id: 'star', name: 'Star', icon: '⭐', price: 50, color: 'from-indigo-500 to-purple-600' },
+  { id: 'coffee', name: 'Coffee', icon: '☕', price: 100, color: 'from-amber-600 to-amber-800' },
+  { id: 'heart', name: 'Heart', icon: '❤️', price: 500, color: 'from-rose-600 to-red-600' },
+  { id: 'diamond', name: 'Diamond', icon: '💎', price: 1500, color: 'from-cyan-400 to-blue-600' },
+  { id: 'crown', name: 'Crown', icon: '👑', price: 5000, color: 'from-amber-400 to-yellow-600' },
+  { id: 'lion', name: 'Lion', icon: '🦁', price: 20000, color: 'from-amber-500 via-orange-600 to-yellow-500', isSuper: true },
+  { id: 'car', name: 'Sports Car', icon: '🏎️', price: 50000, color: 'from-purple-600 to-indigo-700', isSuper: true },
+  { id: 'rocket', name: 'Rocket', icon: '🚀', price: 100000, color: 'from-blue-600 to-cyan-500', isSuper: true },
+  { id: 'universe', name: 'Universe', icon: '🌌', price: 500000, color: 'from-indigo-600 via-purple-600 to-pink-600', isSuper: true },
 ];
 
 interface LiveStreamViewProps {
@@ -198,7 +204,7 @@ export default function LiveStreamView({
 
     setTimeout(() => {
       setFloatingGifts((prev) => prev.filter((g) => g.id !== giftId));
-    }, 2500);
+    }, 2800);
   };
 
   const handleSendMessage = async () => {
@@ -225,7 +231,7 @@ export default function LiveStreamView({
   };
 
   const handleSendGift = async (gift: typeof GIFT_CATALOG[0]) => {
-    // 1. Check if user has enough coins
+    // 1. Check if user has enough Lonkind Coins (L)
     if (userCoins < gift.price) {
       setRechargeModalGift(gift);
       return;
@@ -276,8 +282,8 @@ export default function LiveStreamView({
       triggerFloatingGift(gift.icon, gift.name, validUserName);
 
       toast({
-        title: `Sent ${gift.name} ${gift.icon}!`,
-        description: `Successfully sent gift worth ${gift.price} coins.`,
+        title: `Sent ${gift.name} ${gift.icon}! 🎁`,
+        description: `Sent ${gift.price} Lonkind Coins (L). Host received withdrawable balance!`,
       });
 
       setIsGiftModalOpen(false);
@@ -365,10 +371,10 @@ export default function LiveStreamView({
             style={{ left: `${gift.xPercent}%`, bottom: '20%' }}
             className="absolute flex flex-col items-center animate-float-up"
           >
-            <span className="text-5xl filter drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)]">
+            <span className="text-6xl filter drop-shadow-[0_12px_20px_rgba(0,0,0,0.6)]">
               {gift.icon}
             </span>
-            <span className="text-[10px] font-extrabold text-white bg-indigo-600/90 backdrop-blur-md px-2 py-0.5 rounded-full shadow-lg mt-1 whitespace-nowrap border border-white/20">
+            <span className="text-[10px] font-extrabold text-white bg-indigo-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-lg mt-1 whitespace-nowrap border border-white/20">
               {gift.senderName}
             </span>
           </div>
@@ -385,7 +391,7 @@ export default function LiveStreamView({
           <Button
             size="sm"
             onClick={() => setIsGiftModalOpen(true)}
-            className="ml-auto h-7 px-2.5 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-bold text-[11px] rounded-full shadow-md flex items-center gap-1.5 border border-white/20 transform hover:scale-105 transition-all"
+            className="ml-auto h-7 px-2.5 bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white font-bold text-[11px] rounded-full shadow-md flex items-center gap-1.5 border border-white/20 transform hover:scale-105 transition-all"
           >
             <Gift className="h-3.5 w-3.5" />
             Send Gift
@@ -412,8 +418,8 @@ export default function LiveStreamView({
                     {msg.senderName}
                   </span>
                   {msg.type === 'gift' ? (
-                    <span className="inline-flex items-center gap-1 text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30 text-[11px] mt-0.5">
-                      <Sparkles className="h-3 w-3 text-amber-400" />
+                    <span className="inline-flex items-center gap-1 text-indigo-200 font-bold bg-indigo-500/20 px-2 py-0.5 rounded-lg border border-indigo-500/30 text-[11px] mt-0.5">
+                      <Sparkles className="h-3 w-3 text-indigo-400" />
                       {msg.text}
                     </span>
                   ) : (
@@ -450,18 +456,18 @@ export default function LiveStreamView({
 
       {/* Send Virtual Gift Modal / Bottom Drawer */}
       {isGiftModalOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full max-w-md bg-slate-950 border border-white/15 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl animate-in slide-in-from-bottom-5 duration-200">
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full max-w-lg bg-slate-950 border border-white/15 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl animate-in slide-in-from-bottom-5 duration-200 max-h-[85vh] flex flex-col">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4 shrink-0">
               <div className="flex items-center gap-2">
-                <Gift className="h-5 w-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">Send Virtual Gift</h3>
+                <Gift className="h-5 w-5 text-indigo-400" />
+                <h3 className="font-bold text-white text-base">Send Gift</h3>
               </div>
               
-              {/* Coin Balance Badge */}
-              <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full text-xs font-bold text-amber-300">
-                <Coins className="h-3.5 w-3.5 text-amber-400" />
+              {/* Lonkind Coin Balance Badge */}
+              <div className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold text-indigo-300">
+                <span className="h-4 w-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">L</span>
                 <span>{userCoins.toLocaleString()} Coins</span>
               </div>
 
@@ -476,44 +482,51 @@ export default function LiveStreamView({
             </div>
 
             {/* Gift Cards Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 overflow-y-auto pr-1 no-scrollbar p-1 mb-3">
               {GIFT_CATALOG.map((gift) => (
                 <button
                   key={gift.id}
                   disabled={isSending}
                   onClick={() => handleSendGift(gift)}
-                  className="flex flex-col items-center p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/50 transition-all group text-center transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                  className={`flex flex-col items-center p-3 rounded-2xl bg-white/5 hover:bg-white/10 border ${
+                    gift.isSuper ? 'border-amber-400/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'border-white/10 hover:border-indigo-400/50'
+                  } transition-all group text-center transform hover:scale-105 active:scale-95 disabled:opacity-50 relative`}
                 >
+                  {gift.isSuper && (
+                    <span className="absolute -top-1.5 -right-1 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase shadow">
+                      SUPER
+                    </span>
+                  )}
                   <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
                     {gift.icon}
                   </span>
-                  <span className="font-bold text-white text-xs mb-1">{gift.name}</span>
-                  <Badge className={`bg-gradient-to-r ${gift.color} text-white font-extrabold text-[10px] px-2.5 py-0.5 rounded-full border-none shadow-sm`}>
-                    🪙 {gift.price} Coins
+                  <span className="font-bold text-white text-xs mb-1 truncate w-full">{gift.name}</span>
+                  <Badge className={`bg-gradient-to-r ${gift.color} text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full border-none shadow-sm flex items-center gap-1`}>
+                    <span className="font-black">L</span> {gift.price.toLocaleString()}
                   </Badge>
                 </button>
               ))}
             </div>
 
-            <p className="text-[11px] text-center text-slate-400">
-              Gifts send a flying animation on screen & alert everyone in chat! ✨
+            <p className="text-[11px] text-center text-slate-400 shrink-0 border-t border-white/10 pt-3">
+              Gifts send flying animations & credit the creator's Lonkind account balance instantly! 💸
             </p>
           </div>
         </div>
       )}
 
-      {/* Insufficient Coins / Recharge Prompt Modal */}
+      {/* Insufficient Lonkind Coins / Recharge Prompt Modal */}
       {rechargeModalGift && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-slate-950 border border-white/15 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
-            <div className="h-14 w-14 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
-              <Coins className="h-7 w-7 text-amber-400" />
+            <div className="h-14 w-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl font-black text-indigo-400">L</span>
             </div>
 
-            <h3 className="font-extrabold text-white text-lg mb-2">Insufficient Coins</h3>
+            <h3 className="font-extrabold text-white text-lg mb-2">Insufficient Lonkind Coins</h3>
             <p className="text-slate-300 text-xs leading-relaxed mb-6">
-              You need <strong className="text-amber-400">{rechargeModalGift.price} Coins</strong> to send <span className="text-white font-bold">{rechargeModalGift.name} {rechargeModalGift.icon}</span>, but you currently have <strong className="text-white">{userCoins.toLocaleString()} Coins</strong>.
-              Would you like to recharge your balance now?
+              You need <strong className="text-indigo-400">{rechargeModalGift.price.toLocaleString()} Lonkind Coins (L)</strong> to send <span className="text-white font-bold">{rechargeModalGift.name} {rechargeModalGift.icon}</span>, but you currently have <strong className="text-white">{userCoins.toLocaleString()} Coins</strong>.
+              Would you like to buy cheap Lonkind Coins now?
             </p>
 
             <div className="flex gap-3">
@@ -534,7 +547,7 @@ export default function LiveStreamView({
                     window.location.href = '/?view=wallet';
                   }
                 }}
-                className="w-1/2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold rounded-xl text-xs h-10 shadow-lg shadow-amber-500/20"
+                className="w-1/2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold rounded-xl text-xs h-10 shadow-lg shadow-indigo-500/20"
               >
                 Buy Coins
               </Button>
