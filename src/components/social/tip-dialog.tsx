@@ -156,7 +156,7 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
     const handlePurchaseCoins = async () => {
         setIsTipping(true);
         try {
-            const priceLocal = selectedAmount * 20; // ₦20 per coin
+            const priceLocal = selectedAmount * 10; // ₦10 per coin
             const response = await fetch('/api/paystack/initialize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

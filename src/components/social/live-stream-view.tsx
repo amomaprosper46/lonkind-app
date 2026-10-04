@@ -1,11 +1,11 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId } from '@/lib/zego';
 import { db, auth } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, increment } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2 } from 'lucide-react';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -30,6 +30,12 @@ interface FloatingGift {
   name: string;
   senderName: string;
   xPercent: number;
+}
+
+interface FloatingLike {
+  id: string;
+  xPercent: number;
+  emoji: string;
 }
 
 export const GIFT_CATALOG = [
@@ -78,8 +84,60 @@ export default function LiveStreamView({
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
   const [rechargeModalGift, setRechargeModalGift] = useState<typeof GIFT_CATALOG[0] | null>(null);
   const [floatingGifts, setFloatingGifts] = useState<FloatingGift[]>([]);
-  const [viewerCount, setViewerCount] = useState(14);
+  const [floatingLikes, setFloatingLikes] = useState<FloatingLike[]>([]);
+  const [viewerCount, setViewerCount] = useState(1);
   const [userCoins, setUserCoins] = useState(initialCoins);
+
+  // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING
+  // Adds current user to viewers collection upon entering, removes upon leaving or tab close.
+  useEffect(() => {
+    if (!roomId || !validUserId) return;
+
+    const viewerRef = doc(db, 'live_streams', roomId, 'viewers', validUserId);
+    const roomRef = doc(db, 'live_streams', roomId);
+
+    // Register active viewer entry in Firestore
+    setDoc(viewerRef, {
+      uid: validUserId,
+      name: validUserName,
+      avatarUrl: userAvatar || '',
+      joinedAt: serverTimestamp(),
+    }, { merge: true }).catch(console.error);
+
+    // Update stream status to active if host
+    if (isHost) {
+      setDoc(roomRef, {
+        status: 'active',
+        hostUid: validUserId,
+        hostName: validUserName,
+        startedAt: serverTimestamp(),
+      }, { merge: true }).catch(console.error);
+    }
+
+    // Clean up when user closes browser or tab
+    const handleBeforeUnload = () => {
+      deleteDoc(viewerRef).catch(() => {});
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      deleteDoc(viewerRef).catch(console.error);
+    };
+  }, [roomId, validUserId, validUserName, userAvatar, isHost]);
+
+  // 2. REAL-TIME VIEWERS COUNT LISTENER
+  // Counts exact real users connected to the live stream
+  useEffect(() => {
+    if (!roomId) return;
+    const viewersCol = collection(db, 'live_streams', roomId, 'viewers');
+
+    const unsubscribe = onSnapshot(viewersCol, (snapshot) => {
+      setViewerCount(Math.max(1, snapshot.size));
+    });
+
+    return () => unsubscribe();
+  }, [roomId]);
 
   // Subscribe to real-time user coin balance updates
   useEffect(() => {
@@ -95,17 +153,6 @@ export default function LiveStreamView({
     });
     return () => unsubscribe();
   }, [validUserId]);
-
-  // Dynamic viewer count simulation (-1, 0, or +1 every 4 seconds)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setViewerCount((prev) => {
-        const delta = Math.floor(Math.random() * 3) - 1;
-        return Math.max(8, prev + delta);
-      });
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Listen for stream end status from host
   useEffect(() => {
@@ -189,6 +236,21 @@ export default function LiveStreamView({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // TikTok-Style Screen Tap Floating Heart Spawner
+  const handleScreenTap = () => {
+    const emojis = ['❤️', '💖', '🔥', '💜', '✨'];
+    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+    const likeId = Math.random().toString();
+    const randomX = Math.floor(Math.random() * 25) + 70; // Float up near bottom-right (70% - 95% width)
+
+    const newLike: FloatingLike = { id: likeId, xPercent: randomX, emoji: randomEmoji };
+    setFloatingLikes((prev) => [...prev, newLike]);
+
+    setTimeout(() => {
+      setFloatingLikes((prev) => prev.filter((l) => l.id !== likeId));
+    }, 2000);
+  };
+
   const triggerFloatingGift = (icon: string, name: string, senderName: string) => {
     const giftId = Math.random().toString();
     const randomX = Math.floor(Math.random() * 60) + 20;
@@ -231,7 +293,7 @@ export default function LiveStreamView({
   };
 
   const handleSendGift = async (gift: typeof GIFT_CATALOG[0]) => {
-    // 1. Check if user has enough Lonkind Coins (L)
+    // Check if user has enough coins
     if (userCoins < gift.price) {
       setRechargeModalGift(gift);
       return;
@@ -260,7 +322,7 @@ export default function LiveStreamView({
           throw new Error(errData.error || 'Failed to send gift');
         }
       } else {
-        // Fallback local update for self-testing
+        // Fallback local update for self testing
         const userRef = doc(db, 'users', validUserId);
         await updateDoc(userRef, { coins: increment(-gift.price) });
       }
@@ -301,9 +363,15 @@ export default function LiveStreamView({
 
   const handleEndStream = async () => {
     try {
-      if (isHost && roomId) {
-        const streamRef = doc(db, 'live_streams', roomId);
-        await setDoc(streamRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true });
+      if (validUserId && roomId) {
+        // Delete viewer tracking document
+        const viewerRef = doc(db, 'live_streams', roomId, 'viewers', validUserId);
+        await deleteDoc(viewerRef).catch(() => {});
+
+        if (isHost) {
+          const streamRef = doc(db, 'live_streams', roomId);
+          await setDoc(streamRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true });
+        }
       }
     } catch (err) {
       console.error('Error ending stream:', err);
@@ -313,9 +381,13 @@ export default function LiveStreamView({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black overflow-hidden flex flex-col">
-      {/* Video Container */}
-      <div ref={containerRef} className="w-full h-full absolute inset-0" />
+    <div className="fixed inset-0 z-50 bg-black overflow-hidden flex flex-col select-none">
+      {/* Smooth Video Container */}
+      <div 
+        ref={containerRef} 
+        onClick={handleScreenTap}
+        className="w-full h-full absolute inset-0 cursor-pointer" 
+      />
 
       {/* Top Header Overlay */}
       <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-auto">
@@ -341,11 +413,11 @@ export default function LiveStreamView({
           </Badge>
         </div>
 
-        {/* Right Side: Viewer Count + End Stream / Leave Button */}
+        {/* Right Side: REAL Real-Time Viewer Count + End Stream / Leave Button */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-100 text-xs font-bold px-3 py-1.5 rounded-full shadow-xl">
             <Eye className="h-3.5 w-3.5 text-indigo-400" />
-            <span>👁 {viewerCount} viewers</span>
+            <span>👁 {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}</span>
           </div>
 
           <Button
@@ -377,6 +449,17 @@ export default function LiveStreamView({
             <span className="text-[10px] font-extrabold text-white bg-indigo-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-lg mt-1 whitespace-nowrap border border-white/20">
               {gift.senderName}
             </span>
+          </div>
+        ))}
+
+        {/* TikTok-Style Screen Tap Floating Hearts Overlay */}
+        {floatingLikes.map((like) => (
+          <div
+            key={like.id}
+            style={{ left: `${like.xPercent}%`, bottom: '15%' }}
+            className="absolute text-4xl animate-float-up filter drop-shadow-[0_5px_10px_rgba(0,0,0,0.4)]"
+          >
+            {like.emoji}
           </div>
         ))}
       </div>

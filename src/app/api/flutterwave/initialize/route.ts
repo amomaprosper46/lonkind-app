@@ -8,13 +8,13 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.
  * 1 Coin = ~₦20 NGN | ~$0.02 USD | ~0.30 GHS | ~3.00 KES | ~£0.016 GBP | ~€0.018 EUR
  */
 const CURRENCY_RATE_PER_COIN: Record<string, number> = {
-  'NGN': 20,
-  'USD': 0.02,
-  'GHS': 0.30,
-  'KES': 3.00,
-  'GBP': 0.016,
-  'EUR': 0.018,
-  'ZAR': 0.36,
+  'NGN': 10,
+  'USD': 0.01,
+  'GHS': 0.15,
+  'KES': 1.50,
+  'GBP': 0.008,
+  'EUR': 0.009,
+  'ZAR': 0.18,
 };
 
 /**
