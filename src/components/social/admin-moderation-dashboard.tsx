@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { collection, query, where, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
 import {
   Loader2,
@@ -77,19 +77,35 @@ export default function AdminModerationDashboard() {
   const fetchModerationData = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch reports (we fetch recent reports to categorize them into tabs)
-      const reportsRef = collection(db, 'reports');
-      const reportsSnap = await getDocs(query(reportsRef, limit(100)));
-      const fetchedReports = reportsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ModerationReport));
+      // Auto-ensure admin doc for admin@lonkind.com
+      if (auth.currentUser && auth.currentUser.email === 'admin@lonkind.com') {
+        await setDoc(doc(db, 'admins', auth.currentUser.uid), { addedAt: new Date() }, { merge: true }).catch(() => {});
+      }
+
+      let fetchedReports: ModerationReport[] = [];
+      let fetchedAppeals: ModerationAppeal[] = [];
+
+      // 1. Fetch reports
+      try {
+        const reportsRef = collection(db, 'reports');
+        const reportsSnap = await getDocs(query(reportsRef, limit(100)));
+        fetchedReports = reportsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ModerationReport));
+      } catch (err: any) {
+        console.warn('[Admin Dashboard] Reports query notice:', err);
+      }
 
       // 2. Fetch pending appeals
-      const appealsRef = collection(db, 'appeals');
-      const appealsSnap = await getDocs(query(appealsRef, where('status', '==', 'pending')));
-      const fetchedAppeals = appealsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ModerationAppeal));
+      try {
+        const appealsRef = collection(db, 'appeals');
+        const appealsSnap = await getDocs(query(appealsRef, where('status', '==', 'pending')));
+        fetchedAppeals = appealsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ModerationAppeal));
+      } catch (err: any) {
+        console.warn('[Admin Dashboard] Appeals query notice:', err);
+      }
 
       setReports(fetchedReports);
       setAppeals(fetchedAppeals);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load moderation data:', error);
       toast({ variant: 'destructive', title: 'Load Error', description: 'Could not fetch moderation logs from Firestore.' });
     } finally {

@@ -13,7 +13,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+         (request.auth.token != null && request.auth.token.email == 'admin@lonkind.com'));
     }
 
     /* ---------------- USERS ---------------- */
@@ -120,7 +121,14 @@ service cloud.firestore {
 
     match /reports/{reportId} {
       allow create: if isSignedIn();
-      allow read, list, delete: if isAdmin();
+      allow read, list, update, delete: if isAdmin();
+    }
+
+    /* ---------------- APPEALS ---------------- */
+
+    match /appeals/{appealId} {
+      allow create: if isSignedIn();
+      allow read, list, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     /* ---------------- GROUPS ---------------- */
