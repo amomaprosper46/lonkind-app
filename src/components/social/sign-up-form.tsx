@@ -343,11 +343,19 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
             </TabsContent>
         </Tabs>
         )}
-        <div className="mt-4 text-center text-sm">
-            Already have an account?{" "}
-            <Button variant="link" className="p-0 h-auto" onClick={onShowSignIn}>
-                Sign in
-            </Button>
+        <div className="mt-4 text-center text-sm space-y-2">
+            <div>
+                Already have an account?{" "}
+                <Button variant="link" className="p-0 h-auto" onClick={onShowSignIn}>
+                    Sign in
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+                By signing up, you agree to our{" "}
+                <a href="/terms" target="_blank" className="underline hover:text-primary">Terms of Service</a>{" "}
+                and{" "}
+                <a href="/privacy" target="_blank" className="underline hover:text-primary">Privacy Policy</a>.
+            </p>
         </div>
     </>
   );

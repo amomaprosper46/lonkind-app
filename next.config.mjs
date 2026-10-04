@@ -1,5 +1,3 @@
-
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -35,7 +33,15 @@ const nextConfig = {
       bodySizeLimit: '4.5mb',
     },
   },
+
+  async rewrites() {
+    return [
+      {
+        source: '/privacy',
+        destination: '/privacy-policy',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
-

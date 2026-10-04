@@ -454,8 +454,13 @@ function SocialHomePageInner() {
               </main>
           
               <footer className="py-6 border-t bg-background">
-                  <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-4 gap-y-2">
+                  <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-6 gap-y-2 text-sm font-medium">
                     <p>{t('footer_copyright')}</p>
+                    <span className="hidden sm:inline">•</span>
+                    <Link href="/privacy" className="hover:text-primary hover:underline">Privacy Policy</Link>
+                    <span className="hidden sm:inline">•</span>
+                    <Link href="/privacy-policy" className="hover:text-primary hover:underline">Privacy & Security</Link>
+                    <span className="hidden sm:inline">•</span>
                     <Link href="/terms" className="hover:text-primary hover:underline">Terms of Service</Link>
                   </div>
               </footer>
