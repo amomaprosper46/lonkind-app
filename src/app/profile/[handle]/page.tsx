@@ -101,10 +101,15 @@ function UserProfilePageInner() {
                     if (postsUnsubscribe) postsUnsubscribe();
     
                     const postsCollection = collection(db, "posts");
-                    const q = query(postsCollection, where("author.handle", "==", handle.toLowerCase()), orderBy("timestamp", "desc"));
+                    const q = query(postsCollection, where("author.uid", "==", userData.uid));
                     
                     postsUnsubscribe = onSnapshot(q, (postSnapshot) => {
                         const postList = postSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+                        postList.sort((a, b) => {
+                            const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
+                            const timeB = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.timestamp?.seconds ? b.timestamp.seconds * 1000 : 0);
+                            return timeB - timeA;
+                        });
                         setPosts(postList);
                         setIsLoading(false);
                     }, (error) => {

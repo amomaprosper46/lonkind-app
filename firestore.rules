@@ -188,6 +188,10 @@ service cloud.firestore {
         request.auth.uid in resource.data.participantUids;
 
       match /messages/{messageId} {
+        // Read messages
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
+
         // Create a new message
         allow create: if isSignedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
