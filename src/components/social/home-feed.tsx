@@ -7,7 +7,7 @@ import { db, storage } from '@/lib/firebase';
 import CreatePostCard from './create-post-card';
 import PostCard from './post-card';
 import SkeletonCard from './skeleton-card';
-import { Loader2, Users } from 'lucide-react';
+import { Loader2, Users, Radio, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Post, ReactionType } from './post-card';
 import type { CurrentUser } from './social-dashboard';
@@ -16,6 +16,8 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/lib/errors
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Badge } from '../ui/badge';
 import Link from 'next/link';
 import ngeohash from 'ngeohash';
 import { compressImage } from '@/lib/image-compression';
@@ -40,6 +42,8 @@ interface HomeFeedProps {
     blockedUids?: Set<string>;
     activeHashtag?: string | null;
     onClearHashtag?: () => void;
+    onWatchLive?: (hostUid: string) => void;
+    onGoLive?: () => void;
 }
 
 const getUserLocation = (): Promise<GeolocationPosition> => {
@@ -63,12 +67,28 @@ export default function HomeFeed({
     userReactions,
     savedPostIds,
     activeHashtag,
-    onClearHashtag
+    onClearHashtag,
+    onWatchLive,
+    onGoLive
 }: HomeFeedProps) {
     const [followingPosts, setFollowingPosts] = useState<Post[]>([]);
     const [forYouPosts, setForYouPosts] = useState<Post[]>([]);
+    const [activeStreams, setActiveStreams] = useState<any[]>([]);
     const [feedType, setFeedType] = useState<'foryou' | 'following'>('foryou');
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+
+    // Real-time listener for active live streams to display on home feed
+    useEffect(() => {
+        const streamsCol = collection(db, 'live_streams');
+        const q = query(streamsCol, where('status', '==', 'active'));
+        const unsub = onSnapshot(q, (snapshot) => {
+            const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            setActiveStreams(list);
+        }, (err) => {
+            console.warn("Active streams listener notice:", err);
+        });
+        return () => unsub();
+    }, []);
     const [isCreatingPost, setIsCreatingPost] = useState(false);
     const [newPostContent, setNewPostContent] = useState('');
     const [newPostMedia, setNewPostMedia] = useState<NewPostMedia | null>(null);
@@ -365,6 +385,67 @@ export default function HomeFeed({
                     <span>↑ {newPostsAvailableCount} New Post{newPostsAvailableCount > 1 ? 's' : ''} - Tap to view</span>
                 </button>
             )}
+
+            {/* Active Live Streams Carousel Banner on Feed */}
+            <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-rose-950/80 via-red-950/50 to-slate-900 border border-rose-500/30 shadow-xl">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                        </span>
+                        <span className="font-extrabold text-sm text-white uppercase tracking-wider">Live Broadcasts</span>
+                        {activeStreams.length > 0 && (
+                            <Badge className="bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">{activeStreams.length} LIVE</Badge>
+                        )}
+                    </div>
+                    {onGoLive && (
+                        <Button
+                            size="sm"
+                            onClick={onGoLive}
+                            className="h-8 px-3 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-md flex items-center gap-1.5"
+                        >
+                            <Radio className="h-3.5 w-3.5" />
+                            Start Live
+                        </Button>
+                    )}
+                </div>
+
+                {activeStreams.length > 0 ? (
+                    <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-1">
+                        {activeStreams.map((stream) => (
+                            <div
+                                key={stream.id}
+                                onClick={() => onWatchLive && onWatchLive(stream.hostUid || stream.id)}
+                                className="flex-shrink-0 flex items-center gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition-all hover:scale-[1.02] group"
+                            >
+                                <div className="relative">
+                                    <Avatar className="h-11 w-11 border-2 border-rose-500 p-0.5 shadow-md">
+                                        <AvatarImage src={stream.hostAvatar} alt={stream.hostName || 'Host'} />
+                                        <AvatarFallback className="bg-rose-600 text-white text-xs font-bold">
+                                            {stream.hostName ? stream.hostName.charAt(0) : 'L'}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-rose-600 text-[9px] font-extrabold text-white px-1.5 py-0.2 rounded-full uppercase">LIVE</span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
+                                        {stream.hostName || 'Live Streamer'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                        <Eye className="h-3 w-3 text-rose-400" /> Watch Stream
+                                    </span>
+                                </div>
+                                <Button size="sm" className="h-7 px-2.5 text-[11px] font-bold bg-rose-600 group-hover:bg-rose-500 text-white rounded-lg ml-1">
+                                    Watch
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-xs text-slate-400 italic">No one is currently streaming live. Tap "Start Live" to go live on Lonkind!</p>
+                )}
+            </div>
 
             <CreatePostCard
                 currentUser={currentUser}

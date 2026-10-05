@@ -283,6 +283,38 @@ export default function SettingsView({
           </div>
         </Card>
 
+        {/* Legal Policies & Community Rules */}
+        <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
+          <div className="bg-muted/30 px-4 py-2 border-b">
+            <h2 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+              <Shield className="h-4 w-4 text-indigo-500" /> Legal Policies & Platform Rules
+            </h2>
+          </div>
+          <div className="divide-y divide-border/50">
+            <a href="/privacy" target="_blank" className="p-4 flex items-center justify-between hover:bg-muted/20 transition-colors block">
+              <div>
+                <p className="font-semibold text-base text-foreground">Privacy Policy</p>
+                <p className="text-sm text-muted-foreground">Detailed disclosure on data collection and security.</p>
+              </div>
+              <Button variant="outline" size="sm">View Policy</Button>
+            </a>
+            <a href="/terms" target="_blank" className="p-4 flex items-center justify-between hover:bg-muted/20 transition-colors block">
+              <div>
+                <p className="font-semibold text-base text-foreground">Terms of Service</p>
+                <p className="text-sm text-muted-foreground">Rules governing service usage and rights.</p>
+              </div>
+              <Button variant="outline" size="sm">View Terms</Button>
+            </a>
+            <a href="/rules" target="_blank" className="p-4 flex items-center justify-between hover:bg-muted/20 transition-colors block">
+              <div>
+                <p className="font-semibold text-base text-foreground">Community Guidelines & Rules</p>
+                <p className="text-sm text-muted-foreground">Safety rules, content standards, and moderation guidelines.</p>
+              </div>
+              <Button variant="outline" size="sm">View Guidelines</Button>
+            </a>
+          </div>
+        </Card>
+
         {/* Wallet */}
         <Card className="rounded-none sm:rounded-lg shadow-sm border-x-0 sm:border-x">
           <div className="bg-muted/30 px-4 py-2 border-b">

@@ -226,6 +226,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [currentView, setCurrentView] = useState<View>('home');
   const [initialConversationId, setInitialConversationId] = useState<string | undefined>(undefined);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [selectedLiveHostUid, setSelectedLiveHostUid] = useState<string | null>(null);
   
   const [userReactions, setUserReactions] = useState<Map<string, ReactionType>>(new Map());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
@@ -1246,6 +1247,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onMuteUser={handleMuteUser}
                                 activeHashtag={activeHashtag}
                                 onClearHashtag={handleClearHashtag}
+                                onWatchLive={(hostUid) => {
+                                    setSelectedLiveHostUid(hostUid);
+                                    changeView('live');
+                                }}
+                                onGoLive={() => {
+                                    setSelectedLiveHostUid(null);
+                                    changeView('live');
+                                }}
                             />
                         )}
                         {currentView === 'explore' && (
@@ -1316,12 +1325,15 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         {currentView === 'admin' && (currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind') && <AdminDashboardView />}
                         {currentView === 'live' && (
                             <LiveStreamView
-                                hostUid={currentUser?.uid || ''}
+                                hostUid={selectedLiveHostUid || currentUser?.uid || ''}
                                 userId={currentUser?.uid || ''}
                                 userName={currentUser?.name || 'User'}
                                 userAvatar={currentUser?.avatarUrl || ''}
-                                isHost={true}
-                                onLeave={() => changeView('home')}
+                                isHost={!selectedLiveHostUid || selectedLiveHostUid === currentUser?.uid}
+                                onLeave={() => {
+                                    setSelectedLiveHostUid(null);
+                                    changeView('home');
+                                }}
                                 userCoins={currentUser?.coins || 0}
                                 onGoToWallet={() => changeView('wallet')}
                             />
@@ -1456,7 +1468,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <div className="flex items-center justify-between px-2 h-14 overflow-x-auto no-scrollbar gap-1">
                         <MobileNavItem icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} title="Home" />
                         <MobileNavItem icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} title="Explore" />
-                        <MobileNavItem icon={Radio} active={currentView === 'groups'} onClick={() => changeView('groups')} title="Groups" />
+                        <MobileNavItem icon={Radio} active={currentView === 'live'} onClick={() => { setSelectedLiveHostUid(null); changeView('live'); }} title="Go Live" />
                         <MobileNavItem icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} title="Videos" />
                         
                         <div className="relative -mt-4 mx-1 shrink-0">
@@ -1488,7 +1500,10 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 <DropdownMenuItem onClick={() => changeView('story-writer')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Lightbulb className="mr-2 h-4 w-4" /> Automated Storyteller</DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-slate-800" />
                                 <DropdownMenuItem onClick={() => changeView('leaderboard')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Trophy className="mr-2 h-4 w-4 text-amber-400" /> Leaderboard</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('settings')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Cog className="mr-2 h-4 w-4" /> Settings</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => changeView('settings')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Cog className="mr-2 h-4 w-4 text-indigo-400" /> Settings</DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-slate-800" />
+                                <DropdownMenuItem onClick={() => window.open('/privacy', '_blank')} className="cursor-pointer py-2.5 rounded-xl hover:bg-slate-800 text-xs text-slate-400"><FileText className="mr-2 h-3.5 w-3.5" /> Privacy Policy</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => window.open('/terms', '_blank')} className="cursor-pointer py-2.5 rounded-xl hover:bg-slate-800 text-xs text-slate-400"><FileText className="mr-2 h-3.5 w-3.5" /> Terms of Service</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
