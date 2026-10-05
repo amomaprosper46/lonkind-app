@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
@@ -87,6 +87,8 @@ export default function LiveStreamView({
   const [floatingLikes, setFloatingLikes] = useState<FloatingLike[]>([]);
   const [viewerCount, setViewerCount] = useState(1);
   const [userCoins, setUserCoins] = useState(initialCoins);
+  const [entranceBanner, setEntranceBanner] = useState<{ name: string; avatarUrl?: string } | null>(null);
+  const [isCoHostRequested, setIsCoHostRequested] = useState(false);
 
   // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING
   // Adds current user to viewers collection upon entering, removes upon leaving or tab close.
@@ -126,18 +128,27 @@ export default function LiveStreamView({
     };
   }, [roomId, validUserId, validUserName, userAvatar, isHost]);
 
-  // 2. REAL-TIME VIEWERS COUNT LISTENER
-  // Counts exact real users connected to the live stream
+  // 2. REAL-TIME VIEWERS COUNT & ENTRANCE BANNER LISTENER
   useEffect(() => {
     if (!roomId) return;
     const viewersCol = collection(db, 'live_streams', roomId, 'viewers');
 
     const unsubscribe = onSnapshot(viewersCol, (snapshot) => {
       setViewerCount(Math.max(1, snapshot.size));
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' && change.doc.id !== validUserId) {
+          const data = change.doc.data();
+          if (data.name) {
+            setEntranceBanner({ name: data.name, avatarUrl: data.avatarUrl });
+            setTimeout(() => setEntranceBanner(null), 3500);
+          }
+        }
+      });
     });
 
     return () => unsubscribe();
-  }, [roomId]);
+  }, [roomId, validUserId]);
 
   // Subscribe to real-time user coin balance updates
   useEffect(() => {
@@ -413,8 +424,43 @@ export default function LiveStreamView({
           </Badge>
         </div>
 
-        {/* Right Side: REAL Real-Time Viewer Count + End Stream / Leave Button */}
+        {/* Right Side: REAL Real-Time Viewer Count + Co-Host Seat Button + End Stream / Leave Button */}
         <div className="flex items-center gap-2">
+          {!isHost ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                const nextState = !isCoHostRequested;
+                setIsCoHostRequested(nextState);
+                toast({
+                  title: nextState ? '✨ Co-Host Request Sent!' : 'Co-Host Request Canceled',
+                  description: nextState ? 'The host will review your request to join split-screen.' : 'Your guest seat request was removed.',
+                });
+              }}
+              className={`h-9 px-3 text-xs font-bold rounded-full shadow-xl transition-all border border-emerald-400/30 ${
+                isCoHostRequested
+                  ? 'bg-emerald-700 text-white'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }`}
+            >
+              {isCoHostRequested ? 'Requested ✓' : 'Request Co-Host'}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => {
+                toast({
+                  title: 'Co-Host Guest Seat',
+                  description: 'No pending guest requests. Viewers can tap "Request Co-Host" to join.',
+                });
+              }}
+              className="h-9 px-3 text-xs font-bold rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl flex items-center gap-1 border border-emerald-400/30"
+            >
+              <span>Co-Host Seats</span>
+              <Badge className="bg-white text-emerald-800 font-extrabold text-[10px] px-1.5 py-0 rounded-full">0</Badge>
+            </Button>
+          )}
+
           <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-100 text-xs font-bold px-3 py-1.5 rounded-full shadow-xl">
             <Eye className="h-3.5 w-3.5 text-indigo-400" />
             <span>👁 {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}</span>
@@ -434,6 +480,14 @@ export default function LiveStreamView({
           </Button>
         </div>
       </div>
+
+      {/* Slide-In Viewer Entrance Banner */}
+      {entranceBanner && (
+        <div className="absolute top-20 left-4 z-40 bg-emerald-600/95 text-white font-extrabold text-xs backdrop-blur-md shadow-2xl rounded-full px-4 py-2 flex items-center gap-2 border border-emerald-400/40 animate-in slide-in-from-left duration-300">
+          <span className="text-base">✨</span>
+          <span><strong>@{entranceBanner.name}</strong> joined the live!</span>
+        </div>
+      )}
 
       {/* Floating Animated Flying Gifts Overlay */}
       <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">

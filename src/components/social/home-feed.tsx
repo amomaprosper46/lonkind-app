@@ -113,6 +113,9 @@ export default function HomeFeed({
         fetchFollowing();
     }, [currentUser]);
 
+    const [newPostsAvailableCount, setNewPostsAvailableCount] = useState(0);
+    const initialLoadRef = React.useRef(false);
+
     useEffect(() => {
         if (followingUids === null) {
             setIsLoadingPosts(true);
@@ -150,30 +153,34 @@ export default function HomeFeed({
         });
 
         // 2. Listen for "For You" Posts (Algorithmic)
-        // We pull the most recent 100 global posts and sort them client-side by our Engagement Algorithm
         const forYouQuery = query(
             postsCollection,
             where('groupId', '==', null), // Only show non-group posts on main feeds
             orderBy("timestamp", "desc"),
-            // Limit to recent to avoid massive client-side load, in production this would be a Cloud Function
             where("timestamp", ">=", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)) // Last 14 days
         );
 
         const unsubForYou = onSnapshot(forYouQuery, (querySnapshot) => {
             const postList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-            // Sort by algorithm
             const sortedList = postList.sort((a, b) => calculateScore(b) - calculateScore(a));
+
+            if (initialLoadRef.current && postList.length > forYouPosts.length && forYouPosts.length > 0) {
+                const diff = postList.length - forYouPosts.length;
+                setNewPostsAvailableCount(prev => prev + diff);
+            } else {
+                initialLoadRef.current = true;
+            }
+
             setForYouPosts(sortedList);
         }, (serverError: any) => {
              console.error("For You listener error:", serverError);
         });
 
-
         return () => {
             unsubFollowing();
             unsubForYou();
         };
-    }, [followingUids, currentUser.uid, calculateScore]);
+    }, [followingUids, currentUser.uid, calculateScore, forYouPosts.length]);
 
     const [hashtagDbPosts, setHashtagDbPosts] = useState<Post[]>([]);
     const [isLoadingHashtag, setIsLoadingHashtag] = useState(false);
@@ -346,7 +353,19 @@ export default function HomeFeed({
 
 
     return (
-        <main className="col-span-12 md:col-span-8 lg:col-span-6">
+        <main className="col-span-12 md:col-span-8 lg:col-span-6 relative">
+            {newPostsAvailableCount > 0 && (
+                <button
+                    onClick={() => {
+                        setNewPostsAvailableCount(0);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-5 py-2.5 rounded-full shadow-2xl transition-all border border-emerald-400/40 flex items-center gap-2 text-sm animate-bounce cursor-pointer"
+                >
+                    <span>↑ {newPostsAvailableCount} New Post{newPostsAvailableCount > 1 ? 's' : ''} - Tap to view</span>
+                </button>
+            )}
+
             <CreatePostCard
                 currentUser={currentUser}
                 newPostContent={newPostContent}

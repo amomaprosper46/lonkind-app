@@ -72,8 +72,17 @@ function MessageBubble({ msg, user, setSelectedMessage, setActionMenuOpen, handl
           <audio controls src={msg.audioUrl} className="h-10" />
         )}
         {msg.timestamp && (
-          <p className={`text-xs mt-1 text-right ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-            {new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          <p className={`text-xs mt-1 text-right flex items-center justify-end gap-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+            <span>{new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            {isOwn && (
+              <span className="ml-1 inline-flex items-center" title={msg.read ? 'Read' : 'Delivered'}>
+                {msg.read ? (
+                  <span className="text-emerald-400 font-extrabold text-xs tracking-tighter">✓✓</span>
+                ) : (
+                  <span className="text-primary-foreground/70 text-xs">✓</span>
+                )}
+              </span>
+            )}
           </p>
         )}
         {'editedAt' in msg && (
