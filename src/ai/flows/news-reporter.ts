@@ -99,6 +99,52 @@ export const autonomousNewsReporter = ai.defineFlow(
       comments: 0,
     });
 
-    return { success: true, postId: newPostRef.id };
+    // D. Systematic Twilio Auto Messaging Broadcast
+    let twilioBroadcastResult = null;
+    try {
+      // Import Twilio helper dynamically
+      const { broadcastTwilioNewsAlert } = await import('@/lib/twilio');
+
+      // Fetch subscribed phone numbers from Firestore (or fallback to test recipients)
+      const subscribersSnap = await db.collection('users')
+        .where('newsSubscribed', '==', true)
+        .limit(50)
+        .get();
+
+      const phoneNumbers: string[] = [];
+      subscribersSnap.forEach(doc => {
+        const phone = doc.data().phoneNumber || doc.data().phone;
+        if (phone) phoneNumbers.push(phone);
+      });
+
+      if (phoneNumbers.length > 0) {
+        twilioBroadcastResult = await broadcastTwilioNewsAlert(
+          phoneNumbers,
+          'Tech Breaking Update',
+          postContent.trim(),
+          'sms'
+        );
+      }
+
+      // Log Twilio systematic bot event
+      await db.collection('twilio_bot_logs').add({
+        botName: 'Auto News Reporter Bot',
+        action: 'news_post_and_broadcast',
+        postId: newPostRef.id,
+        content: postContent.trim(),
+        recipientsCount: phoneNumbers.length,
+        broadcastSummary: twilioBroadcastResult,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (twilioErr: any) {
+      console.warn('Twilio news broadcast warning:', twilioErr?.message);
+    }
+
+    return { 
+      success: true, 
+      postId: newPostRef.id,
+      postContent: postContent.trim(),
+      twilioBroadcast: twilioBroadcastResult 
+    };
   }
 );

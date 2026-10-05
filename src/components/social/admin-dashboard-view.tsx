@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminModerationDashboard from './admin-moderation-dashboard';
 import AdminUserManagement from './admin-user-management';
+import AutoNewsBotView from './auto-news-bot-view';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { getCountFromServer } from 'firebase/firestore';
@@ -507,39 +508,9 @@ export default function AdminDashboardView() {
                     </div>
                 </TabsContent>
 
-                {/* ── AI Tools Tab ── */}
-                <TabsContent value="tools">
-                    <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white shadow-xl border border-blue-500/30">
-                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div>
-                                <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-300 border border-blue-500/30 mb-2">
-                                    <Sparkles className="h-3.5 w-3.5 text-blue-400 animate-pulse" />
-                                    Autonomous AI Command Center
-                                </div>
-                                <h3 className="text-2xl font-extrabold flex items-center gap-2">
-                                    <Newspaper className="h-6 w-6 text-blue-400" />
-                                    Lonkind News Reporter Bot
-                                </h3>
-                                <p className="text-sm text-slate-300 mt-1 max-w-xl">
-                                    Powered by <strong>Serper API</strong> &amp; <strong>Google Gemini 3.5 Flash</strong>. Automatically broadcasts live tech &amp; startup updates to the global feed every 6 hours.
-                                </p>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-                                <div className="bg-white/5 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 text-center">
-                                    <div className="text-[11px] font-semibold text-blue-300">Schedule Cadence</div>
-                                    <div className="text-sm font-bold text-white">0 */6 * * * (6 hrs)</div>
-                                </div>
-                                <Button
-                                    onClick={handleRunNewsReporter}
-                                    disabled={isRunningNews}
-                                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-6 py-6 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
-                                >
-                                    {isRunningNews ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-white" />}
-                                    <span>{isRunningNews ? 'Broadcasting...' : 'Trigger News Now'}</span>
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
+                {/* ── AI & Twilio Tools Tab ── */}
+                <TabsContent value="tools" className="space-y-6">
+                    <AutoNewsBotView />
                 </TabsContent>
             </Tabs>
         </Card>
