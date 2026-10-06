@@ -154,6 +154,9 @@ export default function LiveStreamView({
   const [userCoins, setUserCoins] = useState(initialCoins);
   const [entranceBanner, setEntranceBanner] = useState<{ name: string; avatarUrl?: string } | null>(null);
   const [isCoHostRequested, setIsCoHostRequested] = useState(false);
+  const [isCoHostAccepted, setIsCoHostAccepted] = useState(false);
+  const [coHostRequests, setCoHostRequests] = useState<Array<{ id: string; uid: string; name: string; avatarUrl?: string; status: string }>>([]);
+  const [isHostRequestsModalOpen, setIsHostRequestsModalOpen] = useState(false);
   const [activeSuperGift, setActiveSuperGift] = useState<{ icon: string; name: string; senderName: string } | null>(null);
 
   // Lonkind 1v1 PK Battle State
@@ -226,6 +229,81 @@ export default function LiveStreamView({
     return () => unsubscribe();
   }, [roomId, validUserId]);
 
+  // 3. REAL-TIME CO-HOST REQUESTS & ACCEPTANCE LISTENER
+  useEffect(() => {
+    if (!roomId || !validUserId) return;
+    const reqsCol = collection(db, 'live_streams', roomId, 'cohost_requests');
+
+    const unsubscribe = onSnapshot(reqsCol, (snapshot) => {
+      const reqList: any[] = [];
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        reqList.push({ id: docSnap.id, ...data });
+
+        // If viewer's request was accepted by host
+        if (!isHost && docSnap.id === validUserId) {
+          if (data.status === 'accepted' && !isCoHostAccepted) {
+            setIsCoHostAccepted(true);
+            toast({
+              title: '🎉 Co-Host Request Accepted!',
+              description: 'The host approved your request! You are now live on split-screen.',
+            });
+          }
+        }
+      });
+      setCoHostRequests(reqList);
+    });
+
+    return () => unsubscribe();
+  }, [roomId, validUserId, isHost, isCoHostAccepted]);
+
+  const handleToggleCoHostRequest = async () => {
+    if (!roomId || !validUserId) return;
+    const reqRef = doc(db, 'live_streams', roomId, 'cohost_requests', validUserId);
+
+    if (isCoHostRequested) {
+      await deleteDoc(reqRef).catch(console.error);
+      setIsCoHostRequested(false);
+      toast({
+        title: 'Co-Host Request Canceled',
+        description: 'Your guest seat request was removed.',
+      });
+    } else {
+      await setDoc(reqRef, {
+        uid: validUserId,
+        name: validUserName,
+        avatarUrl: userAvatar || '',
+        status: 'pending',
+        requestedAt: serverTimestamp(),
+      });
+      setIsCoHostRequested(true);
+      toast({
+        title: '✨ Co-Host Request Sent!',
+        description: 'The host will review your request to bring you on live split-screen.',
+      });
+    }
+  };
+
+  const handleAcceptCoHostRequest = async (reqUid: string, reqName: string) => {
+    if (!roomId) return;
+    const reqRef = doc(db, 'live_streams', roomId, 'cohost_requests', reqUid);
+    await updateDoc(reqRef, { status: 'accepted' });
+    toast({
+      title: `Approved @${reqName}! 🎉`,
+      description: `Viewer @${reqName} is now joining live split-screen!`,
+    });
+  };
+
+  const handleDeclineCoHostRequest = async (reqUid: string) => {
+    if (!roomId) return;
+    const reqRef = doc(db, 'live_streams', roomId, 'cohost_requests', reqUid);
+    await updateDoc(reqRef, { status: 'declined' });
+    toast({
+      title: 'Request Declined',
+      description: 'Co-Host seat request was declined.',
+    });
+  };
+
   // Subscribe to real-time user coin balance updates
   useEffect(() => {
     if (!validUserId) return;
@@ -253,7 +331,7 @@ export default function LiveStreamView({
     return () => unsubscribe();
   }, [roomId, isHost, onLeave]);
 
-  // ZegoCloud video stream initialization
+  // ZegoCloud video stream initialization with Cross-Platform PC & Mobile Co-Host scenario
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -268,19 +346,23 @@ export default function LiveStreamView({
 
     const zp = ZegoUIKitPrebuilt.create(kitToken);
 
+    const currentRole = isHost
+      ? ZegoUIKitPrebuilt.Host
+      : isCoHostAccepted
+      ? ZegoUIKitPrebuilt.Cohost
+      : ZegoUIKitPrebuilt.Audience;
+
     zp.joinRoom({
       container: containerRef.current,
       scenario: {
         mode: ZegoUIKitPrebuilt.LiveStreaming,
         config: {
-          role: isHost
-            ? ZegoUIKitPrebuilt.Host
-            : ZegoUIKitPrebuilt.Audience,
+          role: currentRole,
         },
       },
-      showPreJoinView: isHost,
-      turnOnCameraWhenJoining: isHost,
-      turnOnMicrophoneWhenJoining: isHost,
+      showPreJoinView: isHost || isCoHostAccepted,
+      turnOnCameraWhenJoining: isHost || isCoHostAccepted,
+      turnOnMicrophoneWhenJoining: isHost || isCoHostAccepted,
       showUserList: false,
       onLeaveRoom: () => {
         handleEndStream();
@@ -290,7 +372,7 @@ export default function LiveStreamView({
     return () => {
       try { zp.destroy(); } catch (_) {}
     };
-  }, [roomId, validUserId, validUserName, isHost]);
+  }, [roomId, validUserId, validUserName, isHost, isCoHostAccepted]);
 
   // Firestore real-time live chat & gift listener
   useEffect(() => {
@@ -535,35 +617,27 @@ export default function LiveStreamView({
           {!isHost ? (
             <Button
               size="sm"
-              onClick={() => {
-                const nextState = !isCoHostRequested;
-                setIsCoHostRequested(nextState);
-                toast({
-                  title: nextState ? '✨ Co-Host Request Sent!' : 'Co-Host Request Canceled',
-                  description: nextState ? 'The host will review your request to join split-screen.' : 'Your guest seat request was removed.',
-                });
-              }}
+              onClick={handleToggleCoHostRequest}
               className={`h-9 px-3 text-xs font-bold rounded-full shadow-xl transition-all border border-emerald-400/30 ${
-                isCoHostRequested
+                isCoHostAccepted
+                  ? 'bg-emerald-500 text-white animate-pulse'
+                  : isCoHostRequested
                   ? 'bg-emerald-700 text-white'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white'
               }`}
             >
-              {isCoHostRequested ? 'Requested ✓' : 'Request Co-Host'}
+              {isCoHostAccepted ? 'Co-Host Active 🎙️' : isCoHostRequested ? 'Requested ✓' : 'Request Co-Host'}
             </Button>
           ) : (
             <Button
               size="sm"
-              onClick={() => {
-                toast({
-                  title: 'Co-Host Guest Seat',
-                  description: 'No pending guest requests. Viewers can tap "Request Co-Host" to join.',
-                });
-              }}
+              onClick={() => setIsHostRequestsModalOpen(true)}
               className="h-9 px-3 text-xs font-bold rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl flex items-center gap-1 border border-emerald-400/30"
             >
               <span>Co-Host Seats</span>
-              <Badge className="bg-white text-emerald-800 font-extrabold text-[10px] px-1.5 py-0 rounded-full">0</Badge>
+              <Badge className="bg-white text-emerald-800 font-extrabold text-[10px] px-1.5 py-0 rounded-full">
+                {coHostRequests.filter(r => r.status === 'pending').length}
+              </Badge>
             </Button>
           )}
 
@@ -948,6 +1022,70 @@ export default function LiveStreamView({
               >
                 Buy Coins
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Host Co-Host Seat Management Modal */}
+      {isHostRequestsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-950 border border-white/15 rounded-3xl p-5 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+              <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                <span>✨ Co-Host Guest Requests</span>
+                <Badge className="bg-emerald-600 text-white font-black text-xs px-2 py-0.5">
+                  {coHostRequests.filter(r => r.status === 'pending').length} pending
+                </Badge>
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsHostRequestsModalOpen(false)}
+                className="h-8 w-8 text-slate-400 hover:text-white rounded-full"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 no-scrollbar">
+              {coHostRequests.filter(r => r.status === 'pending').length === 0 ? (
+                <p className="text-slate-400 text-xs text-center py-6">
+                  No pending guest requests right now. Viewers on phone or PC can tap "Request Co-Host" to join your live!
+                </p>
+              ) : (
+                coHostRequests.filter(r => r.status === 'pending').map((req) => (
+                  <div key={req.id} className="flex items-center justify-between bg-white/5 border border-white/10 p-3 rounded-2xl">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="h-9 w-9 border border-emerald-400/40">
+                        <AvatarImage src={req.avatarUrl} alt={req.name} />
+                        <AvatarFallback className="bg-emerald-600 text-white text-xs">{req.name ? req.name.charAt(0) : 'U'}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-white">@{req.name}</span>
+                        <span className="text-[10px] text-emerald-400 font-medium">Wants to join split-screen</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => handleDeclineCoHostRequest(req.uid)}
+                        variant="ghost"
+                        className="h-8 px-2.5 text-xs text-rose-400 hover:bg-rose-500/20 rounded-xl font-bold"
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAcceptCoHostRequest(req.uid, req.name)}
+                        className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-md"
+                      >
+                        Accept ✓
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
