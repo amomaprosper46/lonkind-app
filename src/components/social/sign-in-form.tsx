@@ -18,7 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPhoneNumber, signInWithCustomToken, ConfirmationResult } from 'firebase/auth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { countries } from '@/lib/countries';
 import { Separator } from '../ui/separator';
@@ -61,6 +61,7 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [showAdminReset, setShowAdminReset] = useState(false);
   const [isResettingAdmin, setIsResettingAdmin] = useState(false);
+  const [phoneForOtp, setPhoneForOtp] = useState('');
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -146,38 +147,33 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
 
   async function onPhoneSubmit(data: z.infer<typeof phoneFormSchema>) {
     setIsLoading(true);
-
-    if (data.deliveryMethod === 'whatsapp') {
-        toast({
-            title: 'Coming Soon!',
-            description: `WhatsApp delivery is not yet available. Please select another method.`,
-        });
-        setIsLoading(false);
-        return;
-    }
-    
-    if (data.deliveryMethod === 'notification') {
-        // Simulate sending a notification. In a real app, this would use FCM.
-        console.log("Simulating sending a push notification for verification...");
-        toast({
-            title: 'In-App Notification Sent',
-            description: `A verification code has been sent as a Lonkind notification. For this demo, we'll proceed with SMS.`,
-        });
-    }
+    const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
+    setPhoneForOtp(fullPhoneNumber);
 
     try {
-      const verifier = window.recaptchaVerifier;
-      if (!verifier) {
-          throw new Error('Recaptcha verifier not initialized');
+      const res = await fetch('/api/twilio/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: fullPhoneNumber,
+          channel: data.deliveryMethod === 'whatsapp' ? 'whatsapp' : 'sms',
+        }),
+      });
+
+      const resData = await res.json();
+
+      if (!res.ok || resData.error) {
+        throw new Error(resData.error || 'Could not send verification code via Twilio.');
       }
-      const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
-      const confirmationResult = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
-      window.confirmationResult = confirmationResult;
+
       setShowCodeForm(true);
-      toast({ title: "Verification code sent!", description: `A code has been sent via SMS to ${fullPhoneNumber}.` });
-    } catch(error) {
-        console.error("Phone auth error: ", error);
-        toast({ variant: 'destructive', title: 'Could not send code', description: 'Please check the phone number and try again.'});
+      toast({
+        title: "📱 Verification Code Sent!",
+        description: resData.message || `A code has been sent via Twilio to ${fullPhoneNumber}.`,
+      });
+    } catch(error: any) {
+        console.error("Twilio Phone auth error: ", error);
+        toast({ variant: 'destructive', title: 'Could not send code', description: error.message || 'Please check the phone number and try again.'});
     } finally {
         setIsLoading(false);
     }
@@ -186,16 +182,29 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
   async function onCodeSubmit(data: z.infer<typeof codeFormSchema>) {
       setIsLoading(true);
       try {
-          const confirmationResult = window.confirmationResult;
-          if (!confirmationResult) {
-              throw new Error('No confirmation result found.');
+          const res = await fetch('/api/twilio/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phoneNumber: phoneForOtp,
+              code: data.code,
+            }),
+          });
+
+          const resData = await res.json();
+
+          if (!res.ok || resData.error || !resData.customToken) {
+            throw new Error(resData.error || 'Verification failed.');
           }
-          await confirmationResult.confirm(data.code);
-          toast({ title: 'Signed In!', description: 'Welcome back!'});
+
+          // Sign in using custom token
+          await signInWithCustomToken(auth, resData.customToken);
+
+          toast({ title: '🎉 Verified & Signed In!', description: 'Welcome to Lonkind!'});
           onSignIn();
-      } catch(error) {
+      } catch(error: any) {
            console.error("Code verification error: ", error);
-           toast({ variant: 'destructive', title: 'Verification Failed', description: 'The code you entered is invalid. Please try again.'});
+           toast({ variant: 'destructive', title: 'Verification Failed', description: error.message || 'The code you entered is invalid. Please try again.'});
       } finally {
            setIsLoading(false);
       }

@@ -89,6 +89,7 @@ export default function LiveStreamView({
   const [userCoins, setUserCoins] = useState(initialCoins);
   const [entranceBanner, setEntranceBanner] = useState<{ name: string; avatarUrl?: string } | null>(null);
   const [isCoHostRequested, setIsCoHostRequested] = useState(false);
+  const [activeSuperGift, setActiveSuperGift] = useState<{ icon: string; name: string; senderName: string } | null>(null);
 
   // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING
   // Adds current user to viewers collection upon entering, removes upon leaving or tab close.
@@ -274,6 +275,12 @@ export default function LiveStreamView({
     };
 
     setFloatingGifts((prev) => [...prev, newGift]);
+
+    // Trigger TikTok Super Gift Banner Animation for high-tier gifts
+    setActiveSuperGift({ icon, name, senderName });
+    setTimeout(() => {
+      setActiveSuperGift((current) => (current?.name === name ? null : current));
+    }, 4500);
 
     setTimeout(() => {
       setFloatingGifts((prev) => prev.filter((g) => g.id !== giftId));
@@ -486,6 +493,20 @@ export default function LiveStreamView({
         <div className="absolute top-20 left-4 z-40 bg-emerald-600/95 text-white font-extrabold text-xs backdrop-blur-md shadow-2xl rounded-full px-4 py-2 flex items-center gap-2 border border-emerald-400/40 animate-in slide-in-from-left duration-300">
           <span className="text-base">✨</span>
           <span><strong>@{entranceBanner.name}</strong> joined the live!</span>
+        </div>
+      )}
+
+      {/* TikTok-Style Animated Super Gift Screen Banner */}
+      {activeSuperGift && (
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none animate-in zoom-in-75 duration-300">
+          <div className="relative px-6 py-3 rounded-full bg-gradient-to-r from-amber-500 via-orange-600 to-yellow-500 text-white font-black text-sm shadow-[0_0_35px_rgba(245,158,11,0.8)] border-2 border-amber-300 flex items-center gap-3">
+            <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-amber-100 uppercase tracking-widest font-black">SUPER GIFT DISPATCHED</span>
+              <span className="text-xs truncate"><strong>@{activeSuperGift.senderName}</strong> sent <strong>{activeSuperGift.name}</strong>!</span>
+            </div>
+            <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
+          </div>
         </div>
       )}
 
