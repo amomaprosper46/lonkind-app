@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import ConnectivityProvider from '@/components/connectivity-provider';
 import { NotificationPermission } from '@/components/NotificationPermission';
+import PwaInstaller from '@/components/pwa-installer';
 import '@/ai/genkit';
 
 export const metadata: Metadata = {
@@ -39,6 +40,7 @@ export default function RootLayout({
           <ConnectivityProvider>
             <div className="min-h-screen flex flex-col bg-background text-foreground">
               <NotificationPermission />
+              <PwaInstaller />
               {children}
             </div>
           </ConnectivityProvider>

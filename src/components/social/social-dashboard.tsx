@@ -1211,6 +1211,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <NavigationItem label="Direct Messages" icon={MessageSquare} active={currentView === 'messages'} onClick={() => changeView('messages')} badgeCount={0} />
                     <NavigationItem label="Short Videos" icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} />
                     <NavigationItem label="Go Live" icon={Radio} active={currentView === 'live'} onClick={() => changeView('live')} />
+                    <NavigationItem label="Audio Spaces" icon={Mic} active={currentView === 'spaces'} onClick={() => changeView('spaces')} />
                     <NavigationItem label="Saved Content" icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} />
                     
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Ecosystem</div>
@@ -1309,6 +1310,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                             />
                         )}
                         {currentView === 'ai-command-center' && <AICommandCenterView currentUser={currentUser} />}
+                        {currentView === 'spaces' && <SpacesView currentUser={currentUser} />}
                         {currentView === 'personal-ai' && <PersonalAiView />}
                         {currentView === 'story-writer' && <StoryGeneratorView currentUser={currentUser} />}
                         {currentView === 'wallet' && <WalletView currentUser={currentUser} />}
