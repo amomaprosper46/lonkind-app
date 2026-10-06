@@ -496,18 +496,75 @@ export default function LiveStreamView({
         </div>
       )}
 
-      {/* TikTok-Style Animated Super Gift Screen Banner */}
+      {/* TikTok-Style Animated Super Gift Screen Banner & Full Motion Overlay */}
       {activeSuperGift && (
-        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none animate-in zoom-in-75 duration-300">
-          <div className="relative px-6 py-3 rounded-full bg-gradient-to-r from-amber-500 via-orange-600 to-yellow-500 text-white font-black text-sm shadow-[0_0_35px_rgba(245,158,11,0.8)] border-2 border-amber-300 flex items-center gap-3">
-            <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-amber-100 uppercase tracking-widest font-black">SUPER GIFT DISPATCHED</span>
-              <span className="text-xs truncate"><strong>@{activeSuperGift.senderName}</strong> sent <strong>{activeSuperGift.name}</strong>!</span>
+        <>
+          {/* Top Banner */}
+          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none animate-in zoom-in-75 duration-300">
+            <div className="relative px-6 py-3 rounded-full bg-gradient-to-r from-amber-500 via-orange-600 to-yellow-500 text-white font-black text-sm shadow-[0_0_35px_rgba(245,158,11,0.8)] border-2 border-amber-300 flex items-center gap-3">
+              <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-amber-100 uppercase tracking-widest font-black">SUPER GIFT DISPATCHED</span>
+                <span className="text-xs truncate"><strong>@{activeSuperGift.senderName}</strong> sent <strong>{activeSuperGift.name}</strong>!</span>
+              </div>
+              <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
             </div>
-            <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
           </div>
-        </div>
+
+          {/* 🏎️ TikTok Sports Car Motion Animation (Drives Left-to-Right Across Screen) */}
+          {(activeSuperGift.icon === '🏎️' || activeSuperGift.name.toLowerCase().includes('car')) && (
+            <div className="absolute top-1/2 left-0 right-0 z-50 pointer-events-none flex items-center justify-center">
+              <div className="animate-drive-forward flex items-center gap-2">
+                <span className="text-8xl filter drop-shadow-[0_15px_25px_rgba(0,0,0,0.8)]">🏎️</span>
+                <div className="flex flex-col">
+                  <span className="text-xs font-black text-amber-300 bg-black/80 px-3 py-1 rounded-full border border-amber-400 shadow-xl">
+                    🏎️ @{activeSuperGift.senderName}'s Supercar
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🚀 TikTok Rocket Motion Animation (Blasts Off Upward into Space) */}
+          {(activeSuperGift.icon === '🚀' || activeSuperGift.name.toLowerCase().includes('rocket')) && (
+            <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center">
+              <div className="animate-rocket-launch flex flex-col items-center">
+                <span className="text-8xl filter drop-shadow-[0_15px_30px_rgba(59,130,246,0.9)]">🚀</span>
+                <span className="text-2xl animate-pulse">🔥💨</span>
+                <span className="text-xs font-black text-cyan-200 bg-blue-950/90 px-3 py-1 rounded-full border border-cyan-400 shadow-2xl mt-2">
+                  🚀 @{activeSuperGift.senderName} Launched Rocket!
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 🦁 TikTok Lion Motion Animation (Golden Roar Explosion) */}
+          {(activeSuperGift.icon === '🦁' || activeSuperGift.name.toLowerCase().includes('lion')) && (
+            <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+              <div className="animate-lion-roar flex flex-col items-center text-center">
+                <div className="relative">
+                  <span className="text-9xl filter drop-shadow-[0_0_50px_rgba(245,158,11,1)]">🦁</span>
+                  <div className="absolute inset-0 rounded-full border-4 border-amber-400 animate-ping opacity-75" />
+                </div>
+                <span className="text-sm font-black text-amber-200 bg-amber-950/90 px-4 py-1.5 rounded-full border-2 border-amber-400 shadow-2xl mt-4 uppercase tracking-widest">
+                  👑 @{activeSuperGift.senderName} Unleashed The Lion!
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 🌌 TikTok Universe Motion Animation (Galaxy Fireworks Explosion) */}
+          {(activeSuperGift.icon === '🌌' || activeSuperGift.name.toLowerCase().includes('universe')) && (
+            <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+              <div className="animate-universe-explode flex flex-col items-center text-center">
+                <span className="text-9xl filter drop-shadow-[0_0_60px_rgba(168,85,247,1)]">🌌✨</span>
+                <span className="text-sm font-black text-pink-200 bg-purple-950/90 px-4 py-1.5 rounded-full border-2 border-purple-400 shadow-2xl mt-4 uppercase tracking-widest">
+                  🌌 @{activeSuperGift.senderName} Gifted The Universe!
+                </span>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Floating Animated Flying Gifts Overlay */}
