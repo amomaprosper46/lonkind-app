@@ -62,6 +62,71 @@ interface LiveStreamViewProps {
   onGoToWallet?: () => void;
 }
 
+export function playLonkindSoundEffect(type: 'applause' | 'cheer' | 'airhorn' | 'fanfare' | 'bell') {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    if (type === 'airhorn') {
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc1.type = 'sawtooth';
+      osc2.type = 'square';
+      osc1.frequency.setValueAtTime(466, ctx.currentTime);
+      osc2.frequency.setValueAtTime(470, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(370, ctx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+      osc1.start();
+      osc2.start();
+      osc1.stop(ctx.currentTime + 0.5);
+      osc2.stop(ctx.currentTime + 0.5);
+    } else if (type === 'bell' || type === 'fanfare') {
+      const freqs = type === 'bell' ? [523.25, 659.25, 783.99] : [440, 554.37, 659.25, 880];
+      freqs.forEach((f, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.6);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + idx * 0.1);
+        osc.stop(ctx.currentTime + idx * 0.1 + 0.6);
+      });
+    } else {
+      const bufferSize = ctx.sampleRate * 1.5;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1000;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start();
+      noise.stop(ctx.currentTime + 1.5);
+    }
+  } catch (e) {
+    console.warn('Audio synth error:', e);
+  }
+}
+
 export default function LiveStreamView({
   hostUid,
   userId,
@@ -90,6 +155,16 @@ export default function LiveStreamView({
   const [entranceBanner, setEntranceBanner] = useState<{ name: string; avatarUrl?: string } | null>(null);
   const [isCoHostRequested, setIsCoHostRequested] = useState(false);
   const [activeSuperGift, setActiveSuperGift] = useState<{ icon: string; name: string; senderName: string } | null>(null);
+
+  // Lonkind 1v1 PK Battle State
+  const [pkBattleScore, setPkBattleScore] = useState<{ host1Score: number; host2Score: number; active: boolean }>({
+    host1Score: 1250,
+    host2Score: 980,
+    active: true,
+  });
+
+  // Lonkind Video AR Filter & Sound Effects State
+  const [activeFilter, setActiveFilter] = useState<'normal' | 'sparkles' | 'warm' | 'neon' | 'vintage' | 'golden'>('normal');
 
   // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING
   // Adds current user to viewers collection upon entering, removes upon leaving or tab close.
@@ -358,12 +433,19 @@ export default function LiveStreamView({
         timestamp: serverTimestamp(),
       });
 
-      // Trigger flying animation
+      // Trigger flying animation & play sound effect
       triggerFloatingGift(gift.icon, gift.name, validUserName);
+      playLonkindSoundEffect(gift.isSuper ? 'fanfare' : 'bell');
+
+      // Increment PK Battle score points
+      setPkBattleScore(prev => ({
+        ...prev,
+        host1Score: prev.host1Score + gift.price,
+      }));
 
       toast({
         title: `Sent ${gift.name} ${gift.icon}! 🎁`,
-        description: `Sent ${gift.price} Lonkind Coins (L). Host received withdrawable balance!`,
+        description: `Sent ${gift.price} Lonkind Coins (L). Host received withdrawable balance & +${gift.price} PK Battle pts!`,
       });
 
       setIsGiftModalOpen(false);
@@ -404,8 +486,25 @@ export default function LiveStreamView({
       <div 
         ref={containerRef} 
         onClick={handleScreenTap}
-        className="w-full h-full absolute inset-0 cursor-pointer" 
+        className={`w-full h-full absolute inset-0 cursor-pointer transition-all duration-300 ${
+          activeFilter === 'sparkles' ? 'brightness-110 contrast-105' :
+          activeFilter === 'warm' ? 'sepia-[0.2] hue-rotate-15' :
+          activeFilter === 'neon' ? 'saturate-200 contrast-125' :
+          activeFilter === 'vintage' ? 'sepia-[0.4] contrast-90 brightness-95' :
+          activeFilter === 'golden' ? 'brightness-115 sepia-[0.25]' : ''
+        }`} 
       />
+
+      {/* AR Video Filter Overlay Layer */}
+      {activeFilter !== 'normal' && (
+        <div className={`absolute inset-0 pointer-events-none z-10 transition-all duration-300 ${
+          activeFilter === 'sparkles' ? 'bg-gradient-to-tr from-yellow-500/10 via-pink-500/10 to-indigo-500/10 mix-blend-screen animate-pulse' :
+          activeFilter === 'warm' ? 'bg-amber-500/15 mix-blend-color-burn' :
+          activeFilter === 'neon' ? 'bg-gradient-to-r from-cyan-500/20 to-fuchsia-500/20 mix-blend-overlay' :
+          activeFilter === 'vintage' ? 'bg-amber-900/20 mix-blend-color' :
+          activeFilter === 'golden' ? 'bg-gradient-to-b from-yellow-400/20 to-amber-600/20 mix-blend-color' : ''
+        }`} />
+      )}
 
       {/* Top Header Overlay */}
       <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-auto">
@@ -485,6 +584,89 @@ export default function LiveStreamView({
             <Power className="h-3.5 w-3.5" />
             {isHost ? 'End Stream' : 'Leave'}
           </Button>
+        </div>
+      </div>
+
+      {/* ⚔️ Lonkind 1v1 PK Battle Top Progress Bar Widget */}
+      {pkBattleScore.active && (
+        <div className="absolute top-16 left-4 right-4 z-30 flex flex-col items-center pointer-events-auto max-w-md mx-auto">
+          <div className="w-full bg-slate-950/85 backdrop-blur-md border border-white/20 rounded-2xl p-2.5 shadow-2xl">
+            <div className="flex items-center justify-between text-xs font-black mb-1.5 px-1">
+              <div className="flex items-center gap-1.5 text-blue-400">
+                <Avatar className="h-5 w-5 border border-blue-400">
+                  <AvatarImage src={userAvatar} alt={validUserName} />
+                  <AvatarFallback className="bg-blue-600 text-white text-[9px]">{validUserName.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <span className="truncate max-w-[90px]">{validUserName}</span>
+                <Badge className="bg-blue-600/80 text-white font-black text-[10px] px-1.5 py-0">{pkBattleScore.host1Score.toLocaleString()} pts</Badge>
+              </div>
+
+              <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 via-purple-600 to-rose-600 px-2 py-0.5 rounded-full text-white font-black text-[10px] tracking-widest shadow-md">
+                <span>⚔️ PK BATTLE</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-rose-400">
+                <Badge className="bg-rose-600/80 text-white font-black text-[10px] px-1.5 py-0">{pkBattleScore.host2Score.toLocaleString()} pts</Badge>
+                <span className="truncate max-w-[90px]">Opponent Host</span>
+                <Avatar className="h-5 w-5 border border-rose-400">
+                  <AvatarFallback className="bg-rose-600 text-white text-[9px]">OH</AvatarFallback>
+                </Avatar>
+              </div>
+            </div>
+
+            {/* Dual PK Progress Bar */}
+            <div className="relative w-full h-3 bg-slate-800 rounded-full overflow-hidden flex border border-white/10 shadow-inner">
+              <div 
+                style={{ width: `${Math.max(10, Math.min(90, (pkBattleScore.host1Score / (pkBattleScore.host1Score + pkBattleScore.host2Score || 1)) * 100))}%` }}
+                className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-500 relative"
+              >
+                <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/40 animate-pulse" />
+              </div>
+              <div 
+                style={{ width: `${100 - Math.max(10, Math.min(90, (pkBattleScore.host1Score / (pkBattleScore.host1Score + pkBattleScore.host2Score || 1)) * 100))}%` }}
+                className="h-full bg-gradient-to-r from-pink-500 to-rose-600 transition-all duration-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎺 Sound Effects & 🎨 AR Video Filter Floating Quick Selector Toolbar */}
+      <div className="absolute top-36 left-4 z-30 flex flex-col gap-2 pointer-events-auto">
+        <div className="bg-slate-950/80 backdrop-blur-md border border-white/15 p-2 rounded-2xl flex flex-col gap-1.5 shadow-2xl">
+          <span className="text-[10px] font-black text-slate-300 px-1 uppercase tracking-wider">Sounds 🎺</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => playLonkindSoundEffect('airhorn')} title="Airhorn" className="h-7 w-7 rounded-lg bg-indigo-600/60 hover:bg-indigo-500 text-white flex items-center justify-center text-xs transition-transform active:scale-95 shadow">🎺</button>
+            <button onClick={() => playLonkindSoundEffect('cheer')} title="Cheer" className="h-7 w-7 rounded-lg bg-emerald-600/60 hover:bg-emerald-500 text-white flex items-center justify-center text-xs transition-transform active:scale-95 shadow">🥳</button>
+            <button onClick={() => playLonkindSoundEffect('fanfare')} title="Fanfare" className="h-7 w-7 rounded-lg bg-amber-600/60 hover:bg-amber-500 text-white flex items-center justify-center text-xs transition-transform active:scale-95 shadow">🎉</button>
+            <button onClick={() => playLonkindSoundEffect('bell')} title="Bell" className="h-7 w-7 rounded-lg bg-purple-600/60 hover:bg-purple-500 text-white flex items-center justify-center text-xs transition-transform active:scale-95 shadow">🔔</button>
+          </div>
+        </div>
+
+        <div className="bg-slate-950/80 backdrop-blur-md border border-white/15 p-2 rounded-2xl flex flex-col gap-1.5 shadow-2xl">
+          <span className="text-[10px] font-black text-slate-300 px-1 uppercase tracking-wider">AR Filters 🎨</span>
+          <div className="grid grid-cols-3 gap-1">
+            {[
+              { id: 'normal', name: 'Off', icon: '🚫' },
+              { id: 'sparkles', name: 'Sparkles', icon: '✨' },
+              { id: 'warm', name: 'Warm', icon: '☀️' },
+              { id: 'neon', name: 'Neon', icon: '⚡' },
+              { id: 'vintage', name: 'Vintage', icon: '📜' },
+              { id: 'golden', name: 'Golden', icon: '🌟' },
+            ].map(filter => (
+              <button
+                key={filter.id}
+                onClick={() => setActiveFilter(filter.id as any)}
+                className={`h-7 px-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-0.5 border transition-all ${
+                  activeFilter === filter.id
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-white/40 shadow-md'
+                    : 'bg-white/10 hover:bg-white/20 text-slate-200 border-white/10'
+                }`}
+              >
+                <span>{filter.icon}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

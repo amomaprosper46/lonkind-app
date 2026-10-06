@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft, BadgeCheck, Star, Heart, Medal } from 'lucide-react';
+import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft, BadgeCheck, Star, Heart, Medal, Globe, Languages } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -51,17 +51,51 @@ interface MessagingViewProps {
 
 function MessageBubble({ msg, user, setSelectedMessage, setActionMenuOpen, handleCopyMessage, copiedMessageId }: any) {
   const isOwn = msg.senderId === user?.uid;
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+
   const longPressHandlers = useLongPress(() => {
     setSelectedMessage(msg);
     setActionMenuOpen(true);
   }, 3000);
 
+  const handleTranslate = async (lang: string = 'English') => {
+    const textToTranslate = msg.text || (msg.type === 'audio' ? 'Audio Voice Note' : '');
+    if (!textToTranslate) return;
+
+    setIsTranslating(true);
+    try {
+      const res = await fetch('/api/ai/voice-translator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: textToTranslate, targetLanguage: lang }),
+      });
+      const data = await res.json();
+      if (data.success && data.translatedText) {
+        setTranslatedText(data.translatedText);
+      } else {
+        toast({ title: 'Translation Error', description: data.error || 'Failed to translate message', variant: 'destructive' });
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   return (
     <div className={`group flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`} {...longPressHandlers}>
-      {msg.senderId !== user?.uid && msg.type === 'text' && (
-        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyMessage(msg.text, msg.id)}>
-          {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-        </Button>
+      {!isOwn && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-indigo-400 hover:text-indigo-300" onClick={() => handleTranslate('English')} title="Translate with Lonkind AI">
+            {isTranslating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+          </Button>
+          {msg.type === 'text' && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyMessage(msg.text, msg.id)}>
+              {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          )}
+        </div>
       )}
       <div className={cn(
         `max-w-xs lg:max-w-md p-3 rounded-xl ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-background shadow-sm'} ${msg.type === 'audio' ? 'p-2' : ''}`
@@ -71,6 +105,18 @@ function MessageBubble({ msg, user, setSelectedMessage, setActionMenuOpen, handl
         ) : (
           <audio controls src={msg.audioUrl} className="h-10" />
         )}
+
+        {/* AI Voice Note & Chat Translator Result Banner */}
+        {translatedText && (
+          <div className="mt-2 pt-2 border-t border-indigo-400/30 text-xs bg-indigo-500/10 p-2 rounded-lg text-indigo-200">
+            <div className="flex items-center justify-between font-bold mb-1 text-[10px] text-indigo-400">
+              <span className="flex items-center gap-1">✨ Lonkind AI:</span>
+              <button onClick={() => setTranslatedText(null)} className="hover:underline text-[9px] opacity-70">Close</button>
+            </div>
+            <p className="italic">{translatedText}</p>
+          </div>
+        )}
+
         {msg.timestamp && (
           <p className={`text-xs mt-1 text-right flex items-center justify-end gap-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
             <span>{new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -89,10 +135,17 @@ function MessageBubble({ msg, user, setSelectedMessage, setActionMenuOpen, handl
           <p className="text-xs text-muted-foreground italic">(edited)</p>
         )}
       </div>
-      {isOwn && msg.type === 'text' && (
-        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyMessage(msg.text, msg.id)}>
-          {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-        </Button>
+      {isOwn && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-indigo-400 hover:text-indigo-300" onClick={() => handleTranslate('English')} title="Translate with Lonkind AI">
+            {isTranslating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+          </Button>
+          {msg.type === 'text' && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyMessage(msg.text, msg.id)}>
+              {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
