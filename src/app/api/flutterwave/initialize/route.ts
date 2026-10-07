@@ -47,13 +47,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Pricing validation failed for selected currency. Transaction blocked.' }, { status: 400 });
     }
 
+    const origin = req.headers.get('origin') || req.nextUrl.origin || APP_URL;
     const txRef = `flw_tx_${userId}_${Date.now()}`;
 
     const flwPayload = {
       tx_ref: txRef,
       amount: Number(amount),
       currency: cleanCurrency,
-      redirect_url: `${APP_URL}/api/flutterwave/callback`,
+      redirect_url: `${origin}/api/flutterwave/callback`,
       meta: {
         userId,
         coinAmount: String(coinsToCredit),
