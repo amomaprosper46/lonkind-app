@@ -5,8 +5,25 @@ import { adminDb } from '@/lib/firebase-admin';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.app';
 
+function getPublicOrigin(req: NextRequest): string {
+  const forwardedHost = req.headers.get('x-forwarded-host');
+  const host = forwardedHost || req.headers.get('host');
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+
+  if (host && !host.includes('0.0.0.0')) {
+    return `${proto}://${host}`;
+  }
+
+  const origin = req.nextUrl.origin;
+  if (origin && !origin.includes('0.0.0.0')) {
+    return origin;
+  }
+
+  return APP_URL;
+}
+
 export async function GET(req: NextRequest) {
-  const origin = req.headers.get('origin') || req.nextUrl.origin || APP_URL;
+  const origin = getPublicOrigin(req);
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status');
   const txRef = searchParams.get('tx_ref');

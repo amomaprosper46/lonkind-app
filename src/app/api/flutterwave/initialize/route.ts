@@ -3,6 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.app';
 
+function getPublicOrigin(req: NextRequest): string {
+  const forwardedHost = req.headers.get('x-forwarded-host');
+  const host = forwardedHost || req.headers.get('host');
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+
+  if (host && !host.includes('0.0.0.0')) {
+    return `${proto}://${host}`;
+  }
+
+  const origin = req.nextUrl.origin;
+  if (origin && !origin.includes('0.0.0.0')) {
+    return origin;
+  }
+
+  return APP_URL;
+}
+
 /**
  * Supported Global Currency Rates (Price per coin in local currency)
  * 1 Coin = ~₦20 NGN | ~$0.02 USD | ~0.30 GHS | ~3.00 KES | ~£0.016 GBP | ~€0.018 EUR
@@ -47,7 +64,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Pricing validation failed for selected currency. Transaction blocked.' }, { status: 400 });
     }
 
-    const origin = req.headers.get('origin') || req.nextUrl.origin || APP_URL;
+    const origin = getPublicOrigin(req);
     const txRef = `flw_tx_${userId}_${Date.now()}`;
 
     const flwPayload = {
