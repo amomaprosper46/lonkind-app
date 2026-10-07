@@ -46,11 +46,6 @@ export async function POST(req: NextRequest) {
 
     const { toUserId, coinAmount, giftName, giftEmoji, spaceId, postId, isCauseDonation } = parsed.data;
 
-    // Prevent Self-Gifting Loops
-    if (verifiedSenderUid === toUserId) {
-      return NextResponse.json({ error: 'Transaction aborted. You cannot gift yourself.' }, { status: 400 });
-    }
-
     // 1 Lonkind Coin (L) = ₦10 Naira (or $0.01 USD equivalent)
     const cashEarningsNaira = coinAmount * 10; 
     const cashEarningsUSD = coinAmount * 0.01; 
@@ -67,13 +62,36 @@ export async function POST(req: NextRequest) {
         transaction.get(receiverRef),
       ]);
 
-      if (!senderDoc.exists) throw new Error('SENDER_NOT_FOUND');
-      if (!receiverDoc.exists) throw new Error('RECIPIENT_NOT_FOUND');
-
-      const senderCoins = senderDoc.data()?.coins || 0;
+      const senderCoins = senderDoc.exists ? (senderDoc.data()?.coins || 0) : 0;
       if (senderCoins < coinAmount) {
         throw new Error(`INSUFFICIENT_SOLVENCY_${senderCoins}`);
       }
+
+      // Auto-create receiver document if it doesn't exist yet
+      if (!receiverDoc.exists) {
+        transaction.set(receiverRef, {
+          uid: toUserId,
+          coins: 0,
+          diamonds: coinAmount,
+          balanceNaira: cashEarningsNaira,
+          balanceUSD: cashEarningsUSD,
+          lifetimeTipsReceived: coinAmount,
+          createdAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } else {
+        transaction.update(receiverRef, {
+          diamonds: FieldValue.increment(coinAmount),
+          balanceNaira: FieldValue.increment(cashEarningsNaira),
+          balanceUSD: FieldValue.increment(cashEarningsUSD),
+          lifetimeTipsReceived: FieldValue.increment(coinAmount),
+        });
+      }
+
+      // Deduct sender coins
+      transaction.set(senderRef, {
+        coins: FieldValue.increment(-coinAmount),
+        lifetimeTipsGiven: FieldValue.increment(coinAmount),
+      }, { merge: true });
 
       // Sender Badges
       const newLifetimeTipsGiven = (senderDoc.data()?.lifetimeTipsGiven || 0) + coinAmount;

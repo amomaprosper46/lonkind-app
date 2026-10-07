@@ -18,7 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPhoneNumber, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithPhoneNumber, signInWithCustomToken, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from "firebase/firestore"; 
 import { addDummyFollowers } from '@/ai/flows/add-dummy-followers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -102,8 +102,6 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       defaultValues: { code: '' },
   });
 
-
-
   const createEmailAccount = async (data: z.infer<typeof emailFormSchema>) => {
     setIsLoading(true);
     try {
@@ -139,50 +137,71 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   async function onPhoneSubmit(data: z.infer<typeof phoneFormSchema>) {
     setIsLoading(true);
+    const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
+    setPhoneAuthData({ name: data.name, phone: fullPhoneNumber });
 
     try {
-      const verifier = window.recaptchaVerifier;
-      if (!verifier) throw new Error('Recaptcha verifier not initialized');
-      
-      const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
-      const confirmationResult = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
-      window.confirmationResult = confirmationResult;
+      const res = await fetch('/api/twilio/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: fullPhoneNumber,
+          channel: 'sms',
+        }),
+      });
 
-      setPhoneAuthData({ name: data.name, phone: fullPhoneNumber });
-      setShowCodeForm(true);
-      toast({ title: "Verification code sent!", description: `A code has been sent via SMS to ${fullPhoneNumber}.` });
+      const resData = await res.json();
 
-      } catch(error: any) {
-          console.error("Phone auth error: ", error);
-          let errorMessage = 'Could not send code. Please try again.';
-          if (error.code === 'auth/credential-already-in-use') {
-            errorMessage = 'This phone number is already registered. Please sign in instead.';
-          }
-          toast({ variant: 'destructive', title: 'Phone Sign Up Failed', description: errorMessage });
-      } finally {
-          setIsLoading(false);
+      if (!res.ok || resData.error) {
+        throw new Error(resData.error || 'Could not send verification code.');
       }
+
+      setShowCodeForm(true);
+      toast({
+        title: "📱 Verification Code Sent!",
+        description: resData.message || `A 6-digit OTP has been dispatched to ${fullPhoneNumber}.`,
+      });
+    } catch(error: any) {
+        console.error("Phone sign up error: ", error);
+        toast({ variant: 'destructive', title: 'Phone Sign Up Failed', description: error.message || 'Could not send verification code. Please check the phone number and try again.' });
+    } finally {
+        setIsLoading(false);
+    }
   }
 
   async function onCodeSubmit(data: z.infer<typeof codeFormSchema>) {
       setIsLoading(true);
       try {
-          const confirmationResult = window.confirmationResult;
-          if (!confirmationResult || !phoneAuthData) throw new Error('No confirmation result found.');
+          if (!phoneAuthData) throw new Error('Phone verification details missing.');
           
-          const userCredential = await confirmationResult.confirm(data.code);
-          const user = userCredential.user;
-          
-          // User is now authenticated. `onAuthStateChanged` in social-home-page will detect them
-          // as a new user and show the WelcomeDialog. We just need to update their name.
-          await updateProfile(user, { displayName: phoneAuthData.name });
-          
-          toast({ title: 'Account Verified!', description: 'Welcome to Lonkind!'});
-          onSignUp(); // Triggers the parent to close the auth card.
+          const res = await fetch('/api/twilio/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phoneNumber: phoneAuthData.phone,
+              code: data.code,
+            }),
+          });
 
-      } catch(error) {
+          const resData = await res.json();
+
+          if (!res.ok || resData.error || !resData.customToken) {
+            throw new Error(resData.error || 'Verification failed.');
+          }
+
+          // Sign in using custom token from Twilio/Firebase Admin
+          const userCredential = await signInWithCustomToken(auth, resData.customToken);
+          const user = userCredential.user;
+
+          if (user && phoneAuthData.name) {
+            await updateProfile(user, { displayName: phoneAuthData.name }).catch(() => {});
+          }
+
+          toast({ title: '🎉 Account Verified!', description: 'Welcome to Lonkind!'});
+          onSignUp();
+      } catch(error: any) {
            console.error("Code verification error: ", error);
-           toast({ variant: 'destructive', title: 'Verification Failed', description: 'The code you entered is invalid. Please try again.'});
+           toast({ variant: 'destructive', title: 'Verification Failed', description: error.message || 'The code you entered is invalid. Please try again.'});
       } finally {
            setIsLoading(false);
       }
