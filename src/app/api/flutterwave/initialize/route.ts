@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY!;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.app';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
 
 function getPublicOrigin(req: NextRequest): string {
   const forwardedHost = req.headers.get('x-forwarded-host');
