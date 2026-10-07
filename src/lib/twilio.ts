@@ -1,4 +1,5 @@
 import twilio from 'twilio';
+import { sendSendchampSms } from '@/lib/sendchamp';
 
 // Environment credentials
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -27,7 +28,7 @@ export interface TwilioSendResult {
 }
 
 /**
- * Send an SMS message via Twilio
+ * Send an SMS message via Twilio (with Sendchamp / Termii Fallback)
  */
 export async function sendTwilioSms(to: string, body: string): Promise<TwilioSendResult> {
   const cleanPhone = to.trim();
@@ -36,7 +37,20 @@ export async function sendTwilioSms(to: string, body: string): Promise<TwilioSen
   }
 
   if (!twilioClient || !fromPhone) {
-    console.log(`[Twilio SMS Simulation] To: ${cleanPhone} | Body: ${body}`);
+    // Priority Fallback 1: Live Sendchamp API
+    if (process.env.SENDCHAMP_PUBLIC_KEY) {
+      const scRes = await sendSendchampSms(cleanPhone, body);
+      if (scRes.success) {
+        return {
+          success: true,
+          sid: scRes.messageId || `sc_${Date.now()}`,
+          status: 'sent',
+          recipient: cleanPhone,
+        };
+      }
+    }
+
+    console.log(`[SMS Simulation] To: ${cleanPhone} | Body: ${body}`);
     return {
       success: true,
       simulated: true,
