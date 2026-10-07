@@ -137,7 +137,11 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   async function onPhoneSubmit(data: z.infer<typeof phoneFormSchema>) {
     setIsLoading(true);
-    const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
+    let rawDigits = data.phone.replace(/\D/g, '');
+    if (rawDigits.startsWith('0')) {
+      rawDigits = rawDigits.slice(1);
+    }
+    const fullPhoneNumber = data.countryCode + rawDigits;
     setPhoneAuthData({ name: data.name, phone: fullPhoneNumber });
 
     try {

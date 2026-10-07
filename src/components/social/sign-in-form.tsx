@@ -147,7 +147,11 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
 
   async function onPhoneSubmit(data: z.infer<typeof phoneFormSchema>) {
     setIsLoading(true);
-    const fullPhoneNumber = data.countryCode + data.phone.replace(/\D/g, '');
+    let rawDigits = data.phone.replace(/\D/g, '');
+    if (rawDigits.startsWith('0')) {
+      rawDigits = rawDigits.slice(1);
+    }
+    const fullPhoneNumber = data.countryCode + rawDigits;
     setPhoneForOtp(fullPhoneNumber);
 
     try {

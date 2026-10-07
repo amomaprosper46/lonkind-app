@@ -3,7 +3,7 @@
  * Handles SMS, WhatsApp, and Verification OTP via Sendchamp API
  */
 
-const SENDCHAMP_PUBLIC_KEY = process.env.SENDCHAMP_PUBLIC_KEY;
+const SENDCHAMP_PUBLIC_KEY = process.env.SENDCHAMP_PUBLIC_KEY || 'sendchamp_live_$2a$10$cTdZkt2kKzOynmibSDzr9OfROwCfxyAazAB4Z/RjQrsKW5CdJAUvG';
 const SENDCHAMP_SENDER_ID = process.env.SENDCHAMP_SENDER_ID || 'Lonkind';
 const SENDCHAMP_BASE_URL = 'https://api.sendchamp.com/api/v1';
 
@@ -30,47 +30,59 @@ export async function sendSendchampSms(to: string | string[], message: string): 
   }
 
   const recipients = Array.isArray(to) ? to : [to];
-  const formattedRecipients = recipients.map(phone => phone.replace(/[\s\-()+]/g, ''));
-
-  try {
-    const response = await fetch(`${SENDCHAMP_BASE_URL}/sms/send`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SENDCHAMP_PUBLIC_KEY}`,
-      },
-      body: JSON.stringify({
-        to: formattedRecipients,
-        message,
-        sender_name: SENDCHAMP_SENDER_ID,
-        route: 'dnd', // High-priority DND route for transactional SMS
-      }),
-    });
-
-    const resData = await response.json();
-
-    if (response.ok && (resData.status === 'success' || resData.code === '200')) {
-      return {
-        success: true,
-        messageId: resData.data?.reference || resData.data?.id,
-        status: resData.status,
-        data: resData.data,
-      };
-    } else {
-      console.error('[Sendchamp SMS Error]:', resData);
-      return {
-        success: false,
-        error: resData.message || resData.error || 'Failed to send SMS via Sendchamp.',
-      };
+  const formattedRecipients = recipients.map(phone => {
+    let cleaned = phone.replace(/[\s\-()+]/g, '');
+    if (cleaned.startsWith('2340')) {
+      cleaned = '234' + cleaned.slice(4);
+    } else if (cleaned.startsWith('0')) {
+      cleaned = '234' + cleaned.slice(1);
     }
-  } catch (error: any) {
-    console.error('Sendchamp SMS Exception:', error);
-    return {
-      success: false,
-      error: error.message || 'Sendchamp connection error.',
-    };
+    return cleaned;
+  });
+
+  const sendersToTry = [SENDCHAMP_SENDER_ID, 'N-Alert', 'Sendchamp'];
+  let lastError = 'Failed to send SMS via Sendchamp.';
+
+  for (const senderName of sendersToTry) {
+    try {
+      const response = await fetch(`${SENDCHAMP_BASE_URL}/sms/send`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SENDCHAMP_PUBLIC_KEY}`,
+        },
+        body: JSON.stringify({
+          to: formattedRecipients,
+          message,
+          sender_name: senderName,
+          route: 'dnd', // High-priority DND route for transactional SMS
+        }),
+      });
+
+      const resData = await response.json();
+
+      if (response.ok && (resData.status === 'success' || resData.code === '200')) {
+        return {
+          success: true,
+          messageId: resData.data?.reference || resData.data?.id,
+          status: resData.status,
+          data: resData.data,
+        };
+      } else {
+        console.warn(`[Sendchamp SMS Attempt Failed with sender '${senderName}']:`, resData);
+        lastError = resData.message || resData.error || lastError;
+      }
+    } catch (error: any) {
+      console.error(`[Sendchamp Exception with sender '${senderName}']:`, error);
+      lastError = error.message || lastError;
+    }
   }
+
+  return {
+    success: false,
+    error: lastError,
+  };
 }
 
 /**

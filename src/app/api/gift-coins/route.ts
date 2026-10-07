@@ -53,130 +53,122 @@ export async function POST(req: NextRequest) {
     const senderRef = db.collection('users').doc(verifiedSenderUid);
     const receiverRef = db.collection('users').doc(toUserId);
 
-    /**
-     * 2. ACID Transaction Settlement Thread
-     */
-    await db.runTransaction(async (transaction) => {
-      const [senderDoc, receiverDoc] = await Promise.all([
-        transaction.get(senderRef),
-        transaction.get(receiverRef),
-      ]);
+      /**
+       * 2. ACID Transaction Settlement Thread
+       */
+      await db.runTransaction(async (transaction) => {
+        const [senderDoc, receiverDoc] = await Promise.all([
+          transaction.get(senderRef),
+          transaction.get(receiverRef),
+        ]);
 
-      const senderCoins = senderDoc.exists ? (senderDoc.data()?.coins || 0) : 0;
-      if (senderCoins < coinAmount) {
-        throw new Error(`INSUFFICIENT_SOLVENCY_${senderCoins}`);
-      }
-
-      // Auto-create receiver document if it doesn't exist yet
-      if (!receiverDoc.exists) {
-        transaction.set(receiverRef, {
-          uid: toUserId,
-          coins: 0,
-          diamonds: coinAmount,
-          balanceNaira: cashEarningsNaira,
-          balanceUSD: cashEarningsUSD,
-          lifetimeTipsReceived: coinAmount,
-          createdAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
-      } else {
-        transaction.update(receiverRef, {
-          diamonds: FieldValue.increment(coinAmount),
-          balanceNaira: FieldValue.increment(cashEarningsNaira),
-          balanceUSD: FieldValue.increment(cashEarningsUSD),
-          lifetimeTipsReceived: FieldValue.increment(coinAmount),
-        });
-      }
-
-      // Deduct sender coins
-      transaction.set(senderRef, {
-        coins: FieldValue.increment(-coinAmount),
-        lifetimeTipsGiven: FieldValue.increment(coinAmount),
-      }, { merge: true });
-
-      // Sender Badges
-      const newLifetimeTipsGiven = (senderDoc.data()?.lifetimeTipsGiven || 0) + coinAmount;
-      let senderBadges: string[] = senderDoc.data()?.badges || [];
-      if (newLifetimeTipsGiven >= 1000 && !senderBadges.includes('Top Supporter')) {
-        senderBadges.push('Top Supporter');
-      }
-      if (newLifetimeTipsGiven >= 10000 && !senderBadges.includes('Whale')) {
-        senderBadges.push('Whale');
-      }
-
-      // Receiver Badges
-      const newLifetimeTipsReceived = (receiverDoc.data()?.lifetimeTipsReceived || 0) + coinAmount;
-      let receiverBadges: string[] = receiverDoc.data()?.badges || [];
-      if (newLifetimeTipsReceived >= 1000 && !receiverBadges.includes('Rising Star')) {
-        receiverBadges.push('Rising Star');
-      }
-      if (newLifetimeTipsReceived >= 10000 && !receiverBadges.includes('Top Creator')) {
-        receiverBadges.push('Top Creator');
-      }
-
-      // A. Register Audit Ledger Document Entry in 'gifts' collection
-      const giftRef = db.collection('gifts').doc();
-      transaction.set(giftRef, {
-        fromUserId: verifiedSenderUid,
-        fromUserName: senderDoc.data()?.name || 'Unknown User',
-        toUserId,
-        toUserName: receiverDoc.data()?.name || 'Unknown User',
-        coins: coinAmount,
-        cashValueNaira: cashEarningsNaira,
-        cashValueUSD: cashEarningsUSD,
-        giftName: giftName || 'Tip',
-        giftEmoji: giftEmoji || '🎁',
-        postId: postId || null,
-        isCauseDonation: isCauseDonation || false,
-        time: FieldValue.serverTimestamp(),
-      });
-
-      // B. Deduct virtual Lonkind coins (L) from sender
-      transaction.update(senderRef, {
-        coins: FieldValue.increment(-coinAmount),
-        lifetimeTipsGiven: FieldValue.increment(coinAmount),
-        badges: senderBadges,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      // C. Credit REAL WITHDRAWABLE BALANCE directly to recipient creator account
-      transaction.update(receiverRef, {
-        balance: FieldValue.increment(cashEarningsUSD),
-        earningsNaira: FieldValue.increment(cashEarningsNaira),
-        diamonds: FieldValue.increment(coinAmount), // synced for legacy counter
-        lifetimeTipsReceived: FieldValue.increment(coinAmount),
-        badges: receiverBadges,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      // D. If donation to Cause post, update raisedCoins
-      if (postId && isCauseDonation) {
-        const postRef = db.collection('posts').doc(postId);
-        transaction.update(postRef, {
-          raisedCoins: FieldValue.increment(coinAmount),
-        });
-      }
-
-      // E. Update Live Space recentGifts stream feed if applicable
-      if (spaceId) {
-        const spaceRef = db.collection('spaces').doc(spaceId);
-        const spaceDoc = await transaction.get(spaceRef);
-        if (spaceDoc.exists) {
-          const currentRecent = spaceDoc.data()?.recentGifts || [];
-          const updatedGifts = [
-            {
-              id: giftRef.id,
-              fromUserName: senderDoc.data()?.name || 'User',
-              giftName: giftName || 'Tip',
-              giftEmoji: giftEmoji || '🎁',
-              coins: coinAmount,
-              timestamp: new Date().toISOString(),
-            },
-            ...currentRecent,
-          ].slice(0, 20);
-          transaction.update(spaceRef, { recentGifts: updatedGifts });
+        const senderCoins = senderDoc.exists ? (senderDoc.data()?.coins || 0) : 0;
+        if (senderCoins < coinAmount) {
+          throw new Error(`INSUFFICIENT_SOLVENCY_${senderCoins}`);
         }
-      }
-    });
+
+        // Sender Badges calculation
+        const newLifetimeTipsGiven = (senderDoc.data()?.lifetimeTipsGiven || 0) + coinAmount;
+        let senderBadges: string[] = senderDoc.data()?.badges || [];
+        if (newLifetimeTipsGiven >= 1000 && !senderBadges.includes('Top Supporter')) {
+          senderBadges.push('Top Supporter');
+        }
+        if (newLifetimeTipsGiven >= 10000 && !senderBadges.includes('Whale')) {
+          senderBadges.push('Whale');
+        }
+
+        // Receiver Badges calculation
+        const newLifetimeTipsReceived = (receiverDoc.data()?.lifetimeTipsReceived || 0) + coinAmount;
+        let receiverBadges: string[] = receiverDoc.data()?.badges || [];
+        if (newLifetimeTipsReceived >= 1000 && !receiverBadges.includes('Rising Star')) {
+          receiverBadges.push('Rising Star');
+        }
+        if (newLifetimeTipsReceived >= 10000 && !receiverBadges.includes('Top Creator')) {
+          receiverBadges.push('Top Creator');
+        }
+
+        // A. Register Audit Ledger Document Entry in 'gifts' collection
+        const giftRef = db.collection('gifts').doc();
+        transaction.set(giftRef, {
+          fromUserId: verifiedSenderUid,
+          fromUserName: senderDoc.data()?.name || 'Unknown User',
+          toUserId,
+          toUserName: receiverDoc.data()?.name || 'Unknown User',
+          coins: coinAmount,
+          cashValueNaira: cashEarningsNaira,
+          cashValueUSD: cashEarningsUSD,
+          giftName: giftName || 'Tip',
+          giftEmoji: giftEmoji || '🎁',
+          postId: postId || null,
+          isCauseDonation: isCauseDonation || false,
+          time: FieldValue.serverTimestamp(),
+        });
+
+        // B. Deduct virtual Lonkind coins (L) from sender (single update)
+        transaction.set(senderRef, {
+          coins: FieldValue.increment(-coinAmount),
+          lifetimeTipsGiven: FieldValue.increment(coinAmount),
+          badges: senderBadges,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // C. Credit REAL WITHDRAWABLE BALANCE directly to recipient creator account (single update)
+        if (!receiverDoc.exists) {
+          transaction.set(receiverRef, {
+            uid: toUserId,
+            coins: 0,
+            diamonds: coinAmount,
+            balance: cashEarningsUSD,
+            earningsNaira: cashEarningsNaira,
+            balanceNaira: cashEarningsNaira,
+            balanceUSD: cashEarningsUSD,
+            lifetimeTipsReceived: coinAmount,
+            badges: receiverBadges,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        } else {
+          transaction.update(receiverRef, {
+            balance: FieldValue.increment(cashEarningsUSD),
+            earningsNaira: FieldValue.increment(cashEarningsNaira),
+            balanceNaira: FieldValue.increment(cashEarningsNaira),
+            balanceUSD: FieldValue.increment(cashEarningsUSD),
+            diamonds: FieldValue.increment(coinAmount),
+            lifetimeTipsReceived: FieldValue.increment(coinAmount),
+            badges: receiverBadges,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+
+        // D. If donation to Cause post, update raisedCoins
+        if (postId && isCauseDonation) {
+          const postRef = db.collection('posts').doc(postId);
+          transaction.update(postRef, {
+            raisedCoins: FieldValue.increment(coinAmount),
+          });
+        }
+
+        // E. Update Live Space recentGifts stream feed if applicable
+        if (spaceId) {
+          const spaceRef = db.collection('spaces').doc(spaceId);
+          const spaceDoc = await transaction.get(spaceRef);
+          if (spaceDoc.exists) {
+            const currentRecent = spaceDoc.data()?.recentGifts || [];
+            const updatedGifts = [
+              {
+                id: giftRef.id,
+                fromUserName: senderDoc.data()?.name || 'User',
+                giftName: giftName || 'Tip',
+                giftEmoji: giftEmoji || '🎁',
+                coins: coinAmount,
+                timestamp: new Date().toISOString(),
+              },
+              ...currentRecent,
+            ].slice(0, 20);
+            transaction.update(spaceRef, { recentGifts: updatedGifts });
+          }
+        }
+      });
 
     return NextResponse.json({
       success: true,

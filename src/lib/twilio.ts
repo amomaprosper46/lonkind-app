@@ -38,26 +38,23 @@ export async function sendTwilioSms(to: string, body: string): Promise<TwilioSen
 
   if (!twilioClient || !fromPhone) {
     // Priority Fallback 1: Live Sendchamp API
-    if (process.env.SENDCHAMP_PUBLIC_KEY) {
-      const scRes = await sendSendchampSms(cleanPhone, body);
-      if (scRes.success) {
-        return {
-          success: true,
-          sid: scRes.messageId || `sc_${Date.now()}`,
-          status: 'sent',
-          recipient: cleanPhone,
-        };
-      }
+    const scRes = await sendSendchampSms(cleanPhone, body);
+    if (scRes.success) {
+      return {
+        success: true,
+        sid: scRes.messageId || `sc_${Date.now()}`,
+        status: 'sent',
+        recipient: cleanPhone,
+      };
+    } else {
+      console.warn(`[Sendchamp Live SMS Failed]: ${scRes.error}`);
+      // If Sendchamp fails, report actual error to user
+      return {
+        success: false,
+        error: `Sendchamp SMS Error: ${scRes.error}`,
+        recipient: cleanPhone,
+      };
     }
-
-    console.log(`[SMS Simulation] To: ${cleanPhone} | Body: ${body}`);
-    return {
-      success: true,
-      simulated: true,
-      sid: `SIM_SMS_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      status: 'simulated_queued',
-      recipient: cleanPhone,
-    };
   }
 
   try {
