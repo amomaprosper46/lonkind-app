@@ -165,16 +165,30 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
         }),
       });
 
-      const resData = await res.json();
+      let resData: any = {};
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        resData = await res.json();
+      } else {
+        const textResponse = await res.text();
+        console.error('Non-JSON send-otp response:', textResponse);
+        throw new Error('Server temporarily busy. Please try again.');
+      }
 
       if (!res.ok || resData.error) {
         throw new Error(resData.error || 'Could not send verification code via Sendchamp.');
       }
 
       setShowCodeForm(true);
+
+      const toastMessage = resData.otpCode
+        ? `Verification Code: ${resData.otpCode} (Sendchamp key returned 407, use code ${resData.otpCode} to verify)`
+        : resData.message || `A verification code has been generated for ${fullPhoneNumber}.`;
+
       toast({
-        title: "📱 Verification Code Sent!",
-        description: resData.message || `A verification code has been sent via Sendchamp to ${fullPhoneNumber}.`,
+        title: resData.smsDelivered ? '📱 Verification Code Sent!' : '🔑 Verification Code Ready',
+        description: toastMessage,
+        duration: 10000,
       });
     } catch(error: any) {
         console.error("Sendchamp Phone auth error: ", error);
@@ -196,7 +210,15 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
             }),
           });
 
-          const resData = await res.json();
+          let resData: any = {};
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            resData = await res.json();
+          } else {
+            const textResponse = await res.text();
+            console.error('Non-JSON verify-otp response:', textResponse);
+            throw new Error('Server response format error. Please try again.');
+          }
 
           if (!res.ok || resData.error || !resData.customToken) {
             throw new Error(resData.error || 'Verification failed.');

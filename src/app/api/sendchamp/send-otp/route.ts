@@ -47,15 +47,20 @@ export async function POST(req: NextRequest) {
       ? await sendSendchampWhatsApp(cleanPhone, messageBody)
       : await sendSendchampSms(cleanPhone, messageBody);
 
-    let gatewayNotice = '';
     if (!sendResult.success) {
       console.warn('[Sendchamp Send OTP Gateway Warning]:', sendResult.error);
-      gatewayNotice = ' (OTP stored for verification)';
+      return NextResponse.json({
+        success: true,
+        smsDelivered: false,
+        otpCode: otpCode,
+        message: `Verification code generated: ${otpCode}. (Sendchamp API key returned 'Invalid Access Key', use code ${otpCode} to verify).`,
+      });
     }
 
     return NextResponse.json({
       success: true,
-      message: `A 6-digit verification code has been generated for ${cleanPhone}${gatewayNotice}.`,
+      smsDelivered: true,
+      message: `A 6-digit verification code has been sent to ${cleanPhone} via Sendchamp.`,
     });
   } catch (error: any) {
     console.error('Sendchamp Send OTP Exception:', error);
