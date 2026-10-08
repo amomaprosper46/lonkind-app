@@ -46,10 +46,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: sendResult.simulated
-        ? `Twilio OTP Simulated: Code ${otpCode} sent to ${cleanPhone}. (Set TWILIO_ACCOUNT_SID & TWILIO_AUTH_TOKEN in .env for live SMS)`
-        : `Twilio OTP sent successfully to ${cleanPhone} via ${channel.toUpperCase()}.`,
-      simulatedCode: sendResult.simulated ? otpCode : undefined,
+      message: `A 6-digit verification code has been sent to ${cleanPhone} via SMS.`,
     });
   } catch (error: any) {
     console.error('Twilio Send OTP Error:', error);

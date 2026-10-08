@@ -289,9 +289,19 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                                 name="code"
                                 render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Verification Code</FormLabel>
+                                    <FormLabel className="text-center block text-sm font-semibold">Enter 6-Digit SMS Code</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="123456" {...field} />
+                                        <Input
+                                            {...field}
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            maxLength={6}
+                                            autoFocus
+                                            autoComplete="one-time-code"
+                                            placeholder="123456"
+                                            className="text-center text-2xl tracking-[0.4em] font-mono h-14 border-2 border-primary/50 focus:border-primary"
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

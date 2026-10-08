@@ -6,7 +6,7 @@
     "node": "20"
   },
   "scripts": {
-    "clean": "rimraf .next",
+    "clean": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\"",
     "security-scan": "node scripts/security_scan.js",
     "build": "npm run clean && npm run security-scan && next build",
     "start": "next start",
