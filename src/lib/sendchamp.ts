@@ -4,7 +4,7 @@
  */
 
 const SENDCHAMP_PUBLIC_KEY = process.env.SENDCHAMP_PUBLIC_KEY || 'sendchamp_live_$2a$10$cTdZkt2kKzOynmibSDzr9OfROwCfxyAazAB4Z/RjQrsKW5CdJAUvG';
-const SENDCHAMP_SENDER_ID = process.env.SENDCHAMP_SENDER_ID || 'Lonkind';
+const SENDCHAMP_SENDER_ID = process.env.SENDCHAMP_SENDER_ID || 'Sendchamp';
 const SENDCHAMP_BASE_URL = 'https://api.sendchamp.com/api/v1';
 
 export interface SendchampResult {
@@ -40,7 +40,7 @@ export async function sendSendchampSms(to: string | string[], message: string): 
     return cleaned;
   });
 
-  const sendersToTry = [SENDCHAMP_SENDER_ID, 'N-Alert', 'Sendchamp'];
+  const sendersToTry = ['Sendchamp', SENDCHAMP_SENDER_ID, 'N-Alert', 'AFRICA'];
   let lastError = 'Failed to send SMS via Sendchamp.';
 
   for (const senderName of sendersToTry) {
