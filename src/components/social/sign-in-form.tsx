@@ -155,7 +155,7 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
     setPhoneForOtp(fullPhoneNumber);
 
     try {
-      const res = await fetch('/api/twilio/send-otp', {
+      const res = await fetch('/api/sendchamp/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -167,16 +167,16 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
       const resData = await res.json();
 
       if (!res.ok || resData.error) {
-        throw new Error(resData.error || 'Could not send verification code via Twilio.');
+        throw new Error(resData.error || 'Could not send verification code via Sendchamp.');
       }
 
       setShowCodeForm(true);
       toast({
         title: "📱 Verification Code Sent!",
-        description: resData.message || `A code has been sent via Twilio to ${fullPhoneNumber}.`,
+        description: resData.message || `A verification code has been sent via Sendchamp to ${fullPhoneNumber}.`,
       });
     } catch(error: any) {
-        console.error("Twilio Phone auth error: ", error);
+        console.error("Sendchamp Phone auth error: ", error);
         toast({ variant: 'destructive', title: 'Could not send code', description: error.message || 'Please check the phone number and try again.'});
     } finally {
         setIsLoading(false);
@@ -186,7 +186,7 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
   async function onCodeSubmit(data: z.infer<typeof codeFormSchema>) {
       setIsLoading(true);
       try {
-          const res = await fetch('/api/twilio/verify-otp', {
+          const res = await fetch('/api/sendchamp/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

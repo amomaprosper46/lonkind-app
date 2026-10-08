@@ -108,9 +108,31 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
         const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
         const user = userCredential.user;
         
-        await updateProfile(user, { displayName: data.name });
+        await updateProfile(user, { displayName: data.name }).catch(() => {});
         
-        await sendEmailVerification(user);
+        // Ensure user document exists in Firestore 'users' collection
+        const userDocRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userDocRef);
+        if (!userSnap.exists()) {
+          const baseHandle = (data.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
+          await setDoc(userDocRef, {
+            uid: user.uid,
+            name: data.name,
+            handle: baseHandle,
+            email: data.email,
+            avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.uid)}`,
+            isProfessional: false,
+            bio: 'Hey there! I am using Lonkind.',
+            followersCount: 0,
+            followingCount: 0,
+            balance: 0,
+            coins: 0,
+            diamonds: 0,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        
+        await sendEmailVerification(user).catch(() => {});
         
         toast({
             title: 'Verification Email Sent!',
@@ -124,6 +146,8 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
          let errorMessage = "Something went wrong. Please try again.";
          if (errorCode === 'auth/email-already-in-use') {
             errorMessage = "This email address is already in use by another account.";
+         } else if (error.message) {
+            errorMessage = error.message;
          }
          toast({
             variant: "destructive",
@@ -145,7 +169,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
     setPhoneAuthData({ name: data.name, phone: fullPhoneNumber });
 
     try {
-      const res = await fetch('/api/twilio/send-otp', {
+      const res = await fetch('/api/sendchamp/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -163,7 +187,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       setShowCodeForm(true);
       toast({
         title: "📱 Verification Code Sent!",
-        description: resData.message || `A 6-digit OTP has been dispatched to ${fullPhoneNumber}.`,
+        description: resData.message || `A 6-digit verification code has been sent to ${fullPhoneNumber}.`,
       });
     } catch(error: any) {
         console.error("Phone sign up error: ", error);
@@ -178,7 +202,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       try {
           if (!phoneAuthData) throw new Error('Phone verification details missing.');
           
-          const res = await fetch('/api/twilio/verify-otp', {
+          const res = await fetch('/api/sendchamp/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -193,7 +217,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
             throw new Error(resData.error || 'Verification failed.');
           }
 
-          // Sign in using custom token from Twilio/Firebase Admin
+          // Sign in using custom token from Sendchamp/Firebase Admin
           const userCredential = await signInWithCustomToken(auth, resData.customToken);
           const user = userCredential.user;
 

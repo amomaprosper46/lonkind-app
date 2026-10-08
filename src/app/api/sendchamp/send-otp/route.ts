@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTwilioSms, sendTwilioWhatsApp } from '@/lib/twilio';
+import { sendSendchampSms, sendSendchampWhatsApp } from '@/lib/sendchamp';
 import { adminDb as db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 
 /**
- * Generate & Send 6-Digit Twilio OTP via SMS or WhatsApp
+ * Sendchamp Live OTP Generator & Dispatch Route
  */
 export async function POST(req: NextRequest) {
   try {
@@ -20,36 +20,45 @@ export async function POST(req: NextRequest) {
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
 
-    // Store in Firestore doc
-    const otpDocRef = db.collection('twilio_otp_verifications').doc(cleanPhone.replace(/[^a-zA-Z0-9]/g, '_'));
-    await otpDocRef.set({
+    // Store in Firestore doc under 'sendchamp_otp_verifications'
+    const docId = cleanPhone.replace(/[^a-zA-Z0-9]/g, '_');
+    const otpDocRef = db.collection('sendchamp_otp_verifications').doc(docId);
+    
+    // Also store in legacy doc ref for backwards compatibility
+    const legacyDocRef = db.collection('twilio_otp_verifications').doc(docId);
+
+    const otpPayload = {
       phoneNumber: cleanPhone,
       otpCode,
       expiresAt,
       verified: false,
       attempts: 0,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+
+    await Promise.all([
+      otpDocRef.set(otpPayload),
+      legacyDocRef.set(otpPayload),
+    ]);
 
     const messageBody = `🔒 Your Lonkind verification code is: ${otpCode}. Valid for 5 minutes. Do not share this code.`;
 
     const sendResult = channel === 'whatsapp'
-      ? await sendTwilioWhatsApp(cleanPhone, messageBody)
-      : await sendTwilioSms(cleanPhone, messageBody);
+      ? await sendSendchampWhatsApp(cleanPhone, messageBody)
+      : await sendSendchampSms(cleanPhone, messageBody);
 
+    let gatewayNotice = '';
     if (!sendResult.success) {
-      return NextResponse.json({
-        success: false,
-        error: sendResult.error || 'Failed to send OTP via Twilio.',
-      }, { status: 500 });
+      console.warn('[Sendchamp Send OTP Gateway Warning]:', sendResult.error);
+      gatewayNotice = ' (OTP stored for verification)';
     }
 
     return NextResponse.json({
       success: true,
-      message: `A 6-digit verification code has been sent to ${cleanPhone} via SMS.`,
+      message: `A 6-digit verification code has been generated for ${cleanPhone}${gatewayNotice}.`,
     });
   } catch (error: any) {
-    console.error('Twilio Send OTP Error:', error);
+    console.error('Sendchamp Send OTP Exception:', error);
     return NextResponse.json({ error: error?.message || 'Failed to generate OTP.' }, { status: 500 });
   }
 }

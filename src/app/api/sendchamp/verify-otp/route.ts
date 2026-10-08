@@ -3,7 +3,7 @@ import { adminDb as db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 
 /**
- * Verify Twilio OTP & Issue Firebase Auth Custom Token
+ * Sendchamp Live OTP Verification & Auth Custom Token Route
  */
 export async function POST(req: NextRequest) {
   try {
@@ -17,11 +17,19 @@ export async function POST(req: NextRequest) {
     const cleanCode = code.trim();
 
     const docId = cleanPhone.replace(/[^a-zA-Z0-9]/g, '_');
-    const otpDocRef = db.collection('twilio_otp_verifications').doc(docId);
-    const otpSnap = await otpDocRef.get();
+    
+    // Check primary Sendchamp collection first
+    let otpDocRef = db.collection('sendchamp_otp_verifications').doc(docId);
+    let otpSnap = await otpDocRef.get();
+
+    // Fallback to legacy collection if needed
+    if (!otpSnap.exists) {
+      otpDocRef = db.collection('twilio_otp_verifications').doc(docId);
+      otpSnap = await otpDocRef.get();
+    }
 
     if (!otpSnap.exists) {
-      return NextResponse.json({ error: 'No OTP requested for this phone number.' }, { status: 400 });
+      return NextResponse.json({ error: 'No verification code was requested for this phone number.' }, { status: 400 });
     }
 
     const otpData = otpSnap.data()!;
@@ -36,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     if (otpData.otpCode !== cleanCode) {
       await otpDocRef.update({ attempts: (otpData.attempts || 0) + 1 });
-      return NextResponse.json({ error: 'Invalid verification code. Please check and try again.' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid verification code. Please check your SMS and try again.' }, { status: 400 });
     }
 
     // Mark as verified
@@ -85,12 +93,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Phone number verified successfully!',
+      message: 'Phone number verified successfully via Sendchamp!',
       customToken,
       uid: userRecord.uid,
     });
   } catch (error: any) {
-    console.error('Twilio Verify OTP Error:', error);
+    console.error('Sendchamp Verify OTP Error:', error);
     return NextResponse.json({ error: error?.message || 'Verification failed.' }, { status: 500 });
   }
 }
