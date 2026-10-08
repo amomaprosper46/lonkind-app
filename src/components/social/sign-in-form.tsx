@@ -25,6 +25,7 @@ import { Separator } from '../ui/separator';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { resetAdminPassword } from '@/ai/flows/reset-admin-password';
+import { SixDigitOtpInput } from './six-digit-otp-input';
 
 
 declare global {
@@ -227,16 +228,10 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
                             <FormItem>
                                 <FormLabel className="text-center block text-sm font-semibold">Enter 6-Digit SMS Code</FormLabel>
                                 <FormControl>
-                                    <Input
-                                        {...field}
-                                        type="text"
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
-                                        maxLength={6}
-                                        autoFocus
-                                        autoComplete="one-time-code"
-                                        placeholder="123456"
-                                        className="text-center text-2xl tracking-[0.4em] font-mono h-14 border-2 border-primary/50 focus:border-primary"
+                                    <SixDigitOtpInput
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        disabled={isLoading}
                                     />
                                 </FormControl>
                                 <FormMessage />
