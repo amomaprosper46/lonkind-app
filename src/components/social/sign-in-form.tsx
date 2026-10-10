@@ -181,14 +181,9 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
 
       setShowCodeForm(true);
 
-      const toastMessage = resData.otpCode
-        ? `Verification Code: ${resData.otpCode} (Sendchamp key returned 407, use code ${resData.otpCode} to verify)`
-        : resData.message || `A verification code has been generated for ${fullPhoneNumber}.`;
-
       toast({
-        title: resData.smsDelivered ? '📱 Verification Code Sent!' : '🔑 Verification Code Ready',
-        description: toastMessage,
-        duration: 10000,
+        title: '📱 Verification Code Sent!',
+        description: resData.message || `A verification code has been sent via SMS to ${fullPhoneNumber}.`,
       });
     } catch(error: any) {
         console.error("Sendchamp Phone auth error: ", error);
