@@ -1,4 +1,4 @@
-"use server"; // 👈 This line completely blocks Next.js from bundling this file into the browser client!
+"use server";
 
 import * as admin from 'firebase-admin';
 import { ai } from '@/ai/genkit';
@@ -7,44 +7,49 @@ import { adminDb as db } from '@/lib/firebase-admin';
 interface SerperNewsArticle {
   title: string;
   snippet: string;
+  link?: string;
+  source?: string;
+  imageUrl?: string;
 }
+
+const FALLBACK_NEWS_IMAGES = [
+  'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&auto=format&fit=crop&q=80',
+];
 
 /**
  * CORE HELPER: News Aggregator Fetcher
- * Hits a low-cost/free search API to grab live contextual news updates.
+ * Hits Google Serper News API to grab live contextual news updates with real images.
  */
-async function fetchLatestNews(query: string): Promise<string> {
+async function fetchLatestNews(query: string): Promise<SerperNewsArticle[]> {
   try {
     const response = await fetch('https://google.serper.dev/news', {
       method: 'POST',
       headers: {
-        'X-API-KEY': process.env.SERPER_API_KEY || '',
+        'X-API-KEY': process.env.SERPER_API_KEY || '7220135593825b130e1fbfe599249dcb51dfd839',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
         q: query, 
-        gl: 'ng', // Focuses search results on Nigerian/West African ecosystems
-        num: 3    // Keeps the input payload tight and cheap
+        gl: 'ng', // Focus on Nigerian & African innovation & tech ecosystem
+        num: 6
       }), 
     });
     
     const data = await response.json() as { news?: SerperNewsArticle[] };
-    
-    if (!data.news || data.news.length === 0) {
-      console.warn('Serper API returned zero news entries.');
-      return '';
-    }
-
-    return data.news.map((n) => `${n.title}: ${n.snippet}`).join('\n');
+    return data.news || [];
   } catch (error: any) {
     console.error('Failed to fetch web news context:', error.message);
-    return '';
+    return [];
   }
 }
 
 /**
  * GENKIT FLOW: Autonomous News Reporter
- * Takes zero inputs, aggregates data itself, and posts directly to the timeline database.
+ * Aggregates live news, selects top article with picture, crafts engaging post, and publishes to timeline.
  */
 export const autonomousNewsReporter = ai.defineFlow(
   {
@@ -52,21 +57,34 @@ export const autonomousNewsReporter = ai.defineFlow(
   },
   async () => {
     // A. Gather raw live tech data from the web
-    const newsContext = await fetchLatestNews('tech startup innovation investment Nigeria');
+    const articles = await fetchLatestNews('tech startup innovation investment Nigeria Africa');
     
-    // B. Pass context to Gemini using production naming syntax
+    // Pick the most relevant article with a valid image first, or top article
+    let chosenArticle: SerperNewsArticle | null = null;
+    if (articles.length > 0) {
+      chosenArticle = articles.find(a => a.imageUrl && a.imageUrl.startsWith('http')) || articles[0];
+    }
+
+    const newsContext = chosenArticle
+      ? `Title: ${chosenArticle.title}\nSummary: ${chosenArticle.snippet}\nSource: ${chosenArticle.source || 'Tech News'}`
+      : 'Recent breakthrough tech innovations, startup funding, and digital economy growth across Africa.';
+
+    // B. Pass context to Gemini for professional news presentation
     const llmResponse = await ai.generate({
       model: 'googleai/gemini-3.5-flash-lite',
       prompt: `
-        You are Lonkind's automated news reporter anchor. Your voice is smart, analytical, and highly engaging.
-        ${newsContext ? `Using the following raw recent news data snippets, extract the single most impactful story and write a concise, powerful social media post for our application timeline.` : `Write a concise, powerful social media post about recent tech innovations or startups for our application timeline based on your knowledge.`}
+        You are Lonkind's official AI News Anchor (@lonkindnews).
+        Your voice is smart, analytical, and engaging for social media readers.
         
+        Using this news story:
+        ${newsContext}
+        
+        Write an eye-catching news post for Lonkind timeline.
         Strict Guidelines:
-        - Do not use hashtags under any circumstances.
-        - Keep the content punchy, direct, and under 280 characters.
-        - Focus purely on genuine factual data; do not introduce editorial bias.
-        
-        ${newsContext ? `Raw News Data:\n${newsContext}` : ''}
+        - Include an emoji headline at the start (e.g. "🚨 TECH BREAKING:" or "💡 INNOVATION WATCH:").
+        - Write 2 concise, punchy paragraphs explaining what happened and why it matters.
+        - Do not use hashtags.
+        - End with: "📌 Source: ${chosenArticle?.source || 'Lonkind Newsroom'}"
       `,
     });
 
@@ -76,7 +94,11 @@ export const autonomousNewsReporter = ai.defineFlow(
       throw new Error('Gemini failed to yield text output content.');
     }
 
-    // C. Write directly to Firestore under a fixed system profile token identifier
+    // Determine final image URL
+    const finalImageUrl = chosenArticle?.imageUrl || 
+      FALLBACK_NEWS_IMAGES[Math.floor(Math.random() * FALLBACK_NEWS_IMAGES.length)];
+
+    // C. Write directly to Firestore with image attachment
     const SYSTEM_BOT_UID = 'system-news-reporter';
     const newPostRef = db.collection('posts').doc();
 
@@ -91,21 +113,21 @@ export const autonomousNewsReporter = ai.defineFlow(
         badges: ['Top Creator'],
       },
       isAutomated: true,
-      groupId: null, // REQUIRED: Makes post visible on home feed and explore timeline
-      mediaUrl: null,
-      mediaType: null,
+      groupId: null, // REQUIRED: Visible on home feed and explore timeline
+      imageUrl: finalImageUrl,
+      mediaUrl: finalImageUrl,
+      mediaType: 'image',
+      link: chosenArticle?.link || null,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       reactions: { like: 0, love: 0, laugh: 0, sad: 0 },
       comments: 0,
     });
 
-    // D. Systematic Twilio Auto Messaging Broadcast
+    // D. Optional Twilio / SMS Notification Broadcast
     let twilioBroadcastResult = null;
     try {
-      // Import Twilio helper dynamically
       const { broadcastTwilioNewsAlert } = await import('@/lib/twilio');
 
-      // Fetch subscribed phone numbers from Firestore (or fallback to test recipients)
       const subscribersSnap = await db.collection('users')
         .where('newsSubscribed', '==', true)
         .limit(50)
@@ -126,24 +148,26 @@ export const autonomousNewsReporter = ai.defineFlow(
         );
       }
 
-      // Log Twilio systematic bot event
       await db.collection('twilio_bot_logs').add({
         botName: 'Auto News Reporter Bot',
         action: 'news_post_and_broadcast',
         postId: newPostRef.id,
         content: postContent.trim(),
+        imageUrl: finalImageUrl,
         recipientsCount: phoneNumbers.length,
         broadcastSummary: twilioBroadcastResult,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
-    } catch (twilioErr: any) {
-      console.warn('Twilio news broadcast warning:', twilioErr?.message);
+    } catch (broadcastErr: any) {
+      console.warn('News broadcast notice:', broadcastErr?.message);
     }
 
     return { 
       success: true, 
       postId: newPostRef.id,
       postContent: postContent.trim(),
+      imageUrl: finalImageUrl,
+      articleTitle: chosenArticle?.title || null,
       twilioBroadcast: twilioBroadcastResult 
     };
   }
