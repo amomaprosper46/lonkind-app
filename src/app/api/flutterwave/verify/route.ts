@@ -4,6 +4,16 @@ import { adminDb } from '@/lib/firebase-admin';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY;
 
+const CURRENCY_RATE_PER_COIN: Record<string, number> = {
+  'NGN': 10,
+  'USD': 0.01,
+  'GHS': 0.15,
+  'KES': 1.50,
+  'GBP': 0.008,
+  'EUR': 0.009,
+  'ZAR': 0.18,
+};
+
 export async function POST(req: NextRequest) {
   try {
     if (!FLW_SECRET_KEY || FLW_SECRET_KEY.includes('xxxxxxx')) {
@@ -44,11 +54,21 @@ export async function POST(req: NextRequest) {
     const txData = verifyData.data;
     const { userId, coinAmount, purpose } = txData.meta || {};
     const amountPaid = txData.amount;
-    const currency = txData.currency;
+    const currency = (txData.currency || 'NGN').toUpperCase();
     const txRef = txData.tx_ref || reference;
 
-    if (!userId || !coinAmount) {
+    if (!userId || !coinAmount || Number(coinAmount) <= 0) {
       return NextResponse.json({ error: 'Invalid payment metadata' }, { status: 400 });
+    }
+
+    const numCoins = Number(coinAmount);
+    const rate = CURRENCY_RATE_PER_COIN[currency] || CURRENCY_RATE_PER_COIN['NGN'];
+    const expectedMinAmount = (numCoins * rate) * 0.7; // Allow up to 30% bundle discount
+
+    // Independent price-to-coin integrity check
+    if (amountPaid < expectedMinAmount) {
+      console.error(`[Flutterwave Verify] Fraud/tamper detected for user ${userId}. Paid ${currency} ${amountPaid}, expected minimum ${expectedMinAmount} for ${numCoins} coins.`);
+      return NextResponse.json({ error: 'Payment amount does not match coins requested' }, { status: 400 });
     }
 
     const db = adminDb;
