@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Timestamp } from 'firebase/firestore';
@@ -57,6 +57,19 @@ export interface Post {
     moderationStatus?: string;
     hashtags?: string[];
     searchKeywords?: string[];
+    attribution?: {
+        publisher: string;
+        originalTitle?: string;
+        sourceUrl?: string;
+        publishedDate?: string;
+        license?: string;
+    } | null;
+    videoScript?: {
+        hook: string;
+        narration: string;
+        visualCues: string[];
+        anchorSignoff: string;
+    } | null;
 }
 
 interface PostCardProps {
@@ -113,6 +126,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
     const [isReportOpen, setIsReportOpen] = useState(false);
     const [isUnlocking, setIsUnlocking] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false);
+    const [showVideoScript, setShowVideoScript] = useState(false);
 
     const isAuthor = author.uid === currentUser.uid;
     const canViewVip = !post.isVipOnly || isAuthor || post.unlockedBy?.includes(currentUser?.uid) || isUnlocked;
@@ -426,6 +440,72 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                     </div>
                                 </div>
                                 <audio controls src={post.music.url} className="w-full h-10" />
+                            </div>
+                        )}
+
+                        {post.attribution && (
+                            <div className="mt-3 flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <Newspaper className="h-4 w-4 text-primary shrink-0" />
+                                    <span className="text-muted-foreground shrink-0">Original Reporting:</span>
+                                    <span className="font-semibold text-foreground truncate">{post.attribution.publisher}</span>
+                                </div>
+                                {post.attribution.sourceUrl && (
+                                    <a
+                                        href={post.attribution.sourceUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-primary hover:underline font-semibold shrink-0 ml-2"
+                                    >
+                                        Read Source <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                )}
+                            </div>
+                        )}
+
+                        {post.videoScript && (
+                            <div className="mt-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 text-xs">
+                                <div 
+                                    onClick={() => setShowVideoScript(!showVideoScript)} 
+                                    className="flex items-center justify-between cursor-pointer select-none font-semibold text-purple-600 dark:text-purple-400"
+                                >
+                                    <span className="flex items-center gap-1.5">
+                                        <Video className="h-4 w-4" /> AI Broadcast Video Script
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[10px] bg-purple-500/10 px-2 py-0.5 rounded-full font-mono">
+                                        {showVideoScript ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                        {showVideoScript ? 'Hide Script' : 'View Script'}
+                                    </span>
+                                </div>
+                                {showVideoScript && (
+                                    <div className="mt-2.5 pt-2.5 border-t border-purple-500/15 space-y-2">
+                                        <div>
+                                            <span className="font-semibold text-purple-700 dark:text-purple-300 block mb-0.5">🎬 Opening Hook:</span>
+                                            <p className="text-muted-foreground italic">"{post.videoScript.hook}"</p>
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-purple-700 dark:text-purple-300 block mb-0.5">🎙️ Narration (Voiceover):</span>
+                                            <p className="text-foreground leading-relaxed whitespace-pre-wrap">{post.videoScript.narration}</p>
+                                        </div>
+                                        {post.videoScript.visualCues && post.videoScript.visualCues.length > 0 && (
+                                            <div>
+                                                <span className="font-semibold text-purple-700 dark:text-purple-300 block mb-1">📹 Visual Presentation Directions:</span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {post.videoScript.visualCues.map((cue, i) => (
+                                                        <span key={i} className="bg-slate-200 dark:bg-slate-800 text-[10px] px-2 py-0.5 rounded-md font-mono">
+                                                            {cue}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {post.videoScript.anchorSignoff && (
+                                            <p className="text-muted-foreground text-[11px] italic pt-1">
+                                                Sign-off: "{post.videoScript.anchorSignoff}"
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </>
