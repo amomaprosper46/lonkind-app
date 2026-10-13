@@ -54,9 +54,10 @@ const LoadingComponent = () => (
     </div>
 );
 
-const MobileNavItem = ({ icon: Icon, active, onClick, title }: { icon: any, active: boolean, onClick: () => void, title?: string }) => (
-    <button onClick={onClick} title={title} className={cn("h-10 w-10 flex flex-col items-center justify-center rounded-full transition-all duration-300 shrink-0", active ? "text-indigo-400 bg-indigo-500/10 font-bold" : "text-slate-500 hover:text-slate-300")}>
+const MobileNavItem = ({ icon: Icon, active, onClick, title, badge }: { icon: any, active: boolean, onClick: () => void, title?: string, badge?: React.ReactNode }) => (
+    <button onClick={onClick} title={title} className={cn("relative h-10 w-10 flex flex-col items-center justify-center rounded-full transition-all duration-300 shrink-0", active ? "text-indigo-400 bg-indigo-500/10 font-bold" : "text-slate-500 hover:text-slate-300")}>
         <Icon className={cn("h-5 w-5 transition-transform duration-300", active ? "scale-110" : "scale-100")} />
+        {badge}
         {active && <span className="absolute -bottom-1 w-1 h-1 bg-indigo-500 rounded-full" />}
     </button>
 );
@@ -161,9 +162,11 @@ interface NavigationItemProps {
     active: boolean;
     onClick: () => void;
     badgeCount?: number;
+    badgeText?: string;
+    badgeVariant?: 'default' | 'live';
     id?: string;
 }
-function NavigationItem({ label, icon: Icon, active, onClick, badgeCount, id }: NavigationItemProps) {
+function NavigationItem({ label, icon: Icon, active, onClick, badgeCount, badgeText, badgeVariant, id }: NavigationItemProps) {
     return (
         <Button
             id={id}
@@ -178,7 +181,13 @@ function NavigationItem({ label, icon: Icon, active, onClick, badgeCount, id }: 
         >
             <Icon className={cn("h-4 w-4 transition-transform group-hover:scale-105 duration-200", active ? "text-white" : "text-slate-400 group-hover:text-slate-200")} />
             <span className="truncate">{label}</span>
-            {badgeCount !== undefined && badgeCount > 0 && (
+            {badgeVariant === 'live' && badgeText && (
+                <span className="absolute right-3 top-2.5 bg-rose-600 text-white text-[10px] font-extrabold h-5 px-2 rounded-full flex items-center justify-center shadow-md animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white mr-1 animate-ping" />
+                    {badgeText}
+                </span>
+            )}
+            {badgeVariant !== 'live' && badgeCount !== undefined && badgeCount > 0 && (
                 <span className="absolute right-3 top-2.5 bg-indigo-500 text-white text-[10px] font-bold h-5 px-1.5 rounded-full flex items-center justify-center min-w-[20px] shadow-sm">
                     {badgeCount}
                 </span>
@@ -227,8 +236,28 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [initialConversationId, setInitialConversationId] = useState<string | undefined>(undefined);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [selectedLiveHostUid, setSelectedLiveHostUid] = useState<string | null>(null);
-  
-  const [userReactions, setUserReactions] = useState<Map<string, ReactionType>>(new Map());
+  const [activeLiveStreams, setActiveLiveStreams] = useState<any[]>([]);
+
+  // Real-time listener for all active streams to display live badge across dashboard
+  useEffect(() => {
+    const streamsCol = collection(db, 'live_streams');
+    const q = query(streamsCol, where('status', '==', 'active'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })).filter((s: any) => {
+        if (s.startedAt && typeof s.startedAt.toDate === 'function') {
+          const ageMs = Date.now() - s.startedAt.toDate().getTime();
+          if (ageMs > 12 * 60 * 60 * 1000) return false;
+        }
+        return true;
+      });
+      setActiveLiveStreams(list);
+    }, (err) => {
+      console.warn("Dashboard active streams listener notice:", err);
+    });
+    return () => unsub();
+  }, []);
+
+  const activeLiveCount = activeLiveStreams.length;
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -1210,7 +1239,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <NavigationItem label="Friend Requests" icon={UserPlus} active={currentView === 'friend-requests'} onClick={() => changeView('friend-requests')} badgeCount={friendRequests.length} />
                     <NavigationItem label="Direct Messages" icon={MessageSquare} active={currentView === 'messages'} onClick={() => changeView('messages')} badgeCount={0} />
                     <NavigationItem label="Short Videos" icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} />
-                    <NavigationItem label="Go Live" icon={Radio} active={currentView === 'live'} onClick={() => changeView('live')} />
+                    <NavigationItem 
+                        label="Go Live" 
+                        icon={Radio} 
+                        active={currentView === 'live'} 
+                        badgeText={activeLiveCount > 0 ? `${activeLiveCount} LIVE` : undefined}
+                        badgeVariant="live"
+                        onClick={() => { setSelectedLiveHostUid(null); changeView('live'); }} 
+                    />
                     <NavigationItem label="Audio Spaces" icon={Mic} active={currentView === 'spaces'} onClick={() => changeView('spaces')} />
                     <NavigationItem label="Saved Content" icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} />
                     
@@ -1249,7 +1285,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 activeHashtag={activeHashtag}
                                 onClearHashtag={handleClearHashtag}
                                 onWatchLive={(hostUid) => {
-                                    setSelectedLiveHostUid(hostUid);
+                                    setSelectedLiveHostUid(hostUid.replace(/^live_/, ''));
                                     changeView('live');
                                 }}
                                 onGoLive={() => {
@@ -1260,7 +1296,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         )}
                         {currentView === 'explore' && (
                             <ExploreView 
-                                currentUser={currentUser}
+                                currentUser={currentUser} 
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
                                 onReact={handleReact}
@@ -1289,7 +1325,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         {currentView === 'messages' && <MessagingView initialConversationId={initialConversationId} />}
                         {currentView === 'videos' && (
                             <VideosView 
-                                currentUser={currentUser}
+                                currentUser={currentUser} 
                                 userReactions={userReactions}
                                 savedPostIds={savedPostIds}
                                 onReact={handleReact}
@@ -1327,11 +1363,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         {currentView === 'admin' && (currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind') && <AdminDashboardView />}
                         {currentView === 'live' && (
                             <LiveStreamView
-                                hostUid={selectedLiveHostUid || currentUser?.uid || ''}
+                                hostUid={(selectedLiveHostUid || currentUser?.uid || '').replace(/^live_/, '')}
                                 userId={currentUser?.uid || ''}
                                 userName={currentUser?.name || 'User'}
                                 userAvatar={currentUser?.avatarUrl || ''}
-                                isHost={!selectedLiveHostUid || selectedLiveHostUid === currentUser?.uid}
+                                isHost={!selectedLiveHostUid || selectedLiveHostUid.replace(/^live_/, '') === currentUser?.uid}
                                 onLeave={() => {
                                     setSelectedLiveHostUid(null);
                                     changeView('home');
@@ -1470,7 +1506,18 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <div className="flex items-center justify-between px-2 h-14 overflow-x-auto no-scrollbar gap-1">
                         <MobileNavItem icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} title="Home" />
                         <MobileNavItem icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} title="Explore" />
-                        <MobileNavItem icon={Radio} active={currentView === 'live'} onClick={() => { setSelectedLiveHostUid(null); changeView('live'); }} title="Go Live" />
+                        <MobileNavItem 
+                            icon={Radio} 
+                            active={currentView === 'live'} 
+                            onClick={() => { setSelectedLiveHostUid(null); changeView('live'); }} 
+                            title="Go Live" 
+                            badge={activeLiveCount > 0 ? (
+                                <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                                </span>
+                            ) : undefined}
+                        />
                         <MobileNavItem icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} title="Videos" />
                         
                         <div className="relative -mt-4 mx-1 shrink-0">

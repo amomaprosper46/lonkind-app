@@ -168,14 +168,35 @@ export default function LiveStreamView({
 
   // Lonkind Video AR Filter & Sound Effects State
   const [activeFilter, setActiveFilter] = useState<'normal' | 'sparkles' | 'warm' | 'neon' | 'vintage' | 'golden'>('normal');
+  const [streamHostInfo, setStreamHostInfo] = useState<{ name: string; avatar?: string; uid: string } | null>(null);
+  const [isClaimingBonus, setIsClaimingBonus] = useState(false);
 
-  // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING
-  // Adds current user to viewers collection upon entering, removes upon leaving or tab close.
+  // Listen to live stream document for real-time host info
+  useEffect(() => {
+    if (!roomId) return;
+    const roomRef = doc(db, 'live_streams', roomId);
+    const unsub = onSnapshot(roomRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.hostName) {
+          setStreamHostInfo({
+            name: data.hostName,
+            avatar: data.hostAvatar,
+            uid: data.hostUid,
+          });
+        }
+      }
+    });
+    return () => unsub();
+  }, [roomId]);
+
+  // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING & STREAM REGISTRATION
   useEffect(() => {
     if (!roomId || !validUserId) return;
 
     const viewerRef = doc(db, 'live_streams', roomId, 'viewers', validUserId);
     const roomRef = doc(db, 'live_streams', roomId);
+    const actualHostUid = (hostUid || validUserId).replace(/^live_/, '');
 
     // Register active viewer entry in Firestore
     setDoc(viewerRef, {
@@ -188,24 +209,52 @@ export default function LiveStreamView({
     // Update stream status to active if host
     if (isHost) {
       setDoc(roomRef, {
+        id: roomId,
         status: 'active',
-        hostUid: validUserId,
+        hostUid: actualHostUid,
         hostName: validUserName,
+        hostAvatar: userAvatar || '',
+        viewerCount: 1,
         startedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       }, { merge: true }).catch(console.error);
+
+      // Mark host user profile as live for entire app
+      updateDoc(doc(db, 'users', validUserId), {
+        isLive: true,
+        liveRoomId: roomId,
+        liveStartedAt: serverTimestamp(),
+      }).catch(() => {});
     }
 
-    // Clean up when user closes browser or tab
+    // Keep active stream heartbeat alive every 30s
+    let heartbeatTimer: any = null;
+    if (isHost) {
+      heartbeatTimer = setInterval(() => {
+        updateDoc(roomRef, { updatedAt: serverTimestamp() }).catch(() => {});
+      }, 30000);
+    }
+
+    // Clean up when user closes browser, tab, or navigates away
     const handleBeforeUnload = () => {
       deleteDoc(viewerRef).catch(() => {});
+      if (isHost) {
+        setDoc(roomRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+        updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       deleteDoc(viewerRef).catch(console.error);
+      if (isHost) {
+        setDoc(roomRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+        updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
+      }
     };
-  }, [roomId, validUserId, validUserName, userAvatar, isHost]);
+  }, [roomId, validUserId, validUserName, userAvatar, isHost, hostUid]);
 
   // 2. REAL-TIME VIEWERS COUNT & ENTRANCE BANNER LISTENER
   useEffect(() => {
@@ -386,7 +435,10 @@ export default function LiveStreamView({
         if (change.type === 'added') {
           const data = change.doc.data() as LiveMessage;
           if (data.type === 'gift' && data.giftIcon) {
-            triggerFloatingGift(data.giftIcon, data.giftName || 'Gift', data.senderName);
+            if (data.senderId !== validUserId) {
+              triggerFloatingGift(data.giftIcon, data.giftName || 'Gift', data.senderName);
+              playLonkindSoundEffect(data.giftName?.includes('Dragon') || data.giftName?.includes('Castle') ? 'fanfare' : 'bell');
+            }
           }
         }
       });
@@ -478,7 +530,9 @@ export default function LiveStreamView({
 
     try {
       const idToken = await auth.currentUser?.getIdToken();
-      if (idToken && hostUid && hostUid !== validUserId) {
+      const targetHostUid = (hostUid || validUserId).replace(/^live_/, '');
+
+      if (idToken) {
         const res = await fetch('/api/gift-coins', {
           method: 'POST',
           headers: {
@@ -486,7 +540,7 @@ export default function LiveStreamView({
             'Authorization': `Bearer ${idToken}`,
           },
           body: JSON.stringify({
-            toUserId: hostUid,
+            toUserId: targetHostUid,
             coinAmount: gift.price,
             giftName: gift.name,
             giftEmoji: gift.icon,
@@ -496,10 +550,6 @@ export default function LiveStreamView({
           const errData = await res.json();
           throw new Error(errData.error || 'Failed to send gift');
         }
-      } else {
-        // Fallback local update for self testing
-        const userRef = doc(db, 'users', validUserId);
-        await updateDoc(userRef, { coins: increment(-gift.price) });
       }
 
       // Log gift to Firestore chat stream
@@ -527,7 +577,7 @@ export default function LiveStreamView({
 
       toast({
         title: `Sent ${gift.name} ${gift.icon}! 🎁`,
-        description: `Sent ${gift.price} Lonkind Coins (L). Host received withdrawable balance & +${gift.price} PK Battle pts!`,
+        description: `Sent ${gift.price} Lonkind Coins (L)!`,
       });
 
       setIsGiftModalOpen(false);
@@ -543,6 +593,34 @@ export default function LiveStreamView({
     }
   };
 
+  const handleClaimFreeBonus = async () => {
+    setIsClaimingBonus(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Please sign in first');
+      const res = await fetch('/api/coins/claim-bonus', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to claim coins');
+      toast({
+        title: '🎉 500 Coins Credited!',
+        description: data.message,
+      });
+      setUserCoins(prev => prev + 500);
+      setRechargeModalGift(null);
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Claim Failed',
+        description: e.message || 'Could not claim bonus.',
+      });
+    } finally {
+      setIsClaimingBonus(false);
+    }
+  };
+
   const handleEndStream = async () => {
     try {
       if (validUserId && roomId) {
@@ -552,7 +630,8 @@ export default function LiveStreamView({
 
         if (isHost) {
           const streamRef = doc(db, 'live_streams', roomId);
-          await setDoc(streamRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true });
+          await setDoc(streamRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+          await updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
         }
       }
     } catch (err) {
@@ -561,6 +640,9 @@ export default function LiveStreamView({
       onLeave();
     }
   };
+
+  const hostDisplayName = isHost ? validUserName : (streamHostInfo?.name || validUserName);
+  const hostDisplayAvatar = isHost ? userAvatar : (streamHostInfo?.avatar || userAvatar);
 
   return (
     <div className="fixed inset-0 z-50 bg-black overflow-hidden flex flex-col select-none">
@@ -593,17 +675,17 @@ export default function LiveStreamView({
         {/* Left Side: Host Info & LIVE Badge */}
         <div className="flex items-center gap-2.5 bg-slate-950/75 backdrop-blur-md border border-white/15 rounded-full px-3 py-1.5 shadow-xl">
           <Avatar className="h-8 w-8 border border-white/20 shrink-0">
-            <AvatarImage src={userAvatar} alt={validUserName} />
+            <AvatarImage src={hostDisplayAvatar} alt={hostDisplayName} />
             <AvatarFallback className="bg-indigo-600 text-white text-xs">
-              {validUserName.charAt(0)}
+              {hostDisplayName.charAt(0)}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0 pr-1">
             <span className="text-xs font-bold text-white truncate max-w-[100px] sm:max-w-[160px]">
-              {validUserName}
+              {hostDisplayName}
             </span>
             <span className="text-[10px] text-slate-300 font-medium">
-              {isHost ? 'Host' : 'Live'}
+              {isHost ? 'Host (You)' : 'Live Host'}
             </span>
           </div>
           <Badge className="bg-rose-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md border-none shrink-0">
@@ -936,10 +1018,23 @@ export default function LiveStreamView({
                 <h3 className="font-bold text-white text-base">Send Gift</h3>
               </div>
               
-              {/* Lonkind Coin Balance Badge */}
-              <div className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold text-indigo-300">
-                <span className="h-4 w-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">L</span>
-                <span>{userCoins.toLocaleString()} Coins</span>
+              {/* Lonkind Coin Balance Badge & Quick Claim */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold text-indigo-300">
+                  <span className="h-4 w-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">L</span>
+                  <span>{userCoins.toLocaleString()} Coins</span>
+                </div>
+                {userCoins < 500 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isClaimingBonus}
+                    onClick={handleClaimFreeBonus}
+                    className="h-7 px-2 text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30"
+                  >
+                    {isClaimingBonus ? <Loader2 className="h-3 w-3 animate-spin" /> : '+500 Free'}
+                  </Button>
+                )}
               </div>
 
               <Button
@@ -995,10 +1090,17 @@ export default function LiveStreamView({
             </div>
 
             <h3 className="font-extrabold text-white text-lg mb-2">Insufficient Lonkind Coins</h3>
-            <p className="text-slate-300 text-xs leading-relaxed mb-6">
+            <p className="text-slate-300 text-xs leading-relaxed mb-4">
               You need <strong className="text-indigo-400">{rechargeModalGift.price.toLocaleString()} Lonkind Coins (L)</strong> to send <span className="text-white font-bold">{rechargeModalGift.name} {rechargeModalGift.icon}</span>, but you currently have <strong className="text-white">{userCoins.toLocaleString()} Coins</strong>.
-              Would you like to buy cheap Lonkind Coins now?
             </p>
+
+            <Button
+              disabled={isClaimingBonus}
+              onClick={handleClaimFreeBonus}
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black font-extrabold rounded-xl text-xs h-10 shadow-lg mb-3"
+            >
+              {isClaimingBonus ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Claim 500 Free Coins (Instant Test) 🎁'}
+            </Button>
 
             <div className="flex gap-3">
               <Button
@@ -1020,7 +1122,7 @@ export default function LiveStreamView({
                 }}
                 className="w-1/2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold rounded-xl text-xs h-10 shadow-lg shadow-indigo-500/20"
               >
-                Buy Coins
+                Buy More
               </Button>
             </div>
           </div>

@@ -82,13 +82,29 @@ export default function HomeFeed({
         const streamsCol = collection(db, 'live_streams');
         const q = query(streamsCol, where('status', '==', 'active'));
         const unsub = onSnapshot(q, (snapshot) => {
-            const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })).filter((s: any) => {
+                // Filter out stale streams (> 12 hours old)
+                if (s.startedAt && typeof s.startedAt.toDate === 'function') {
+                    const ageMs = Date.now() - s.startedAt.toDate().getTime();
+                    if (ageMs > 12 * 60 * 60 * 1000) return false;
+                }
+                return true;
+            });
             setActiveStreams(list);
         }, (err) => {
             console.warn("Active streams listener notice:", err);
         });
         return () => unsub();
     }, []);
+
+    const activeLiveUids = React.useMemo(() => {
+        const set = new Set<string>();
+        activeStreams.forEach(s => {
+            const uid = (s.hostUid || s.id || '').replace(/^live_/, '');
+            if (uid) set.add(uid);
+        });
+        return set;
+    }, [activeStreams]);
     const [isCreatingPost, setIsCreatingPost] = useState(false);
     const [newPostContent, setNewPostContent] = useState('');
     const [newPostMedia, setNewPostMedia] = useState<NewPostMedia | null>(null);
@@ -413,34 +429,40 @@ export default function HomeFeed({
 
                 {activeStreams.length > 0 ? (
                     <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-1">
-                        {activeStreams.map((stream) => (
-                            <div
-                                key={stream.id}
-                                onClick={() => onWatchLive && onWatchLive(stream.hostUid || stream.id)}
-                                className="flex-shrink-0 flex items-center gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition-all hover:scale-[1.02] group"
-                            >
-                                <div className="relative">
-                                    <Avatar className="h-11 w-11 border-2 border-rose-500 p-0.5 shadow-md">
-                                        <AvatarImage src={stream.hostAvatar} alt={stream.hostName || 'Host'} />
-                                        <AvatarFallback className="bg-rose-600 text-white text-xs font-bold">
-                                            {stream.hostName ? stream.hostName.charAt(0) : 'L'}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-rose-600 text-[9px] font-extrabold text-white px-1.5 py-0.2 rounded-full uppercase">LIVE</span>
+                        {activeStreams.map((stream) => {
+                            const rawUid = stream.hostUid || stream.id;
+                            const cleanHostUid = rawUid ? rawUid.replace(/^live_/, '') : '';
+                            return (
+                                <div
+                                    key={stream.id}
+                                    onClick={() => {
+                                        if (onWatchLive && cleanHostUid) onWatchLive(cleanHostUid);
+                                    }}
+                                    className="flex-shrink-0 flex items-center gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-rose-500/30 hover:border-rose-500/60 cursor-pointer transition-all hover:scale-[1.02] group shadow-sm"
+                                >
+                                    <div className="relative">
+                                        <Avatar className="h-11 w-11 border-2 border-rose-500 p-0.5 shadow-md">
+                                            <AvatarImage src={stream.hostAvatar} alt={stream.hostName || 'Host'} />
+                                            <AvatarFallback className="bg-rose-600 text-white text-xs font-bold">
+                                                {stream.hostName ? stream.hostName.charAt(0) : 'L'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-rose-600 text-[8px] font-extrabold text-white px-1.5 py-0.2 rounded-full uppercase shadow">LIVE</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors truncate max-w-[120px]">
+                                            {stream.hostName || 'Live Streamer'}
+                                        </span>
+                                        <span className="text-[10px] text-rose-300 flex items-center gap-1 mt-0.5 font-medium">
+                                            <Eye className="h-3 w-3 text-rose-400" /> {stream.viewerCount || 1} watching
+                                        </span>
+                                    </div>
+                                    <Button size="sm" className="h-7 px-2.5 text-[11px] font-extrabold bg-rose-600 group-hover:bg-rose-500 text-white rounded-lg ml-1 shadow">
+                                        Watch
+                                    </Button>
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
-                                        {stream.hostName || 'Live Streamer'}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                        <Eye className="h-3 w-3 text-rose-400" /> Watch Stream
-                                    </span>
-                                </div>
-                                <Button size="sm" className="h-7 px-2.5 text-[11px] font-bold bg-rose-600 group-hover:bg-rose-500 text-white rounded-lg ml-1">
-                                    Watch
-                                </Button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
                     <p className="text-xs text-slate-400 italic">No one is currently streaming live. Tap "Start Live" to go live on Lonkind!</p>
@@ -512,6 +534,8 @@ export default function HomeFeed({
                                 onDeletePost={onDeletePost}
                                 userReaction={userReactions.get(post.id)} 
                                 isSaved={savedPostIds.has(post.id)}
+                                isAuthorLive={activeLiveUids.has(post.author.uid)}
+                                onWatchLive={onWatchLive}
                             />
                         ))}
                     </div>

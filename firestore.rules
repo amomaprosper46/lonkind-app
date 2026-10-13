@@ -151,6 +151,37 @@ service cloud.firestore {
         request.auth.uid == resource.data.host.uid;
     }
 
+    /* ---------------- LIVE STREAMS ---------------- */
+
+    match /live_streams/{streamId} {
+      // Anyone can see active live streams on home feed
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.hostUid == request.auth.uid
+      );
+
+      // Real-time viewer tracking
+      match /viewers/{viewerId} {
+        allow read: if true;
+        allow write, delete: if isSignedIn();
+      }
+
+      // Live chat & gift stream announcements
+      match /chat/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin() || (isSignedIn() && resource.data.senderId == request.auth.uid);
+      }
+
+      // Split-screen co-host guest requests
+      match /cohost_requests/{requestId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isSignedIn();
+      }
+    }
+
     /* ---------------- TRANSACTIONS (FIXED) ---------------- */
 
     match /transactions/{txId} {

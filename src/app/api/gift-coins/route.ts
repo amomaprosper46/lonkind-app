@@ -45,22 +45,23 @@ export async function POST(req: NextRequest) {
     }
 
     const { toUserId, coinAmount, giftName, giftEmoji, spaceId, postId, isCauseDonation } = parsed.data;
+    const targetUserId = toUserId.replace(/^live_/, '');
 
     // 1 Lonkind Coin (L) = ₦10 Naira (or $0.01 USD equivalent)
     const cashEarningsNaira = coinAmount * 10; 
     const cashEarningsUSD = coinAmount * 0.01; 
 
     const senderRef = db.collection('users').doc(verifiedSenderUid);
-    const receiverRef = db.collection('users').doc(toUserId);
+    const receiverRef = db.collection('users').doc(targetUserId);
 
       /**
        * 2. ACID Transaction Settlement Thread
        */
       await db.runTransaction(async (transaction) => {
-        const [senderDoc, receiverDoc] = await Promise.all([
-          transaction.get(senderRef),
-          transaction.get(receiverRef),
-        ]);
+        const isSelfGift = verifiedSenderUid === targetUserId;
+
+        const senderDoc = await transaction.get(senderRef);
+        const receiverDoc = isSelfGift ? senderDoc : await transaction.get(receiverRef);
 
         const senderCoins = senderDoc.exists ? (senderDoc.data()?.coins || 0) : 0;
         if (senderCoins < coinAmount) {
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
         transaction.set(giftRef, {
           fromUserId: verifiedSenderUid,
           fromUserName: senderDoc.data()?.name || 'Unknown User',
-          toUserId,
+          toUserId: targetUserId,
           toUserName: receiverDoc.data()?.name || 'Unknown User',
           coins: coinAmount,
           cashValueNaira: cashEarningsNaira,
@@ -104,40 +105,56 @@ export async function POST(req: NextRequest) {
           time: FieldValue.serverTimestamp(),
         });
 
-        // B. Deduct virtual Lonkind coins (L) from sender (single update)
-        transaction.set(senderRef, {
-          coins: FieldValue.increment(-coinAmount),
-          lifetimeTipsGiven: FieldValue.increment(coinAmount),
-          badges: senderBadges,
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
-
-        // C. Credit REAL WITHDRAWABLE BALANCE directly to recipient creator account (single update)
-        if (!receiverDoc.exists) {
-          transaction.set(receiverRef, {
-            uid: toUserId,
-            coins: 0,
-            diamonds: coinAmount,
-            balance: cashEarningsUSD,
-            earningsNaira: cashEarningsNaira,
-            balanceNaira: cashEarningsNaira,
-            balanceUSD: cashEarningsUSD,
-            lifetimeTipsReceived: coinAmount,
-            badges: receiverBadges,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          }, { merge: true });
-        } else {
-          transaction.update(receiverRef, {
+        if (isSelfGift) {
+          // Self-testing: single atomic write avoids transaction conflict on identical document
+          transaction.set(senderRef, {
+            coins: FieldValue.increment(-coinAmount),
+            diamonds: FieldValue.increment(coinAmount),
             balance: FieldValue.increment(cashEarningsUSD),
             earningsNaira: FieldValue.increment(cashEarningsNaira),
             balanceNaira: FieldValue.increment(cashEarningsNaira),
             balanceUSD: FieldValue.increment(cashEarningsUSD),
-            diamonds: FieldValue.increment(coinAmount),
+            lifetimeTipsGiven: FieldValue.increment(coinAmount),
             lifetimeTipsReceived: FieldValue.increment(coinAmount),
-            badges: receiverBadges,
+            badges: Array.from(new Set([...senderBadges, ...receiverBadges])),
             updatedAt: FieldValue.serverTimestamp(),
-          });
+          }, { merge: true });
+        } else {
+          // B. Deduct virtual Lonkind coins (L) from sender
+          transaction.set(senderRef, {
+            coins: FieldValue.increment(-coinAmount),
+            lifetimeTipsGiven: FieldValue.increment(coinAmount),
+            badges: senderBadges,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          // C. Credit REAL WITHDRAWABLE BALANCE directly to recipient creator account
+          if (!receiverDoc.exists) {
+            transaction.set(receiverRef, {
+              uid: targetUserId,
+              coins: 0,
+              diamonds: coinAmount,
+              balance: cashEarningsUSD,
+              earningsNaira: cashEarningsNaira,
+              balanceNaira: cashEarningsNaira,
+              balanceUSD: cashEarningsUSD,
+              lifetimeTipsReceived: coinAmount,
+              badges: receiverBadges,
+              createdAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          } else {
+            transaction.update(receiverRef, {
+              balance: FieldValue.increment(cashEarningsUSD),
+              earningsNaira: FieldValue.increment(cashEarningsNaira),
+              balanceNaira: FieldValue.increment(cashEarningsNaira),
+              balanceUSD: FieldValue.increment(cashEarningsUSD),
+              diamonds: FieldValue.increment(coinAmount),
+              lifetimeTipsReceived: FieldValue.increment(coinAmount),
+              badges: receiverBadges,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
         }
 
         // D. If donation to Cause post, update raisedCoins

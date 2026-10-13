@@ -19,6 +19,9 @@ export function getCallRoomId(uidA: string, uidB: string): string {
  * Viewers use the same room ID to join as audience.
  */
 export function getLiveRoomId(hostUid: string): string {
-  const cleanHost = (hostUid || 'host').replace(/[^a-zA-Z0-9_]/g, '');
-  return `live_${cleanHost}`;
+  const cleanHost = (hostUid || 'host')
+    .toString()
+    .replace(/^live_/, '')
+    .replace(/[^a-zA-Z0-9_]/g, '');
+  return `live_${cleanHost || 'host'}`;
 }

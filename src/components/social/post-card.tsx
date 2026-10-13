@@ -83,6 +83,8 @@ interface PostCardProps {
     isSaved: boolean;
     onReportPost?: (post: Post) => void;
     onMuteUser?: (user: PostAuthor) => void;
+    isAuthorLive?: boolean;
+    onWatchLive?: (hostUid: string) => void;
 }
 
 const reactionIcons: { [key in ReactionType]: React.ElementType } = {
@@ -107,7 +109,7 @@ const ReactionButton = ({ reaction, onReact, isActive }: { reaction: ReactionTyp
     )
 };
 
-export default function PostCard({ post, currentUser, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved, onReportPost, onMuteUser }: PostCardProps) {
+export default function PostCard({ post, currentUser, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved, onReportPost, onMuteUser, isAuthorLive, onWatchLive }: PostCardProps) {
     const { author, content, imageUrl, videoUrl, reactions, comments, timestamp } = post;
     const totalReactions = Object.values(reactions || {}).reduce((a, b) => a + (b || 0), 0);
     const CurrentReactionIcon = userReaction ? reactionIcons[userReaction] : ThumbsUp;
@@ -262,15 +264,45 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
             )}
             <CardHeader className="p-4 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <Link href={`/profile/${author.handle}`}>
-                        <Avatar>
-                            <AvatarImage src={author.avatarUrl} alt={author.name} data-ai-hint="user avatar" />
-                            <AvatarFallback>{author.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                    </Link>
+                    {isAuthorLive && onWatchLive ? (
+                        <div 
+                            onClick={() => onWatchLive(author.uid)} 
+                            className="relative cursor-pointer group"
+                            title={`${author.name} is streaming live! Click to watch.`}
+                        >
+                            <Avatar className="ring-2 ring-rose-500 ring-offset-2 ring-offset-background animate-pulse transition-transform group-hover:scale-105">
+                                <AvatarImage src={author.avatarUrl} alt={author.name} data-ai-hint="user avatar" />
+                                <AvatarFallback className="bg-rose-600 text-white font-bold">{author.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-rose-600 text-[8px] font-black text-white px-1.5 py-0.2 rounded-full uppercase shadow tracking-wider">
+                                LIVE
+                            </span>
+                        </div>
+                    ) : (
+                        <Link href={`/profile/${author.handle}`}>
+                            <Avatar>
+                                <AvatarImage src={author.avatarUrl} alt={author.name} data-ai-hint="user avatar" />
+                                <AvatarFallback>{author.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                        </Link>
+                    )}
                     <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                             <Link href={`/profile/${author.handle}`} className="font-semibold hover:underline">{author.name}</Link>
+                            {isAuthorLive && onWatchLive && (
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        onWatchLive(author.uid);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black tracking-wide shadow-sm hover:bg-rose-500 transition-colors animate-pulse cursor-pointer"
+                                    title="Watch Live Stream"
+                                >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping" />
+                                    🔴 LIVE NOW
+                                </button>
+                            )}
                             {(author.isProfessional || author.handle === 'admin_lonkind') && <BadgeCheck className="h-5 w-5 text-primary" />}
                             {(author as any).badges?.includes('Top Creator') && <span title="Top Creator" className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">👑 Top Creator</span>}
                             {(author as any).badges?.includes('Whale') && <span title="Whale" className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/30">🐋 Whale</span>}
