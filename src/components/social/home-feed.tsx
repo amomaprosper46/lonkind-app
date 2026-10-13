@@ -528,13 +528,13 @@ export default function HomeFeed({
                                 key={post.id} 
                                 post={post}
                                 currentUser={currentUser}
-                                onReact={(postId, reaction) => onReact(postId, reaction, post.author.uid)} 
+                                onReact={(postId, reaction) => onReact && onReact(postId, reaction, post.author?.uid || '')} 
                                 onCommentClick={onComment} 
                                 onSavePost={onSavePost} 
                                 onDeletePost={onDeletePost}
-                                userReaction={userReactions.get(post.id)} 
-                                isSaved={savedPostIds.has(post.id)}
-                                isAuthorLive={activeLiveUids.has(post.author.uid)}
+                                userReaction={userReactions?.get ? userReactions.get(post.id) : undefined} 
+                                isSaved={savedPostIds?.has ? savedPostIds.has(post.id) : false}
+                                isAuthorLive={Boolean(post.author?.uid && activeLiveUids?.has && activeLiveUids.has(post.author.uid))}
                                 onWatchLive={onWatchLive}
                             />
                         ))}

@@ -204,6 +204,9 @@ export default function WalletView({ currentUser }: WalletViewProps) {
     const handlePurchase = async (coinAmount: number) => {
         setIsPurchasing(coinAmount);
         try {
+            const isFirstTimeBuyer = purchaseTxs.length === 0;
+            const coinsToCredit = isFirstTimeBuyer ? Math.round(coinAmount * 1.2) : coinAmount;
+
             let priceLocal = Number((coinAmount * currentGeo.coinRate).toFixed(2));
             const pkg = coinPackages.find(p => p.coins === coinAmount);
             if (pkg) priceLocal = Number((pkg.priceMult * currentGeo.coinRate).toFixed(2));
@@ -214,7 +217,7 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                 body: JSON.stringify({
                     email: currentUser.email || 'user@example.com',
                     amount: priceLocal,
-                    coinsToCredit: coinAmount,
+                    coinsToCredit: coinsToCredit,
                     currency: currentGeo.currency,
                     userId: currentUser.uid,
                 })
@@ -378,27 +381,44 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                 <Sparkles className="h-5 w-5 text-primary" /> Purchase Coins ({currentGeo.currency})
                             </CardTitle>
                             <CardDescription>Select a package or enter a custom amount to checkout globally via Flutterwave.</CardDescription>
+                            {purchaseTxs.length === 0 && (
+                                <div className="mt-2 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/10 border border-amber-500/40 flex items-center gap-2 text-xs text-amber-200">
+                                    <span className="text-base">🎁</span>
+                                    <span><strong>First Purchase Offer:</strong> You will receive <strong>+20% Extra Bonus Coins</strong> on your first purchase!</span>
+                                </div>
+                            )}
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                                 {coinPackages.map(pkg => {
                                     const priceLocal = Number((pkg.priceMult * currentGeo.coinRate).toFixed(2));
+                                    const isFirstTime = purchaseTxs.length === 0;
+                                    const totalCoins = isFirstTime ? Math.round(pkg.coins * 1.2) : pkg.coins;
                                     return (
                                         <Button
                                             key={pkg.coins}
                                             variant="outline"
-                                            className="h-auto p-4 flex flex-col items-center gap-1.5 border-2 hover:border-primary transition-all"
+                                            className="h-auto p-4 flex flex-col items-center gap-1.5 border-2 hover:border-primary transition-all relative overflow-hidden"
                                             onClick={() => handlePurchase(pkg.coins)}
                                             disabled={isPurchasing !== null}
                                         >
+                                            {isFirstTime && (
+                                                <span className="absolute top-1 right-1 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                                                    +20% 1ST BUY
+                                                </span>
+                                            )}
                                             {isPurchasing === pkg.coins ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                                                 <>
                                                     <div className="flex items-center gap-2">
                                                         <Coins className="h-6 w-6 text-yellow-500" />
-                                                        <span className="text-xl font-bold">{pkg.coins}</span>
+                                                        <span className="text-xl font-bold">{totalCoins.toLocaleString()}</span>
                                                     </div>
                                                     <p className="text-sm font-semibold">{currentGeo.symbol}{priceLocal.toLocaleString()}</p>
-                                                    {pkg.bonus && <p className="text-xs text-primary font-bold">{pkg.bonus}</p>}
+                                                    {isFirstTime ? (
+                                                        <p className="text-[10px] text-amber-400 font-bold">Includes 20% bonus ({pkg.coins} + {totalCoins - pkg.coins})</p>
+                                                    ) : (
+                                                        pkg.bonus && <p className="text-xs text-primary font-bold">{pkg.bonus}</p>
+                                                    )}
                                                 </>
                                             )}
                                         </Button>
@@ -423,6 +443,11 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                 disabled={isPurchasing !== null}
                                             />
                                         </div>
+                                        {purchaseTxs.length === 0 && customCoinAmount && parseInt(customCoinAmount) > 0 && (
+                                            <span className="text-[11px] text-amber-400 font-bold block pt-1">
+                                                🎁 +20% 1st Buy Bonus: You will receive {Math.round(parseInt(customCoinAmount) * 1.2).toLocaleString()} coins!
+                                            </span>
+                                        )}
                                     </div>
                                     <Button 
                                         onClick={() => {

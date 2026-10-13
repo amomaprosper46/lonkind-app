@@ -258,6 +258,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   }, []);
 
   const activeLiveCount = activeLiveStreams.length;
+  const [userReactions, setUserReactions] = useState<Map<string, ReactionType>>(new Map());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   
   const [searchQuery, setSearchQuery] = useState('');

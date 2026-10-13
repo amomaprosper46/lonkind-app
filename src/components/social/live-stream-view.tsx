@@ -169,7 +169,6 @@ export default function LiveStreamView({
   // Lonkind Video AR Filter & Sound Effects State
   const [activeFilter, setActiveFilter] = useState<'normal' | 'sparkles' | 'warm' | 'neon' | 'vintage' | 'golden'>('normal');
   const [streamHostInfo, setStreamHostInfo] = useState<{ name: string; avatar?: string; uid: string } | null>(null);
-  const [isClaimingBonus, setIsClaimingBonus] = useState(false);
 
   // Listen to live stream document for real-time host info
   useEffect(() => {
@@ -593,34 +592,6 @@ export default function LiveStreamView({
     }
   };
 
-  const handleClaimFreeBonus = async () => {
-    setIsClaimingBonus(true);
-    try {
-      const idToken = await auth.currentUser?.getIdToken();
-      if (!idToken) throw new Error('Please sign in first');
-      const res = await fetch('/api/coins/claim-bonus', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to claim coins');
-      toast({
-        title: '🎉 500 Coins Credited!',
-        description: data.message,
-      });
-      setUserCoins(prev => prev + 500);
-      setRechargeModalGift(null);
-    } catch (e: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Claim Failed',
-        description: e.message || 'Could not claim bonus.',
-      });
-    } finally {
-      setIsClaimingBonus(false);
-    }
-  };
-
   const handleEndStream = async () => {
     try {
       if (validUserId && roomId) {
@@ -1018,23 +989,25 @@ export default function LiveStreamView({
                 <h3 className="font-bold text-white text-base">Send Gift</h3>
               </div>
               
-              {/* Lonkind Coin Balance Badge & Quick Claim */}
+              {/* Lonkind Coin Balance Badge */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold text-indigo-300">
                   <span className="h-4 w-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">L</span>
                   <span>{userCoins.toLocaleString()} Coins</span>
                 </div>
-                {userCoins < 500 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={isClaimingBonus}
-                    onClick={handleClaimFreeBonus}
-                    className="h-7 px-2 text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30"
-                  >
-                    {isClaimingBonus ? <Loader2 className="h-3 w-3 animate-spin" /> : '+500 Free'}
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setIsGiftModalOpen(false);
+                    if (onGoToWallet) onGoToWallet();
+                    else window.location.href = '/?view=wallet';
+                  }}
+                  className="h-7 px-2.5 text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30"
+                  title="Buy coins"
+                >
+                  Buy Coins
+                </Button>
               </div>
 
               <Button
@@ -1094,19 +1067,22 @@ export default function LiveStreamView({
               You need <strong className="text-indigo-400">{rechargeModalGift.price.toLocaleString()} Lonkind Coins (L)</strong> to send <span className="text-white font-bold">{rechargeModalGift.name} {rechargeModalGift.icon}</span>, but you currently have <strong className="text-white">{userCoins.toLocaleString()} Coins</strong>.
             </p>
 
-            <Button
-              disabled={isClaimingBonus}
-              onClick={handleClaimFreeBonus}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black font-extrabold rounded-xl text-xs h-10 shadow-lg mb-3"
-            >
-              {isClaimingBonus ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Claim 500 Free Coins (Instant Test) 🎁'}
-            </Button>
+            {/* First Purchase Promotional Banner */}
+            <div className="mb-4 p-3 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-indigo-500/15 border border-amber-500/30 text-left">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm">🎁</span>
+                <span className="text-xs font-black text-amber-300 uppercase tracking-wide">First Purchase Special</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-snug">
+                Get up to <strong className="text-amber-400 font-extrabold">+20% Bonus Coins</strong> on your first coin purchase!
+              </p>
+            </div>
 
             <div className="flex gap-3">
               <Button
                 variant="outline"
                 onClick={() => setRechargeModalGift(null)}
-                className="w-1/2 border-white/15 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl text-xs font-bold h-10"
+                className="w-1/2 border-white/15 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl text-xs font-bold h-11"
               >
                 Cancel
               </Button>
@@ -1120,9 +1096,10 @@ export default function LiveStreamView({
                     window.location.href = '/?view=wallet';
                   }
                 }}
-                className="w-1/2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold rounded-xl text-xs h-10 shadow-lg shadow-indigo-500/20"
+                className="w-1/2 bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 hover:opacity-95 text-white font-extrabold rounded-xl text-xs h-11 shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-1.5"
               >
-                Buy More
+                <span>Buy Coins</span>
+                <span className="bg-white/20 text-[9px] font-black px-1.5 py-0.5 rounded-full">+20%</span>
               </Button>
             </div>
           </div>

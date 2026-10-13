@@ -110,7 +110,8 @@ const ReactionButton = ({ reaction, onReact, isActive }: { reaction: ReactionTyp
 };
 
 export default function PostCard({ post, currentUser, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved, onReportPost, onMuteUser, isAuthorLive, onWatchLive }: PostCardProps) {
-    const { author, content, imageUrl, videoUrl, reactions, comments, timestamp } = post;
+    const author = post?.author || { name: 'Lonkind Member', handle: 'member', avatarUrl: '', uid: '' };
+    const { content, imageUrl, videoUrl, reactions, comments, timestamp } = post || {};
     const totalReactions = Object.values(reactions || {}).reduce((a, b) => a + (b || 0), 0);
     const CurrentReactionIcon = userReaction ? reactionIcons[userReaction] : ThumbsUp;
     const [isReactionDialogOpen, setIsReactionDialogOpen] = useState(false);
