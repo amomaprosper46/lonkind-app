@@ -187,3 +187,15 @@
   animation: vipSlideIn 4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* 👑 Top Gifter #1 Leaderboard Takeover Banner */
+@keyframes crownTakeover {
+  0% { transform: translateY(-100%) scale(0.9); opacity: 0; }
+  15% { transform: translateY(0) scale(1.03); opacity: 1; }
+  25% { transform: translateY(0) scale(1); opacity: 1; }
+  85% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-100%) scale(0.9); opacity: 0; }
+}
+.animate-crown-takeover {
+  animation: crownTakeover 4.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

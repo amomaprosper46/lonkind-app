@@ -180,6 +180,12 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow create, update, delete: if isSignedIn();
       }
+
+      // Top gifters & contributor leaderboard
+      match /contributors/{contributorId} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
     }
 
     /* ---------------- TRANSACTIONS (FIXED) ---------------- */

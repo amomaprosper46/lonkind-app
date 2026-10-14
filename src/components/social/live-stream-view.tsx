@@ -5,7 +5,7 @@ import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId, getZegoServerSecret, setZegoServerSecret, isValidZegoSecret } from '@/lib/zego';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, KeyRound, ShieldAlert, ExternalLink, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers } from 'lucide-react';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, KeyRound, ShieldAlert, ExternalLink, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers, Trophy, Target, Pin, PinOff, Crown } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -185,6 +185,40 @@ export default function LiveStreamView({
   } | null>(null);
   const [isScreenShaking, setIsScreenShaking] = useState(false);
 
+  // Top Gifters & Contributor Leaderboard State
+  const [contributors, setContributors] = useState<Array<{
+    uid: string;
+    name: string;
+    avatarUrl?: string;
+    totalCoins: number;
+    lastGiftAt?: any;
+  }>>([]);
+  const [isContributorsModalOpen, setIsContributorsModalOpen] = useState(false);
+  const [leaderboardBanner, setLeaderboardBanner] = useState<{ name: string; avatarUrl?: string; coins: number } | null>(null);
+  const prevLeaderUidRef = useRef<string | null>(null);
+
+  // Creator Stream Goal State
+  const [goalEnabled, setGoalEnabled] = useState(true);
+  const [goalTitle, setGoalTitle] = useState('Community Goal 🎯');
+  const [goalTarget, setGoalTarget] = useState(1000);
+  const [streamGoal, setStreamGoal] = useState<{
+    enabled: boolean;
+    title: string;
+    targetCoins: number;
+    currentCoins: number;
+    achieved?: boolean;
+  } | null>(null);
+  const [hasCelebratedGoal, setHasCelebratedGoal] = useState(false);
+
+  // Pinned Notice / Announcement State
+  const [pinnedComment, setPinnedComment] = useState<{
+    text: string;
+    senderName: string;
+    pinnedAt?: any;
+  } | null>(null);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pinInputText, setPinInputText] = useState('');
+
   // Authentication & Zego Connection State
   const [serverSecret, setServerSecret] = useState<string>(() => getZegoServerSecret());
   const [showSecretModal, setShowSecretModal] = useState<boolean>(() => !isValidZegoSecret(getZegoServerSecret()));
@@ -254,7 +288,7 @@ export default function LiveStreamView({
   const [activeFilter, setActiveFilter] = useState<'normal' | 'sparkles' | 'warm' | 'neon' | 'vintage' | 'golden'>('normal');
   const [streamHostInfo, setStreamHostInfo] = useState<{ name: string; avatar?: string; uid: string } | null>(null);
 
-  // Listen to live stream document for real-time host info
+  // Listen to live stream document for real-time host info, stream goal, and pinned comment
   useEffect(() => {
     if (!roomId) return;
     const roomRef = doc(db, 'live_streams', roomId);
@@ -268,10 +302,31 @@ export default function LiveStreamView({
             uid: data.hostUid,
           });
         }
+        if (data.streamGoal) {
+          setStreamGoal(data.streamGoal);
+          // Check if goal was newly achieved
+          if (data.streamGoal.enabled && data.streamGoal.currentCoins >= data.streamGoal.targetCoins && !hasCelebratedGoal) {
+            setHasCelebratedGoal(true);
+            playLonkindSoundEffect('fanfare');
+            try {
+              confetti({
+                particleCount: 140,
+                spread: 100,
+                origin: { y: 0.45 },
+                colors: ['#f59e0b', '#10b981', '#6366f1', '#ec4899', '#ffffff'],
+              });
+            } catch (_) {}
+          }
+        } else {
+          setStreamGoal(null);
+        }
+        if (data.pinnedComment !== undefined) {
+          setPinnedComment(data.pinnedComment);
+        }
       }
     });
     return () => unsub();
-  }, [roomId]);
+  }, [roomId, hasCelebratedGoal]);
 
   // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING & STREAM REGISTRATION
   useEffect(() => {
@@ -302,6 +357,13 @@ export default function LiveStreamView({
         category: streamCategory,
         streamMode: streamMode,
         viewerCount: 1,
+        streamGoal: goalEnabled ? {
+          enabled: true,
+          title: goalTitle || 'Community Goal 🎯',
+          targetCoins: Number(goalTarget) || 1000,
+          currentCoins: 0,
+          achieved: false,
+        } : null,
         startedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true }).catch(console.error);
@@ -341,7 +403,7 @@ export default function LiveStreamView({
         updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
       }
     };
-  }, [roomId, validUserId, validUserName, userAvatar, isHost, hostUid, hasStartedLive, streamTitle, streamCategory, streamMode]);
+  }, [roomId, validUserId, validUserName, userAvatar, isHost, hostUid, hasStartedLive, streamTitle, streamCategory, streamMode, goalEnabled, goalTitle, goalTarget]);
 
   // 2. REAL-TIME VIEWERS COUNT & ENTRANCE BANNER LISTENER
   useEffect(() => {
@@ -437,6 +499,84 @@ export default function LiveStreamView({
     toast({
       title: 'Request Declined',
       description: 'Co-Host seat request was declined.',
+    });
+  };
+
+  // 4. REAL-TIME CONTRIBUTOR & TOP GIFTER LEADERBOARD LISTENER
+  useEffect(() => {
+    if (!roomId) return;
+    const contribCol = collection(db, 'live_streams', roomId, 'contributors');
+    const q = query(contribCol, orderBy('totalCoins', 'desc'), limit(25));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: Array<{
+        uid: string;
+        name: string;
+        avatarUrl?: string;
+        totalCoins: number;
+        lastGiftAt?: any;
+      }> = [];
+
+      snapshot.docs.forEach((docSnap) => {
+        const d = docSnap.data();
+        list.push({
+          uid: docSnap.id,
+          name: d.name || 'Anonymous',
+          avatarUrl: d.avatarUrl,
+          totalCoins: Number(d.totalCoins) || 0,
+          lastGiftAt: d.lastGiftAt,
+        });
+      });
+
+      // Detect if #1 top contributor changed hands
+      if (list.length > 0 && list[0].totalCoins > 0) {
+        if (prevLeaderUidRef.current && list[0].uid !== prevLeaderUidRef.current) {
+          setLeaderboardBanner({
+            name: list[0].name,
+            avatarUrl: list[0].avatarUrl,
+            coins: list[0].totalCoins,
+          });
+          playLonkindSoundEffect('fanfare');
+          setTimeout(() => setLeaderboardBanner(null), 4500);
+        }
+        prevLeaderUidRef.current = list[0].uid;
+      }
+
+      setContributors(list);
+    });
+
+    return () => unsubscribe();
+  }, [roomId]);
+
+  const handleSavePinnedNotice = async () => {
+    if (!roomId || !isHost) return;
+    const text = pinInputText.trim();
+    if (!text) return;
+    const roomRef = doc(db, 'live_streams', roomId);
+    await updateDoc(roomRef, {
+      pinnedComment: {
+        text,
+        senderName: validUserName,
+        pinnedAt: serverTimestamp(),
+      },
+    }).catch(console.error);
+    setIsPinModalOpen(false);
+    setPinInputText('');
+    toast({
+      title: '📌 Notice Pinned!',
+      description: 'Your announcement is now pinned at the top of the chat for all viewers.',
+    });
+  };
+
+  const handleUnpinNotice = async () => {
+    if (!roomId || !isHost) return;
+    const roomRef = doc(db, 'live_streams', roomId);
+    await updateDoc(roomRef, {
+      pinnedComment: null,
+    }).catch(console.error);
+    toast({
+      title: 'Notice Unpinned',
+      description: 'The pinned announcement was removed.',
     });
   };
 
@@ -788,6 +928,24 @@ export default function LiveStreamView({
       // Trigger immersive gifting moment (confetti, VIP banner, center animation, combo streak, sound effects)
       triggerGiftingMoment(gift, validUserName, userAvatar);
 
+      // Update Contributor Leaderboard in Firestore
+      const contribRef = doc(db, 'live_streams', roomId, 'contributors', validUserId);
+      setDoc(contribRef, {
+        uid: validUserId,
+        name: validUserName,
+        avatarUrl: userAvatar || '',
+        totalCoins: increment(gift.price),
+        lastGiftAt: serverTimestamp(),
+      }, { merge: true }).catch(console.error);
+
+      // Increment Stream Goal progress in Firestore if active
+      if (streamGoal?.enabled) {
+        const roomRef = doc(db, 'live_streams', roomId);
+        updateDoc(roomRef, {
+          'streamGoal.currentCoins': increment(gift.price),
+        }).catch(console.error);
+      }
+
       // Increment PK Battle score points
       setPkBattleScore(prev => ({
         ...prev,
@@ -1062,6 +1220,78 @@ export default function LiveStreamView({
                 })}
               </div>
             </div>
+
+            {/* 4. Creator Stream Goal (Optional) */}
+            <div className="space-y-3 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Target className="h-3.5 w-3.5 text-rose-400" />
+                  <span>Stream Coin Goal</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setGoalEnabled(!goalEnabled)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+                    goalEnabled
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
+                      : 'bg-white/5 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  {goalEnabled ? 'Enabled ✓' : 'Disabled'}
+                </button>
+              </div>
+
+              {goalEnabled && (
+                <div className="space-y-3 p-3.5 rounded-2xl bg-slate-900/90 border border-white/10 shadow-inner">
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-medium block mb-1">Goal Objective</span>
+                    <Input
+                      type="text"
+                      value={goalTitle}
+                      onChange={(e) => setGoalTitle(e.target.value)}
+                      maxLength={40}
+                      placeholder="e.g. Song Cover 🎸, Subathon 🎯"
+                      className="bg-slate-950 border-white/15 text-white text-xs h-10 rounded-xl focus:border-rose-500"
+                    />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {['Song Cover 🎸', 'Dance Celebration 💃', 'Community Milestone 🎯', 'Q&A Special 🎙️', 'PC Setup Fund 💻'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setGoalTitle(preset)}
+                          className="text-[10px] font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white px-2.5 py-1 rounded-full transition-all"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] text-slate-400 font-medium">Coin Target</span>
+                      <span className="text-[11px] font-mono font-extrabold text-amber-400">{goalTarget.toLocaleString()} L</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[500, 1000, 2500, 5000, 10000, 25000].map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => setGoalTarget(amount)}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border transition-all ${
+                            goalTarget === amount
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black border-amber-400 shadow-md font-extrabold'
+                              : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                          }`}
+                        >
+                          {amount.toLocaleString()} L
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1229,6 +1459,37 @@ export default function LiveStreamView({
             </Button>
           )}
 
+          {/* 🏆 Top Gifters Podium Button */}
+          <button
+            type="button"
+            onClick={() => setIsContributorsModalOpen(true)}
+            title="Top Contributors & Leaderboard"
+            className="flex items-center gap-1.5 bg-slate-950/75 hover:bg-slate-900 backdrop-blur-md border border-amber-500/40 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-xl transition-all transform hover:scale-105 active:scale-95"
+          >
+            <Trophy className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            {contributors.length === 0 ? (
+              <span className="text-amber-300 text-[11px] font-semibold hidden sm:inline">Top Gifters</span>
+            ) : (
+              <div className="flex items-center -space-x-1.5">
+                {contributors.slice(0, 3).map((c, idx) => (
+                  <div key={c.uid} className="relative">
+                    <Avatar className={`h-6 w-6 border-2 ${
+                      idx === 0 ? 'border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]' : idx === 1 ? 'border-slate-300' : 'border-amber-700'
+                    } shadow shrink-0`}>
+                      <AvatarImage src={c.avatarUrl} alt={c.name} />
+                      <AvatarFallback className="bg-indigo-600 text-[8px] font-bold text-white">
+                        {c.name ? c.name.charAt(0) : 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="absolute -bottom-1 -right-1 text-[8px] leading-none pointer-events-none">
+                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </button>
+
           <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-100 text-xs font-bold px-3 py-1.5 rounded-full shadow-xl">
             <Eye className="h-3.5 w-3.5 text-indigo-400" />
             <span>👁 {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}</span>
@@ -1261,6 +1522,19 @@ export default function LiveStreamView({
           </Button>
         </div>
       </div>
+
+      {/* 👑 #1 Top Gifter Crown Takeover Banner */}
+      {leaderboardBanner && (
+        <div className="absolute top-16 left-4 right-4 z-40 pointer-events-none flex justify-center animate-crown-takeover">
+          <div className="bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-black font-black text-xs md:text-sm px-5 py-2.5 rounded-full shadow-[0_0_35px_rgba(245,158,11,0.9)] border-2 border-white flex items-center gap-2 max-w-md truncate">
+            <Crown className="h-5 w-5 fill-black text-black shrink-0 animate-bounce" />
+            <span className="truncate">
+              NEW #1 GIFTER! <strong>@{leaderboardBanner.name}</strong> claimed the Crown with {leaderboardBanner.coins.toLocaleString()} L!
+            </span>
+            <span className="shrink-0 text-base">👑</span>
+          </div>
+        </div>
+      )}
 
       {/* ⚔️ Lonkind 1v1 PK Battle Top Progress Bar Widget */}
       {pkBattleScore.active && (
@@ -1301,6 +1575,56 @@ export default function LiveStreamView({
                 style={{ width: `${100 - Math.max(10, Math.min(90, (pkBattleScore.host1Score / (pkBattleScore.host1Score + pkBattleScore.host2Score || 1)) * 100))}%` }}
                 className="h-full bg-gradient-to-r from-pink-500 to-rose-600 transition-all duration-500"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎯 Creator Stream Goal Progress Meter */}
+      {streamGoal?.enabled && (
+        <div className={`absolute ${pkBattleScore.active ? 'top-32' : 'top-16'} left-4 right-4 z-20 flex justify-center pointer-events-auto`}>
+          <div className="bg-slate-950/85 backdrop-blur-md border border-white/20 rounded-2xl px-3.5 py-2.5 shadow-2xl max-w-sm w-full">
+            <div className="flex items-center justify-between text-xs font-bold mb-1.5">
+              <div className="flex items-center gap-1.5 text-white truncate max-w-[190px]">
+                <Target className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                <span className="truncate">{streamGoal.title}</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0 text-[11px]">
+                {streamGoal.currentCoins >= streamGoal.targetCoins ? (
+                  <Badge className="bg-gradient-to-r from-emerald-500 to-green-600 text-white font-extrabold text-[10px] px-2 py-0 animate-pulse border-none shadow-md">
+                    🎉 ACHIEVED!
+                  </Badge>
+                ) : (
+                  <span className="font-mono text-amber-400 font-extrabold">
+                    {streamGoal.currentCoins.toLocaleString()} / {streamGoal.targetCoins.toLocaleString()} L
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Progress Bar Track */}
+            <div className="relative w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-white/10 shadow-inner">
+              <div
+                style={{
+                  width: `${Math.min(100, Math.round(((streamGoal.currentCoins || 0) / (streamGoal.targetCoins || 1)) * 100))}%`,
+                }}
+                className={`h-full transition-all duration-500 ${
+                  streamGoal.currentCoins >= streamGoal.targetCoins
+                    ? 'bg-gradient-to-r from-emerald-400 to-green-500'
+                    : 'bg-gradient-to-r from-rose-500 via-amber-500 to-yellow-400'
+                }`}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1.5">
+              <span>{Math.min(100, Math.round(((streamGoal.currentCoins || 0) / (streamGoal.targetCoins || 1)) * 100))}% complete</span>
+              <button
+                type="button"
+                onClick={() => setIsGiftModalOpen(true)}
+                className="text-amber-400 hover:text-amber-300 font-bold hover:underline"
+              >
+                Contribute Gift 🎁
+              </button>
             </div>
           </div>
         </div>
@@ -1515,15 +1839,55 @@ export default function LiveStreamView({
           <MessageSquare className="h-4 w-4 text-indigo-400" />
           <span className="text-xs font-bold text-white tracking-wide uppercase">Live Chat</span>
           
-          <Button
-            size="sm"
-            onClick={() => setIsGiftModalOpen(true)}
-            className="ml-auto h-7 px-2.5 bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white font-bold text-[11px] rounded-full shadow-md flex items-center gap-1.5 border border-white/20 transform hover:scale-105 transition-all"
-          >
-            <Gift className="h-3.5 w-3.5" />
-            Send Gift
-          </Button>
+          <div className="ml-auto flex items-center gap-1.5">
+            {isHost && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsPinModalOpen(true)}
+                title={pinnedComment ? 'Edit Pinned Notice' : 'Pin Host Notice'}
+                className="h-7 px-2 text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30 flex items-center gap-1"
+              >
+                <Pin className="h-3 w-3" />
+                <span>{pinnedComment ? 'Notice' : 'Pin'}</span>
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              onClick={() => setIsGiftModalOpen(true)}
+              className="h-7 px-2.5 bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white font-bold text-[11px] rounded-full shadow-md flex items-center gap-1.5 border border-white/20 transform hover:scale-105 transition-all"
+            >
+              <Gift className="h-3.5 w-3.5" />
+              Send Gift
+            </Button>
+          </div>
         </div>
+
+        {/* 📌 Pinned Announcement Sticky Notice */}
+        {pinnedComment && (
+          <div className="mb-2 p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-indigo-500/20 to-purple-500/20 border border-amber-400/40 text-xs text-white shrink-0 shadow-lg">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1 text-[10px] font-black text-amber-300 uppercase tracking-wider">
+                <Pin className="h-3 w-3 text-amber-400" />
+                <span>Host Notice</span>
+              </div>
+              {isHost && (
+                <button
+                  type="button"
+                  onClick={handleUnpinNotice}
+                  title="Unpin Announcement"
+                  className="text-slate-400 hover:text-rose-400 p-0.5 transition-colors"
+                >
+                  <PinOff className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-100 leading-snug break-words font-medium">
+              {pinnedComment.text}
+            </p>
+          </div>
+        )}
 
         {/* Message Scroll Area */}
         <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 no-scrollbar min-h-[120px]">
@@ -1768,6 +2132,295 @@ export default function LiveStreamView({
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🏆 Top Contributors & Gifter Podium Leaderboard Modal */}
+      {isContributorsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-950 border border-white/15 rounded-3xl p-5 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-md">
+                  <Trophy className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Top Contributors</h3>
+                  <p className="text-[11px] text-slate-400">Stream gift rankings &amp; podium</p>
+                </div>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsContributorsModalOpen(false)}
+                className="h-8 w-8 text-slate-400 hover:text-white hover:bg-white/10 rounded-full"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {contributors.length === 0 ? (
+              <div className="py-12 text-center flex flex-col items-center">
+                <div className="h-16 w-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-3xl mb-3 shadow-inner">
+                  👑
+                </div>
+                <h4 className="text-sm font-bold text-white mb-1">No Gifters Yet</h4>
+                <p className="text-xs text-slate-400 max-w-xs mb-5">
+                  Be the very first contributor to claim the #1 Crown and take the top of the podium!
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setIsContributorsModalOpen(false);
+                    setIsGiftModalOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-black font-extrabold text-xs rounded-xl shadow-lg h-10 px-5"
+                >
+                  Send First Gift 🎁
+                </Button>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pr-1">
+                {/* 🥇 🥈 🥉 3D-Style Podium Stage */}
+                <div className="pt-4 pb-2 px-1 flex items-end justify-center gap-2 sm:gap-3 border-b border-white/10">
+                  {/* 2nd Place (Silver) */}
+                  <div className="flex flex-col items-center flex-1 max-w-[105px]">
+                    {contributors[1] ? (
+                      <>
+                        <div className="relative mb-2">
+                          <Avatar className="h-12 w-12 border-2 border-slate-300 shadow-md">
+                            <AvatarImage src={contributors[1].avatarUrl} alt={contributors[1].name} />
+                            <AvatarFallback className="bg-slate-700 text-white font-bold text-xs">
+                              {contributors[1].name.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="absolute -bottom-1 -right-1 bg-slate-300 text-slate-900 text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center shadow">
+                            2
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold text-white truncate max-w-full text-center">
+                          {contributors[1].name}
+                        </span>
+                        <span className="text-[10px] font-mono font-extrabold text-slate-300">
+                          {contributors[1].totalCoins.toLocaleString()} L
+                        </span>
+                        <div className="w-full h-14 bg-gradient-to-t from-slate-800 to-slate-700/60 rounded-t-xl mt-2 flex items-center justify-center font-black text-slate-300 text-xs border-t border-slate-400/40">
+                          🥈 2nd
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-full h-24 flex flex-col items-center justify-end opacity-40">
+                        <span className="text-[10px] text-slate-500 mb-1">Open</span>
+                        <div className="w-full h-14 bg-slate-900 rounded-t-xl border-t border-white/5 flex items-center justify-center text-[11px] text-slate-600">
+                          🥈
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 1st Place (Center, tallest, Gold) */}
+                  <div className="flex flex-col items-center flex-1 max-w-[115px]">
+                    {contributors[0] ? (
+                      <>
+                        <div className="relative mb-2">
+                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 text-base animate-bounce">
+                            👑
+                          </div>
+                          <Avatar className="h-14 w-14 border-2 border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+                            <AvatarImage src={contributors[0].avatarUrl} alt={contributors[0].name} />
+                            <AvatarFallback className="bg-amber-600 text-white font-black text-sm">
+                              {contributors[0].name.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="absolute -bottom-1 -right-1 bg-amber-400 text-black text-[11px] font-black h-5 w-5 rounded-full flex items-center justify-center shadow">
+                            1
+                          </span>
+                        </div>
+                        <span className="text-xs font-black text-amber-300 truncate max-w-full text-center">
+                          {contributors[0].name}
+                        </span>
+                        <span className="text-[11px] font-mono font-black text-amber-400">
+                          {contributors[0].totalCoins.toLocaleString()} L
+                        </span>
+                        <div className="w-full h-20 bg-gradient-to-t from-amber-600/40 to-amber-500/20 rounded-t-xl mt-2 flex items-center justify-center font-black text-amber-300 text-xs border-t-2 border-amber-400 shadow-lg">
+                          🥇 1st
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {/* 3rd Place (Bronze) */}
+                  <div className="flex flex-col items-center flex-1 max-w-[105px]">
+                    {contributors[2] ? (
+                      <>
+                        <div className="relative mb-2">
+                          <Avatar className="h-12 w-12 border-2 border-amber-700 shadow-md">
+                            <AvatarImage src={contributors[2].avatarUrl} alt={contributors[2].name} />
+                            <AvatarFallback className="bg-amber-900 text-white font-bold text-xs">
+                              {contributors[2].name.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="absolute -bottom-1 -right-1 bg-amber-700 text-white text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center shadow">
+                            3
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold text-white truncate max-w-full text-center">
+                          {contributors[2].name}
+                        </span>
+                        <span className="text-[10px] font-mono font-extrabold text-amber-500">
+                          {contributors[2].totalCoins.toLocaleString()} L
+                        </span>
+                        <div className="w-full h-10 bg-gradient-to-t from-amber-950/60 to-amber-900/40 rounded-t-xl mt-2 flex items-center justify-center font-black text-amber-600 text-xs border-t border-amber-700/40">
+                          🥉 3rd
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-full h-20 flex flex-col items-center justify-end opacity-40">
+                        <span className="text-[10px] text-slate-500 mb-1">Open</span>
+                        <div className="w-full h-10 bg-slate-900 rounded-t-xl border-t border-white/5 flex items-center justify-center text-[11px] text-slate-600">
+                          🥉
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ranks 4+ List */}
+                <div className="space-y-1.5 pt-1">
+                  {contributors.slice(3).map((c, idx) => (
+                    <div
+                      key={c.uid}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all text-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-bold text-slate-400 w-5 text-center">
+                          #{idx + 4}
+                        </span>
+                        <Avatar className="h-7 w-7 border border-white/10">
+                          <AvatarImage src={c.avatarUrl} alt={c.name} />
+                          <AvatarFallback className="bg-indigo-600 text-white text-[10px]">
+                            {c.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-bold text-white truncate max-w-[160px]">
+                          {c.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 font-mono font-extrabold text-amber-400">
+                        <span>{c.totalCoins.toLocaleString()}</span>
+                        <span className="text-[10px] text-slate-400">L</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-white/10 shrink-0 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Rankings update in real-time
+              </span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsContributorsModalOpen(false);
+                  setIsGiftModalOpen(true);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl h-8 px-3"
+              >
+                Send Gift 🎁
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📌 Host Pin Announcement Modal */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-950 border border-white/15 rounded-3xl p-5 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-md">
+                  <Pin className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Pin Stream Announcement</h3>
+                  <p className="text-[11px] text-slate-400">Stays pinned at the top of the chat</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsPinModalOpen(false)}
+                className="h-8 w-8 text-slate-400 hover:text-white hover:bg-white/10 rounded-full"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-3.5 mb-5">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5">Notice Text</label>
+                <Input
+                  type="text"
+                  value={pinInputText}
+                  onChange={(e) => setPinInputText(e.target.value)}
+                  maxLength={140}
+                  placeholder="e.g. Welcome everyone! Drop your song requests below 🎸"
+                  className="bg-slate-900 border-white/15 text-white placeholder:text-slate-500 rounded-xl h-11 text-xs focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <span className="text-[11px] text-slate-400 font-medium block mb-1.5">Quick Presets</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Welcome everyone! Say hi in chat 👋',
+                    'Subathon in progress! Goal reward at 5k coins 🎁',
+                    'Q&A Session: Drop your questions below 👇',
+                    'Follow my profile for daily live alerts! ✨',
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setPinInputText(preset)}
+                      className="text-[10px] font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white px-2.5 py-1 rounded-full text-left transition-all"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5">
+              {pinnedComment && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    await handleUnpinNotice();
+                    setIsPinModalOpen(false);
+                  }}
+                  className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs font-bold rounded-xl h-10 px-4"
+                >
+                  Unpin Current
+                </Button>
+              )}
+              <Button
+                type="button"
+                disabled={!pinInputText.trim()}
+                onClick={handleSavePinnedNotice}
+                className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-black font-extrabold text-xs rounded-xl h-10 px-5 shadow-lg"
+              >
+                Pin Notice 📌
+              </Button>
             </div>
           </div>
         </div>
