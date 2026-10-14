@@ -5,7 +5,8 @@ import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId, getZegoServerSecret, setZegoServerSecret, isValidZegoSecret } from '@/lib/zego';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, KeyRound, ShieldAlert, ExternalLink } from 'lucide-react';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, KeyRound, ShieldAlert, ExternalLink, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -157,7 +158,32 @@ export default function LiveStreamView({
   const [isCoHostAccepted, setIsCoHostAccepted] = useState(false);
   const [coHostRequests, setCoHostRequests] = useState<Array<{ id: string; uid: string; name: string; avatarUrl?: string; status: string }>>([]);
   const [isHostRequestsModalOpen, setIsHostRequestsModalOpen] = useState(false);
-  const [activeSuperGift, setActiveSuperGift] = useState<{ icon: string; name: string; senderName: string } | null>(null);
+
+  // User Choice Pre-Live Studio State
+  const [hasStartedLive, setHasStartedLive] = useState(!isHost);
+  const [streamTitle, setStreamTitle] = useState(`${validUserName}'s Live Stream ✨`);
+  const [streamCategory, setStreamCategory] = useState<'chat' | 'music' | 'gaming' | 'creative' | 'lifestyle'>('chat');
+  const [streamMode, setStreamMode] = useState<'video' | 'audio'>('video');
+  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+  const [isMicEnabled, setIsMicEnabled] = useState(true);
+
+  // High-Impact Gifting Moments State
+  const [giftCombo, setGiftCombo] = useState<{ giftId: string; count: number }>({ giftId: '', count: 1 });
+  const comboTimerRef = useRef<any>(null);
+  const [vipBanner, setVipBanner] = useState<{
+    senderName: string;
+    senderAvatar?: string;
+    giftName: string;
+    giftIcon: string;
+    combo: number;
+    price: number;
+  } | null>(null);
+  const [activeCenterGift, setActiveCenterGift] = useState<{
+    gift: typeof GIFT_CATALOG[0];
+    senderName: string;
+    combo: number;
+  } | null>(null);
+  const [isScreenShaking, setIsScreenShaking] = useState(false);
 
   // Authentication & Zego Connection State
   const [serverSecret, setServerSecret] = useState<string>(() => getZegoServerSecret());
@@ -250,6 +276,7 @@ export default function LiveStreamView({
   // 1. REAL REAL-TIME FIRESTORE VIEWER TRACKING & STREAM REGISTRATION
   useEffect(() => {
     if (!roomId || !validUserId) return;
+    if (isHost && !hasStartedLive) return;
 
     const viewerRef = doc(db, 'live_streams', roomId, 'viewers', validUserId);
     const roomRef = doc(db, 'live_streams', roomId);
@@ -271,6 +298,9 @@ export default function LiveStreamView({
         hostUid: actualHostUid,
         hostName: validUserName,
         hostAvatar: userAvatar || '',
+        streamTitle: streamTitle || `${validUserName}'s Live Stream`,
+        category: streamCategory,
+        streamMode: streamMode,
         viewerCount: 1,
         startedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -295,7 +325,7 @@ export default function LiveStreamView({
     // Clean up when user closes browser, tab, or navigates away
     const handleBeforeUnload = () => {
       deleteDoc(viewerRef).catch(() => {});
-      if (isHost) {
+      if (isHost && hasStartedLive) {
         setDoc(roomRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true }).catch(() => {});
         updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
       }
@@ -306,12 +336,12 @@ export default function LiveStreamView({
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       deleteDoc(viewerRef).catch(console.error);
-      if (isHost) {
+      if (isHost && hasStartedLive && hasJoinedRoomRef.current) {
         setDoc(roomRef, { status: 'ended', endedAt: serverTimestamp() }, { merge: true }).catch(() => {});
         updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
       }
     };
-  }, [roomId, validUserId, validUserName, userAvatar, isHost, hostUid]);
+  }, [roomId, validUserId, validUserName, userAvatar, isHost, hostUid, hasStartedLive, streamTitle, streamCategory, streamMode]);
 
   // 2. REAL-TIME VIEWERS COUNT & ENTRANCE BANNER LISTENER
   useEffect(() => {
@@ -440,6 +470,7 @@ export default function LiveStreamView({
   // ZegoCloud video stream initialization with Cross-Platform PC & Mobile Co-Host scenario
   useEffect(() => {
     if (!containerRef.current) return;
+    if (isHost && !hasStartedLive) return; // Wait until host customizes and clicks "Go Live Now"
     if (!serverSecret || !isValidZegoSecret(serverSecret)) {
       setShowSecretModal(true);
       return;
@@ -476,9 +507,9 @@ export default function LiveStreamView({
             role: currentRole,
           },
         },
-        showPreJoinView: isHost || isCoHostAccepted,
-        turnOnCameraWhenJoining: isHost || isCoHostAccepted,
-        turnOnMicrophoneWhenJoining: isHost || isCoHostAccepted,
+        showPreJoinView: false,
+        turnOnCameraWhenJoining: (isHost || isCoHostAccepted) && streamMode === 'video' && isCameraEnabled,
+        turnOnMicrophoneWhenJoining: (isHost || isCoHostAccepted) && isMicEnabled,
         showUserList: false,
         onJoinRoom: () => {
           hasJoinedRoomRef.current = true;
@@ -506,7 +537,7 @@ export default function LiveStreamView({
     return () => {
       try { zpInstance?.destroy(); } catch (_) {}
     };
-  }, [roomId, validUserId, validUserName, isHost, isCoHostAccepted, serverSecret]);
+  }, [roomId, validUserId, validUserName, isHost, isCoHostAccepted, serverSecret, hasStartedLive, streamMode, isCameraEnabled, isMicEnabled]);
 
   // Firestore real-time live chat & gift listener
   useEffect(() => {
@@ -521,8 +552,14 @@ export default function LiveStreamView({
           const data = change.doc.data() as LiveMessage;
           if (data.type === 'gift' && data.giftIcon) {
             if (data.senderId !== validUserId) {
-              triggerFloatingGift(data.giftIcon, data.giftName || 'Gift', data.senderName);
-              playLonkindSoundEffect(data.giftName?.includes('Dragon') || data.giftName?.includes('Castle') ? 'fanfare' : 'bell');
+              const matchedGift = GIFT_CATALOG.find(g => g.name === data.giftName || g.icon === data.giftIcon) || {
+                id: 'gift',
+                name: data.giftName || 'Gift',
+                icon: data.giftIcon,
+                price: 100,
+                color: 'from-indigo-500 to-purple-600',
+              };
+              triggerGiftingMoment(matchedGift, data.senderName, data.senderAvatar);
             }
           }
         }
@@ -557,25 +594,123 @@ export default function LiveStreamView({
     }, 2000);
   };
 
-  const triggerFloatingGift = (icon: string, name: string, senderName: string) => {
-    const giftId = Math.random().toString();
-    const randomX = Math.floor(Math.random() * 60) + 20;
-    const newGift: FloatingGift = {
-      id: giftId,
-      icon,
-      name,
-      senderName,
-      xPercent: randomX,
-    };
+  const triggerGiftingMoment = (gift: typeof GIFT_CATALOG[0], senderName: string, senderAvatar?: string) => {
+    // 1. Combo calculation
+    let currentCombo = 1;
+    setGiftCombo((prev) => {
+      const isSame = prev.giftId === gift.id;
+      const count = isSame ? prev.count + 1 : 1;
+      currentCombo = count;
+      return { giftId: gift.id, count };
+    });
 
-    setFloatingGifts((prev) => [...prev, newGift]);
-
-    // Trigger TikTok Super Gift Banner Animation for high-tier gifts
-    setActiveSuperGift({ icon, name, senderName });
-    setTimeout(() => {
-      setActiveSuperGift((current) => (current?.name === name ? null : current));
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    comboTimerRef.current = setTimeout(() => {
+      setGiftCombo({ giftId: '', count: 1 });
     }, 4500);
 
+    // 2. VIP Slide-in Banner (Left-to-Right TikTok Pill)
+    setVipBanner({
+      senderName,
+      senderAvatar,
+      giftName: gift.name,
+      giftIcon: gift.icon,
+      combo: currentCombo,
+      price: gift.price,
+    });
+
+    if ((triggerGiftingMoment as any).vipTimeout) {
+      clearTimeout((triggerGiftingMoment as any).vipTimeout);
+    }
+    (triggerGiftingMoment as any).vipTimeout = setTimeout(() => {
+      setVipBanner(null);
+    }, 4200);
+
+    // 3. Center Screen Showcase Animation
+    setActiveCenterGift({
+      gift,
+      senderName,
+      combo: currentCombo,
+    });
+
+    setTimeout(() => {
+      setActiveCenterGift((curr) => (curr?.gift.id === gift.id ? null : curr));
+    }, 3600);
+
+    // 4. Confetti & Particle Celebrations using canvas-confetti
+    try {
+      if (gift.id === 'rose' || gift.id === 'heart') {
+        confetti({
+          particleCount: 50,
+          spread: 70,
+          origin: { y: 0.65 },
+          colors: ['#f43f5e', '#e11d48', '#fda4af', '#fb7185'],
+        });
+      } else if (gift.id === 'star' || gift.id === 'coffee') {
+        confetti({
+          particleCount: 65,
+          spread: 85,
+          origin: { y: 0.65 },
+          colors: ['#facc15', '#eab308', '#fbbf24', '#ffffff'],
+        });
+      } else if (gift.id === 'diamond') {
+        confetti({
+          particleCount: 65,
+          angle: 60,
+          spread: 75,
+          origin: { x: 0, y: 0.7 },
+          colors: ['#06b6d4', '#38bdf8', '#ffffff'],
+        });
+        confetti({
+          particleCount: 65,
+          angle: 120,
+          spread: 75,
+          origin: { x: 1, y: 0.7 },
+          colors: ['#06b6d4', '#38bdf8', '#ffffff'],
+        });
+      } else if (gift.id === 'crown') {
+        confetti({
+          particleCount: 130,
+          spread: 130,
+          origin: { y: 0.4 },
+          colors: ['#fbbf24', '#f59e0b', '#d97706', '#ef4444', '#ffffff'],
+        });
+      } else if (gift.isSuper) {
+        const end = Date.now() + 1800;
+        const interval: any = setInterval(() => {
+          if (Date.now() > end) return clearInterval(interval);
+          confetti({
+            startVelocity: 35,
+            spread: 360,
+            ticks: 70,
+            origin: { x: Math.random() * 0.8 + 0.1, y: Math.random() * 0.4 + 0.2 },
+            colors: ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b'],
+          });
+        }, 220);
+      }
+    } catch (_) {}
+
+    // 5. Screen Haptic Shake for high-value gifts
+    if (gift.price >= 1500) {
+      setIsScreenShaking(true);
+      setTimeout(() => setIsScreenShaking(false), 550);
+    }
+
+    // 6. Sound Effects
+    if (gift.isSuper) {
+      playLonkindSoundEffect('fanfare');
+    } else if (gift.price >= 1500) {
+      playLonkindSoundEffect('bell');
+    } else if (gift.price >= 100) {
+      playLonkindSoundEffect('cheer');
+    } else {
+      playLonkindSoundEffect('applause');
+    }
+
+    // Vertical floating gift pill
+    const giftId = Math.random().toString();
+    const randomX = Math.floor(Math.random() * 40) + 30;
+    setFloatingGifts((prev) => [...prev, { id: giftId, icon: gift.icon, name: gift.name, senderName, xPercent: randomX }]);
     setTimeout(() => {
       setFloatingGifts((prev) => prev.filter((g) => g.id !== giftId));
     }, 2800);
@@ -650,9 +785,8 @@ export default function LiveStreamView({
         timestamp: serverTimestamp(),
       });
 
-      // Trigger flying animation & play sound effect
-      triggerFloatingGift(gift.icon, gift.name, validUserName);
-      playLonkindSoundEffect(gift.isSuper ? 'fanfare' : 'bell');
+      // Trigger immersive gifting moment (confetti, VIP banner, center animation, combo streak, sound effects)
+      triggerGiftingMoment(gift, validUserName, userAvatar);
 
       // Increment PK Battle score points
       setPkBattleScore(prev => ({
@@ -702,13 +836,277 @@ export default function LiveStreamView({
   const hostDisplayName = isHost ? validUserName : (streamHostInfo?.name || validUserName);
   const hostDisplayAvatar = isHost ? userAvatar : (streamHostInfo?.avatar || userAvatar);
 
+  // Pre-Live Creator Studio (User Choice before going on air)
+  if (isHost && !hasStartedLive) {
+    const titlePresets = [
+      'Chilling & Chatting ☕',
+      'Late Night Vibes 🌙',
+      'Q&A & Community Talk 🎙️',
+      'Gaming Marathon 🎮',
+      'Music Jam Session 🎸',
+    ];
+
+    const categories = [
+      { id: 'chat', label: 'Chat', icon: MessageSquare },
+      { id: 'music', label: 'Music', icon: Music },
+      { id: 'gaming', label: 'Gaming', icon: Gamepad2 },
+      { id: 'creative', label: 'Creative', icon: Sparkles },
+      { id: 'lifestyle', label: 'Lifestyle', icon: Heart },
+    ];
+
+    return (
+      <div className="fixed inset-0 z-50 bg-gradient-to-b from-slate-950 via-slate-900 to-black text-white flex flex-col justify-between overflow-y-auto select-none">
+        {/* Top Header */}
+        <div className="flex items-center justify-between p-4 md:px-8 border-b border-white/10 shrink-0 bg-slate-950/80 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-indigo-600 flex items-center justify-center shadow-lg">
+              <Radio className="h-5 w-5 text-white animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base md:text-lg font-black text-white">Live Studio</h1>
+                <Badge className="bg-indigo-600 text-white text-[10px] font-extrabold uppercase px-2 py-0.5">
+                  Creator Mode
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400">Configure your broadcast before going on air</p>
+            </div>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onLeave}
+            className="text-slate-400 hover:text-white hover:bg-white/10 rounded-full text-xs font-bold"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Cancel
+          </Button>
+        </div>
+
+        {/* Studio Setup Body */}
+        <div className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          {/* Left Column: Live Preview Card */}
+          <div className="bg-slate-900/80 border border-white/15 rounded-3xl p-5 shadow-2xl flex flex-col items-center justify-between min-h-[380px] relative overflow-hidden">
+            {/* Ambient Background Glow */}
+            <div className="absolute -top-24 -left-24 w-60 h-60 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-60 h-60 bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Preview Tag */}
+            <div className="w-full flex items-center justify-between z-10 mb-4">
+              <Badge className="bg-slate-800 text-slate-300 border border-white/10 text-[11px] font-semibold px-3 py-1">
+                Preview Mode
+              </Badge>
+              <Badge className={`font-extrabold text-[11px] px-3 py-1 ${streamMode === 'video' ? 'bg-indigo-600 text-white' : 'bg-purple-600 text-white'}`}>
+                {streamMode === 'video' ? '🎥 Video Live' : '🎙️ Audio Room'}
+              </Badge>
+            </div>
+
+            {/* Avatar & Visual Stage Preview */}
+            <div className="my-auto flex flex-col items-center text-center z-10 py-6">
+              <div className="relative mb-4">
+                {streamMode === 'audio' && (
+                  <div className="absolute inset-0 rounded-full bg-purple-500/30 animate-ping" />
+                )}
+                <Avatar className="h-28 w-28 border-4 border-indigo-500/50 shadow-2xl">
+                  <AvatarImage src={userAvatar} alt={validUserName} />
+                  <AvatarFallback className="bg-indigo-600 text-white text-3xl font-black">
+                    {validUserName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center text-white shadow">
+                  <Check className="h-4 w-4" />
+                </div>
+              </div>
+
+              <h3 className="text-base font-bold text-white mb-1 truncate max-w-[280px]">
+                {streamTitle || `${validUserName}'s Live`}
+              </h3>
+              <p className="text-xs text-slate-400 capitalize">
+                Category: <span className="text-indigo-400 font-semibold">{streamCategory}</span>
+              </p>
+            </div>
+
+            {/* Hardware Quick Toggles */}
+            <div className="w-full z-10 pt-4 border-t border-white/10 flex items-center justify-around">
+              {streamMode === 'video' && (
+                <button
+                  type="button"
+                  onClick={() => setIsCameraEnabled(!isCameraEnabled)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    isCameraEnabled
+                      ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  }`}
+                >
+                  {isCameraEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                  <span>{isCameraEnabled ? 'Camera On' : 'Camera Off'}</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsMicEnabled(!isMicEnabled)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  isMicEnabled
+                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                }`}
+              >
+                {isMicEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                <span>{isMicEnabled ? 'Mic On' : 'Mic Muted'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Right Column: Choices & Configuration */}
+          <div className="space-y-6">
+            {/* 1. Broadcast Mode Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-indigo-400" />
+                <span>Select Broadcast Mode</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setStreamMode('video')}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    streamMode === 'video'
+                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+                      : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Video className={`h-4 w-4 ${streamMode === 'video' ? 'text-indigo-400' : 'text-slate-400'}`} />
+                    <span className="font-bold text-xs">Video Live</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Camera broadcast with AR filters, PK battles, and video co-hosting.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStreamMode('audio')}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    streamMode === 'audio'
+                      ? 'bg-purple-600/20 border-purple-500 text-white shadow-lg shadow-purple-500/10'
+                      : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Radio className={`h-4 w-4 ${streamMode === 'audio' ? 'text-purple-400' : 'text-slate-400'}`} />
+                    <span className="font-bold text-xs">Audio Voice Room</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Clubhouse-style voice room. Low bandwidth, camera off, audio-first stage.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Stream Title Input & Suggestions */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                <span>Stream Title</span>
+              </label>
+              <Input
+                type="text"
+                value={streamTitle}
+                onChange={(e) => setStreamTitle(e.target.value)}
+                maxLength={60}
+                placeholder="Give your stream a catchy title..."
+                className="bg-slate-900/90 border-white/15 text-white placeholder:text-slate-500 rounded-xl h-11 text-sm focus:border-indigo-500"
+              />
+              {/* Quick suggestion chips */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {titlePresets.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setStreamTitle(preset)}
+                    className="text-[11px] font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white px-2.5 py-1 rounded-full transition-all"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Category Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Category
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((cat) => {
+                  const Icon = cat.icon;
+                  const isSelected = streamCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setStreamCategory(cat.id as any)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent shadow-md'
+                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{cat.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Go Live Action Bar */}
+        <div className="p-4 md:px-8 border-t border-white/10 shrink-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-between max-w-4xl w-full mx-auto">
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Radio className="h-4 w-4 text-rose-500 animate-pulse" />
+            <span>Ready to reach viewers across Lonkind</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={onLeave}
+              className="border-white/15 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-bold rounded-xl h-11 px-5"
+            >
+              Cancel
+            </Button>
+
+            <Button
+              onClick={() => {
+                setHasStartedLive(true);
+                toast({
+                  title: '🔴 Going Live!',
+                  description: `Starting ${streamMode === 'video' ? 'Video Live' : 'Audio Voice Room'}...`,
+                });
+              }}
+              className="bg-gradient-to-r from-rose-600 via-pink-600 to-indigo-600 hover:opacity-95 text-white font-extrabold text-sm rounded-xl h-11 px-7 shadow-xl shadow-rose-600/30 flex items-center gap-2 transform hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              <span className="h-2.5 w-2.5 rounded-full bg-white animate-ping" />
+              <span>Go Live Now 🔴</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black overflow-hidden flex flex-col select-none">
+    <div className={`fixed inset-0 z-50 bg-black overflow-hidden flex flex-col select-none ${isScreenShaking ? 'animate-screen-shake' : ''}`}>
       {/* Smooth Video Container */}
       <div 
         ref={containerRef} 
         onClick={handleScreenTap}
-        className={`w-full h-full absolute inset-0 cursor-pointer transition-all duration-300 ${
+        className={`w-full h-full absolute inset-0 cursor-pointer transition-all duration-300 ${streamMode === 'audio' ? 'opacity-0 pointer-events-none' : ''} ${
           activeFilter === 'sparkles' ? 'brightness-110 contrast-105' :
           activeFilter === 'warm' ? 'sepia-[0.2] hue-rotate-15' :
           activeFilter === 'neon' ? 'saturate-200 contrast-125' :
@@ -716,6 +1114,51 @@ export default function LiveStreamView({
           activeFilter === 'golden' ? 'brightness-115 sepia-[0.25]' : ''
         }`} 
       />
+
+      {/* Audio Voice Room Center Stage when in audio mode */}
+      {streamMode === 'audio' && (
+        <div 
+          onClick={handleScreenTap}
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-indigo-950/40 via-slate-950/80 to-black cursor-pointer"
+        >
+          {/* Radial pulsing waves */}
+          <div className="relative flex items-center justify-center mb-6">
+            <div className="absolute h-48 w-48 rounded-full bg-indigo-500/10 animate-ping" />
+            <div className="absolute h-36 w-36 rounded-full bg-purple-500/20 animate-pulse" />
+            <Avatar className="h-28 w-28 border-4 border-indigo-400 shadow-[0_0_40px_rgba(99,102,241,0.5)]">
+              <AvatarImage src={hostDisplayAvatar} alt={hostDisplayName} />
+              <AvatarFallback className="bg-indigo-600 text-white text-3xl font-bold">
+                {hostDisplayName.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute -bottom-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[11px] font-black px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1 border border-white/20">
+              <Radio className="h-3 w-3 animate-pulse text-rose-300" />
+              <span>ON AIR</span>
+            </div>
+          </div>
+
+          {/* Room Title & Host Info */}
+          <h2 className="text-xl md:text-2xl font-black text-white text-center max-w-md drop-shadow mb-2">
+            {streamTitle || `${hostDisplayName}'s Voice Room`}
+          </h2>
+          <div className="flex items-center gap-2 text-xs text-indigo-300 font-semibold mb-6">
+            <Badge className="bg-indigo-600/30 text-indigo-200 border border-indigo-500/40 capitalize">
+              {streamCategory}
+            </Badge>
+            <span>•</span>
+            <span>🎙️ Audio Voice Room</span>
+          </div>
+
+          {/* Animated Audio Equalizer Bars */}
+          <div className="flex items-end gap-1.5 h-8">
+            <div className="w-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s] h-6" />
+            <div className="w-1.5 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.1s] h-8" />
+            <div className="w-1.5 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.4s] h-4" />
+            <div className="w-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.2s] h-7" />
+            <div className="w-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.5s] h-5" />
+          </div>
+        </div>
+      )}
 
       {/* AR Video Filter Overlay Layer */}
       {activeFilter !== 'normal' && (
@@ -739,17 +1182,22 @@ export default function LiveStreamView({
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0 pr-1">
-            <span className="text-xs font-bold text-white truncate max-w-[100px] sm:max-w-[160px]">
+            <span className="text-xs font-bold text-white truncate max-w-[100px] sm:max-w-[150px]">
               {hostDisplayName}
             </span>
-            <span className="text-[10px] text-slate-300 font-medium">
-              {isHost ? 'Host (You)' : 'Live Host'}
+            <span className="text-[10px] text-indigo-300 font-medium truncate max-w-[100px] sm:max-w-[150px]">
+              {streamTitle || (isHost ? 'Host (You)' : 'Live Host')}
             </span>
           </div>
           <Badge className="bg-rose-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md border-none shrink-0">
             <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
             LIVE
           </Badge>
+          {streamCategory && (
+            <Badge className="hidden sm:inline-flex bg-white/15 text-white text-[9px] font-semibold px-1.5 py-0 rounded-full capitalize">
+              {streamCategory}
+            </Badge>
+          )}
         </div>
 
         {/* Right Side: REAL Real-Time Viewer Count + Co-Host Seat Button + End Stream / Leave Button */}
@@ -905,71 +1353,126 @@ export default function LiveStreamView({
         </div>
       )}
 
-      {/* TikTok-Style Animated Super Gift Screen Banner & Full Motion Overlay */}
-      {activeSuperGift && (
-        <>
-          {/* Top Banner */}
-          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none animate-in zoom-in-75 duration-300">
-            <div className="relative px-6 py-3 rounded-full bg-gradient-to-r from-amber-500 via-orange-600 to-yellow-500 text-white font-black text-sm shadow-[0_0_35px_rgba(245,158,11,0.8)] border-2 border-amber-300 flex items-center gap-3">
-              <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
-              <div className="flex flex-col">
-                <span className="text-[10px] text-amber-100 uppercase tracking-widest font-black">SUPER GIFT DISPATCHED</span>
-                <span className="text-xs truncate"><strong>@{activeSuperGift.senderName}</strong> sent <strong>{activeSuperGift.name}</strong>!</span>
-              </div>
-              <span className="text-3xl animate-bounce filter drop-shadow-md">{activeSuperGift.icon}</span>
+      {/* Sliding VIP Gift Pill (TikTok-style Left-to-Right) */}
+      {vipBanner && (
+        <div className="absolute top-28 left-4 z-40 pointer-events-none animate-vip-slide">
+          <div className="bg-gradient-to-r from-amber-500/90 via-purple-600/90 to-pink-600/90 backdrop-blur-md border border-white/30 rounded-full pl-1.5 pr-4 py-1.5 shadow-[0_0_25px_rgba(236,72,153,0.5)] flex items-center gap-2.5">
+            <Avatar className="h-9 w-9 border-2 border-white/60 shadow shrink-0">
+              <AvatarImage src={vipBanner.senderAvatar} alt={vipBanner.senderName} />
+              <AvatarFallback className="bg-indigo-600 text-white text-xs font-bold">
+                {vipBanner.senderName.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-extrabold text-white truncate max-w-[120px]">
+                @{vipBanner.senderName}
+              </span>
+              <span className="text-[10px] text-amber-200 font-semibold truncate">
+                Sent {vipBanner.giftName}
+              </span>
             </div>
+            <span className="text-2xl filter drop-shadow animate-bounce">
+              {vipBanner.giftIcon}
+            </span>
+            {vipBanner.combo > 1 && (
+              <div className="flex items-center gap-0.5 bg-amber-400 text-black font-black text-xs px-2 py-0.5 rounded-full shadow-lg animate-combo-bounce">
+                <Flame className="h-3 w-3 fill-rose-600 text-rose-600" />
+                <span>x{vipBanner.combo}</span>
+              </div>
+            )}
           </div>
+        </div>
+      )}
 
-          {/* 🏎️ TikTok Sports Car Motion Animation (Drives Left-to-Right Across Screen) */}
-          {(activeSuperGift.icon === '🏎️' || activeSuperGift.name.toLowerCase().includes('car')) && (
-            <div className="absolute top-1/2 left-0 right-0 z-50 pointer-events-none flex items-center justify-center">
-              <div className="animate-drive-forward flex items-center gap-2">
-                <span className="text-8xl filter drop-shadow-[0_15px_25px_rgba(0,0,0,0.8)]">🏎️</span>
-                <div className="flex flex-col">
-                  <span className="text-xs font-black text-amber-300 bg-black/80 px-3 py-1 rounded-full border border-amber-400 shadow-xl">
-                    🏎️ @{activeSuperGift.senderName}'s Supercar
-                  </span>
-                </div>
+      {/* 🌟 Center Screen Gifting Showcase Overlay for All Gift Tiers */}
+      {activeCenterGift && (
+        <>
+          {activeCenterGift.gift.id === 'crown' && (
+            <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-crown-drop">
+              <span className="text-9xl filter drop-shadow-[0_0_50px_rgba(245,158,11,1)]">👑</span>
+              <div className="mt-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black text-sm px-6 py-2 rounded-full shadow-2xl uppercase tracking-wider flex items-center gap-2">
+                <span>👑 @{activeCenterGift.senderName} gifted Royal Crown!</span>
+                {activeCenterGift.combo > 1 && (
+                  <span className="bg-black text-amber-400 px-2 py-0.5 rounded-full text-xs">x{activeCenterGift.combo}</span>
+                )}
               </div>
             </div>
           )}
 
-          {/* 🚀 TikTok Rocket Motion Animation (Blasts Off Upward into Space) */}
-          {(activeSuperGift.icon === '🚀' || activeSuperGift.name.toLowerCase().includes('rocket')) && (
-            <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center">
-              <div className="animate-rocket-launch flex flex-col items-center">
-                <span className="text-8xl filter drop-shadow-[0_15px_30px_rgba(59,130,246,0.9)]">🚀</span>
-                <span className="text-2xl animate-pulse">🔥💨</span>
-                <span className="text-xs font-black text-cyan-200 bg-blue-950/90 px-3 py-1 rounded-full border border-cyan-400 shadow-2xl mt-2">
-                  🚀 @{activeSuperGift.senderName} Launched Rocket!
+          {activeCenterGift.gift.id === 'diamond' && (
+            <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-diamond-radiance">
+              <span className="text-9xl filter drop-shadow-[0_0_60px_rgba(6,182,212,1)]">💎</span>
+              <div className="mt-4 bg-gradient-to-r from-cyan-400 to-blue-600 text-white font-black text-sm px-6 py-2 rounded-full shadow-2xl uppercase tracking-wider flex items-center gap-2">
+                <span>💎 @{activeCenterGift.senderName} gifted Diamond Radiance!</span>
+                {activeCenterGift.combo > 1 && (
+                  <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">x{activeCenterGift.combo}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeCenterGift.gift.id === 'car' && (
+            <div className="absolute top-1/2 left-0 right-0 z-40 pointer-events-none flex items-center justify-center">
+              <div className="animate-drive-forward flex items-center gap-3">
+                <span className="text-9xl filter drop-shadow-[0_20px_30px_rgba(0,0,0,0.9)]">🏎️</span>
+                <span className="text-sm font-black text-amber-300 bg-black/85 px-4 py-1.5 rounded-full border border-amber-400 shadow-2xl whitespace-nowrap">
+                  🏎️ @{activeCenterGift.senderName}'s Supercar Drift!
                 </span>
               </div>
             </div>
           )}
 
-          {/* 🦁 TikTok Lion Motion Animation (Golden Roar Explosion) */}
-          {(activeSuperGift.icon === '🦁' || activeSuperGift.name.toLowerCase().includes('lion')) && (
-            <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+          {activeCenterGift.gift.id === 'rocket' && (
+            <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center">
+              <div className="animate-rocket-launch flex flex-col items-center">
+                <span className="text-9xl filter drop-shadow-[0_20px_40px_rgba(59,130,246,0.9)]">🚀</span>
+                <span className="text-3xl animate-pulse">🔥💨</span>
+                <span className="text-sm font-black text-cyan-200 bg-blue-950/90 px-4 py-1.5 rounded-full border border-cyan-400 shadow-2xl mt-2 whitespace-nowrap">
+                  🚀 @{activeCenterGift.senderName} Blasted Off Rocket!
+                </span>
+              </div>
+            </div>
+          )}
+
+          {activeCenterGift.gift.id === 'lion' && (
+            <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
               <div className="animate-lion-roar flex flex-col items-center text-center">
                 <div className="relative">
-                  <span className="text-9xl filter drop-shadow-[0_0_50px_rgba(245,158,11,1)]">🦁</span>
+                  <span className="text-9xl filter drop-shadow-[0_0_60px_rgba(245,158,11,1)]">🦁</span>
                   <div className="absolute inset-0 rounded-full border-4 border-amber-400 animate-ping opacity-75" />
                 </div>
-                <span className="text-sm font-black text-amber-200 bg-amber-950/90 px-4 py-1.5 rounded-full border-2 border-amber-400 shadow-2xl mt-4 uppercase tracking-widest">
-                  👑 @{activeSuperGift.senderName} Unleashed The Lion!
+                <span className="text-sm font-black text-amber-200 bg-amber-950/90 px-5 py-2 rounded-full border-2 border-amber-400 shadow-2xl mt-4 uppercase tracking-widest whitespace-nowrap">
+                  👑 @{activeCenterGift.senderName} Unleashed The Lion!
                 </span>
               </div>
             </div>
           )}
 
-          {/* 🌌 TikTok Universe Motion Animation (Galaxy Fireworks Explosion) */}
-          {(activeSuperGift.icon === '🌌' || activeSuperGift.name.toLowerCase().includes('universe')) && (
-            <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+          {activeCenterGift.gift.id === 'universe' && (
+            <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
               <div className="animate-universe-explode flex flex-col items-center text-center">
-                <span className="text-9xl filter drop-shadow-[0_0_60px_rgba(168,85,247,1)]">🌌✨</span>
-                <span className="text-sm font-black text-pink-200 bg-purple-950/90 px-4 py-1.5 rounded-full border-2 border-purple-400 shadow-2xl mt-4 uppercase tracking-widest">
-                  🌌 @{activeSuperGift.senderName} Gifted The Universe!
+                <span className="text-9xl filter drop-shadow-[0_0_80px_rgba(168,85,247,1)]">🌌✨</span>
+                <span className="text-sm font-black text-pink-200 bg-purple-950/90 px-5 py-2 rounded-full border-2 border-purple-400 shadow-2xl mt-4 uppercase tracking-widest whitespace-nowrap">
+                  🌌 @{activeCenterGift.senderName} Gifted The Universe!
                 </span>
+              </div>
+            </div>
+          )}
+
+          {!['crown', 'diamond', 'car', 'rocket', 'lion', 'universe'].includes(activeCenterGift.gift.id) && (
+            <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-in zoom-in-75 fade-in duration-200">
+              <div className="flex flex-col items-center">
+                <span className="text-8xl filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.7)] animate-bounce">
+                  {activeCenterGift.gift.icon}
+                </span>
+                <div className="mt-3 bg-slate-950/85 backdrop-blur-md border border-white/20 text-white font-extrabold text-xs px-4 py-1.5 rounded-full shadow-xl flex items-center gap-2">
+                  <span>@{activeCenterGift.senderName} sent {activeCenterGift.gift.name}</span>
+                  {activeCenterGift.combo > 1 && (
+                    <span className="bg-gradient-to-r from-amber-400 to-rose-500 text-black font-black px-2 py-0.5 rounded-full text-xs animate-combo-bounce">
+                      x{activeCenterGift.combo}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )}
