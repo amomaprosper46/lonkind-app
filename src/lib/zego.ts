@@ -13,10 +13,12 @@ export function isValidZegoSecret(secret?: string | null): boolean {
   return clean.length === 32 && /^[a-zA-Z0-9]+$/.test(clean);
 }
 
+export const DEFAULT_ZEGO_SERVER_SECRET = process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET || 'db5e619c183f6f2779bc235afe191793';
+
 /**
  * Retrieves the 32-character ZEGOCLOUD ServerSecret.
  * Checks localStorage first (allowing instant UI configuration without rebuild),
- * followed by environment variables.
+ * followed by environment variables, falling back to the verified default.
  */
 export function getZegoServerSecret(): string {
   if (typeof window !== 'undefined') {
@@ -31,7 +33,7 @@ export function getZegoServerSecret(): string {
   if (envSecret && isValidZegoSecret(envSecret)) {
     return envSecret.trim();
   }
-  return '';
+  return DEFAULT_ZEGO_SERVER_SECRET;
 }
 
 /**

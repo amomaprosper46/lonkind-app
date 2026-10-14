@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { ZEGO_APP_ID, isValidZegoSecret } from '@/lib/zego';
+import { ZEGO_APP_ID, isValidZegoSecret, DEFAULT_ZEGO_SERVER_SECRET } from '@/lib/zego';
 
 export async function GET() {
-  const envSecret = process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET || '';
+  const envSecret = process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET || DEFAULT_ZEGO_SERVER_SECRET;
   const isConfigured = isValidZegoSecret(envSecret);
 
   return NextResponse.json({
@@ -27,8 +27,6 @@ export async function POST(req: Request) {
     }
 
     const cleanSecret = serverSecret.trim();
-    process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET = cleanSecret;
-    process.env.ZEGO_SERVER_SECRET = cleanSecret;
 
     // Persist to .env.local if possible
     try {
