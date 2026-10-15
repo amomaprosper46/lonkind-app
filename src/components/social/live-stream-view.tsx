@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
+import KingLionGift from './gifts/KingLionGift';
 
 interface LiveMessage {
   id: string;
@@ -46,7 +47,8 @@ export const GIFT_CATALOG = [
   { id: 'heart', name: 'Heart', icon: '❤️', price: 500, color: 'from-rose-600 to-red-600' },
   { id: 'diamond', name: 'Diamond', icon: '💎', price: 1500, color: 'from-cyan-400 to-blue-600' },
   { id: 'crown', name: 'Crown', icon: '👑', price: 5000, color: 'from-amber-400 to-yellow-600' },
-  { id: 'lion', name: 'Lion', icon: '🦁', price: 20000, color: 'from-amber-500 via-orange-600 to-yellow-500', isSuper: true },
+  { id: 'lion', name: 'King Lion', icon: '🦁', price: 20000, color: 'from-amber-500 via-orange-600 to-yellow-500', isSuper: true },
+  { id: 'dragon', name: 'Golden Dragon', icon: '🐉', price: 25000, color: 'from-amber-500 via-red-600 to-yellow-500', isSuper: true },
   { id: 'car', name: 'Sports Car', icon: '🏎️', price: 50000, color: 'from-purple-600 to-indigo-700', isSuper: true },
   { id: 'rocket', name: 'Rocket', icon: '🚀', price: 100000, color: 'from-blue-600 to-cyan-500', isSuper: true },
   { id: 'universe', name: 'Universe', icon: '🌌', price: 500000, color: 'from-indigo-600 via-purple-600 to-pink-600', isSuper: true },
@@ -63,12 +65,66 @@ interface LiveStreamViewProps {
   onGoToWallet?: () => void;
 }
 
-export function playLonkindSoundEffect(type: 'applause' | 'cheer' | 'airhorn' | 'fanfare' | 'bell') {
+export function playLonkindSoundEffect(type: 'applause' | 'cheer' | 'airhorn' | 'fanfare' | 'bell' | 'dragon_roar') {
   if (typeof window === 'undefined') return;
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
+
+    if (type === 'dragon_roar') {
+      // Ferocious, multi-layer resonant dragon roar audio synthesis
+      const oscLow = ctx.createOscillator();
+      const oscMid = ctx.createOscillator();
+      const noise = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+
+      // Deep sub-bass sweep
+      oscLow.type = 'sawtooth';
+      oscLow.frequency.setValueAtTime(65, ctx.currentTime);
+      oscLow.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.3);
+      oscLow.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 1.8);
+
+      // Guttural mid-frequency roar
+      oscMid.type = 'triangle';
+      oscMid.frequency.setValueAtTime(160, ctx.currentTime);
+      oscMid.frequency.exponentialRampToValueAtTime(260, ctx.currentTime + 0.4);
+      oscMid.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 1.8);
+
+      // Fire throat turbulent breath noise
+      const bufferSize = ctx.sampleRate * 1.8;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      noise.buffer = buffer;
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(400, ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.4);
+      filter.frequency.exponentialRampToValueAtTime(250, ctx.currentTime + 1.8);
+
+      gain.gain.setValueAtTime(0.01, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.9);
+
+      oscLow.connect(gain);
+      oscMid.connect(gain);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscLow.start();
+      oscMid.start();
+      noise.start();
+
+      oscLow.stop(ctx.currentTime + 1.9);
+      oscMid.stop(ctx.currentTime + 1.9);
+      noise.stop(ctx.currentTime + 1.9);
+      return;
+    }
 
     if (type === 'airhorn') {
       const osc1 = ctx.createOscillator();
@@ -181,6 +237,11 @@ export default function LiveStreamView({
   const [activeCenterGift, setActiveCenterGift] = useState<{
     gift: typeof GIFT_CATALOG[0];
     senderName: string;
+    combo: number;
+  } | null>(null);
+  const [activeKingLionGift, setActiveKingLionGift] = useState<{
+    senderName: string;
+    senderAvatar?: string;
     combo: number;
   } | null>(null);
   const [isScreenShaking, setIsScreenShaking] = useState(false);
@@ -767,20 +828,96 @@ export default function LiveStreamView({
       setVipBanner(null);
     }, 4200);
 
-    // 3. Center Screen Showcase Animation
-    setActiveCenterGift({
-      gift,
-      senderName,
-      combo: currentCombo,
-    });
+    // 3. Center Screen Showcase Animation (King Lion has dedicated 7-scene cinematic engine)
+    if (gift.id === 'lion') {
+      setActiveKingLionGift({
+        senderName,
+        senderAvatar,
+        combo: currentCombo,
+      });
+    } else {
+      setActiveCenterGift({
+        gift,
+        senderName,
+        combo: currentCombo,
+      });
 
-    setTimeout(() => {
-      setActiveCenterGift((curr) => (curr?.gift.id === gift.id ? null : curr));
-    }, 3600);
+      const displayDuration = gift.id === 'dragon' ? 5800 : gift.isSuper ? 4500 : 3600;
+      setTimeout(() => {
+        setActiveCenterGift((curr) => (curr?.gift.id === gift.id ? null : curr));
+      }, displayDuration);
+    }
 
     // 4. Confetti & Particle Celebrations using canvas-confetti
     try {
-      if (gift.id === 'rose' || gift.id === 'heart') {
+      if (gift.id === 'dragon') {
+        // 🐉 Golden Dragon Choreographed Audio, Shake & Fire Burst Sequence
+        // Step 1: Roar Audio & Camera Screen Shake at 850ms (when dragon reaches center & expands)
+        setTimeout(() => {
+          playLonkindSoundEffect('dragon_roar');
+          setIsScreenShaking(true);
+          setTimeout(() => setIsScreenShaking(false), 950);
+        }, 850);
+
+        // Step 2: Fire/Smoke Particle Burst at Roar Moment (t = 950ms)
+        setTimeout(() => {
+          try {
+            confetti({
+              particleCount: 90,
+              angle: 45,
+              spread: 90,
+              startVelocity: 45,
+              origin: { x: 0.5, y: 0.45 },
+              colors: ['#ff4500', '#ea580c', '#f59e0b', '#dc2626', '#ffffff'],
+            });
+            confetti({
+              particleCount: 90,
+              angle: 135,
+              spread: 90,
+              startVelocity: 45,
+              origin: { x: 0.5, y: 0.45 },
+              colors: ['#ff4500', '#ea580c', '#f59e0b', '#dc2626', '#ffffff'],
+            });
+          } catch (_) {}
+        }, 950);
+
+        // Step 3: Flame Embers while Circling the Screen
+        setTimeout(() => {
+          try {
+            confetti({
+              particleCount: 45,
+              angle: 90,
+              spread: 80,
+              origin: { x: 0.8, y: 0.3 },
+              colors: ['#f59e0b', '#fbbf24', '#ff4500'],
+            });
+          } catch (_) {}
+        }, 2500);
+
+        setTimeout(() => {
+          try {
+            confetti({
+              particleCount: 45,
+              angle: 270,
+              spread: 80,
+              origin: { x: 0.2, y: 0.3 },
+              colors: ['#f59e0b', '#fbbf24', '#ff4500'],
+            });
+          } catch (_) {}
+        }, 3400);
+
+        // Step 4: Stardust Burst when Disappearing (t = 4900ms)
+        setTimeout(() => {
+          try {
+            confetti({
+              particleCount: 75,
+              spread: 130,
+              origin: { x: 0.85, y: 0.15 },
+              colors: ['#ffd700', '#ffffff', '#fbbf24', '#f59e0b'],
+            });
+          } catch (_) {}
+        }, 4900);
+      } else if (gift.id === 'rose' || gift.id === 'heart') {
         confetti({
           particleCount: 50,
           spread: 70,
@@ -831,14 +968,16 @@ export default function LiveStreamView({
       }
     } catch (_) {}
 
-    // 5. Screen Haptic Shake for high-value gifts
-    if (gift.price >= 1500) {
+    // 5. Screen Haptic Shake for high-value gifts (non-dragon handled above)
+    if (gift.price >= 1500 && gift.id !== 'dragon') {
       setIsScreenShaking(true);
       setTimeout(() => setIsScreenShaking(false), 550);
     }
 
     // 6. Sound Effects
-    if (gift.isSuper) {
+    if (gift.id === 'dragon') {
+      // Synchronized dragon roar audio is triggered dynamically above at t = 850ms
+    } else if (gift.isSuper) {
       playLonkindSoundEffect('fanfare');
     } else if (gift.price >= 1500) {
       playLonkindSoundEffect('bell');
@@ -1722,6 +1861,16 @@ export default function LiveStreamView({
         </div>
       )}
 
+      {/* 🦁 KING LION Cinematic Real-Time Virtual Gift Overlay */}
+      {activeKingLionGift && (
+        <KingLionGift
+          senderName={activeKingLionGift.senderName}
+          senderAvatar={activeKingLionGift.senderAvatar}
+          combo={activeKingLionGift.combo}
+          onComplete={() => setActiveKingLionGift(null)}
+        />
+      )}
+
       {/* 🌟 Center Screen Gifting Showcase Overlay for All Gift Tiers */}
       {activeCenterGift && (
         <>
@@ -1772,20 +1921,6 @@ export default function LiveStreamView({
             </div>
           )}
 
-          {activeCenterGift.gift.id === 'lion' && (
-            <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
-              <div className="animate-lion-roar flex flex-col items-center text-center">
-                <div className="relative">
-                  <span className="text-9xl filter drop-shadow-[0_0_60px_rgba(245,158,11,1)]">🦁</span>
-                  <div className="absolute inset-0 rounded-full border-4 border-amber-400 animate-ping opacity-75" />
-                </div>
-                <span className="text-sm font-black text-amber-200 bg-amber-950/90 px-5 py-2 rounded-full border-2 border-amber-400 shadow-2xl mt-4 uppercase tracking-widest whitespace-nowrap">
-                  👑 @{activeCenterGift.senderName} Unleashed The Lion!
-                </span>
-              </div>
-            </div>
-          )}
-
           {activeCenterGift.gift.id === 'universe' && (
             <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
               <div className="animate-universe-explode flex flex-col items-center text-center">
@@ -1797,7 +1932,35 @@ export default function LiveStreamView({
             </div>
           )}
 
-          {!['crown', 'diamond', 'car', 'rocket', 'lion', 'universe'].includes(activeCenterGift.gift.id) && (
+          {activeCenterGift.gift.id === 'dragon' && (
+            <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center overflow-hidden">
+              {/* 🐉 Mythical Flying Dragon with Full 5.8s Cinematic Choreography */}
+              <div className="relative flex flex-col items-center animate-dragon-flight">
+                {/* Fiery Dragon Aura & Shockwaves */}
+                <div className="absolute -inset-10 rounded-full bg-gradient-to-tr from-amber-600/50 via-red-600/40 to-yellow-500/50 blur-xl animate-dragon-fire-aura" />
+                <div className="relative flex items-center justify-center">
+                  <span className="text-9xl filter drop-shadow-[0_0_60px_rgba(255,69,0,1)] drop-shadow-[0_0_90px_rgba(255,215,0,0.9)] transform -scale-x-100">
+                    🐉
+                  </span>
+                  {/* Fire Breath Burst */}
+                  <div className="absolute -right-12 top-2 text-6xl animate-pulse">
+                    🔥💨
+                  </div>
+                </div>
+
+                <div className="mt-4 bg-gradient-to-r from-amber-600 via-red-600 to-yellow-500 text-white font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_40px_rgba(255,69,0,0.8)] border-2 border-amber-300 uppercase tracking-widest whitespace-nowrap flex items-center gap-2">
+                  <span>🐉 @{activeCenterGift.senderName} Summoned The Golden Dragon!</span>
+                  {activeCenterGift.combo > 1 && (
+                    <span className="bg-black/80 text-amber-300 px-2 py-0.5 rounded-full text-xs">
+                      x{activeCenterGift.combo}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!['crown', 'diamond', 'car', 'rocket', 'lion', 'universe', 'dragon'].includes(activeCenterGift.gift.id) && (
             <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-in zoom-in-75 fade-in duration-200">
               <div className="flex flex-col items-center">
                 <span className="text-8xl filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.7)] animate-bounce">
