@@ -218,6 +218,7 @@ export default function LiveStreamView({
   } | null>(null);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinInputText, setPinInputText] = useState('');
+  const [isEndConfirmModalOpen, setIsEndConfirmModalOpen] = useState(false);
 
   // Authentication & Zego Connection State
   const [serverSecret, setServerSecret] = useState<string>(() => getZegoServerSecret());
@@ -1401,42 +1402,43 @@ export default function LiveStreamView({
         }`} />
       )}
 
-      {/* Top Header Overlay */}
-      <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-auto">
+      {/* Top Header Overlay - Responsive & Adjustable for Phone & PC */}
+      <div className="absolute top-3 left-2.5 right-2.5 sm:top-4 sm:left-4 sm:right-4 z-30 flex items-center justify-between pointer-events-auto gap-1 sm:gap-2">
         {/* Left Side: Host Info & LIVE Badge */}
-        <div className="flex items-center gap-2.5 bg-slate-950/75 backdrop-blur-md border border-white/15 rounded-full px-3 py-1.5 shadow-xl">
-          <Avatar className="h-8 w-8 border border-white/20 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 bg-slate-950/80 backdrop-blur-md border border-white/15 rounded-full px-2 py-1 sm:px-3 sm:py-1.5 shadow-xl shrink min-w-0">
+          <Avatar className="h-7 w-7 sm:h-8 sm:w-8 border border-white/20 shrink-0">
             <AvatarImage src={hostDisplayAvatar} alt={hostDisplayName} />
-            <AvatarFallback className="bg-indigo-600 text-white text-xs">
+            <AvatarFallback className="bg-indigo-600 text-white text-[10px] sm:text-xs font-bold">
               {hostDisplayName.charAt(0)}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col min-w-0 pr-1">
-            <span className="text-xs font-bold text-white truncate max-w-[100px] sm:max-w-[150px]">
+          <div className="flex flex-col min-w-0 pr-0.5 sm:pr-1">
+            <span className="text-[11px] sm:text-xs font-bold text-white truncate max-w-[65px] xs:max-w-[85px] sm:max-w-[140px]">
               {hostDisplayName}
             </span>
-            <span className="text-[10px] text-indigo-300 font-medium truncate max-w-[100px] sm:max-w-[150px]">
+            <span className="hidden sm:inline text-[10px] text-indigo-300 font-medium truncate max-w-[120px]">
               {streamTitle || (isHost ? 'Host (You)' : 'Live Host')}
             </span>
           </div>
-          <Badge className="bg-rose-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md border-none shrink-0">
-            <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+          <Badge className="bg-rose-600 text-white font-extrabold text-[9px] sm:text-[10px] px-1.5 py-0 sm:px-2 sm:py-0.5 rounded-full flex items-center gap-1 shadow-md border-none shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
             LIVE
           </Badge>
           {streamCategory && (
-            <Badge className="hidden sm:inline-flex bg-white/15 text-white text-[9px] font-semibold px-1.5 py-0 rounded-full capitalize">
+            <Badge className="hidden md:inline-flex bg-white/15 text-white text-[9px] font-semibold px-1.5 py-0 rounded-full capitalize">
               {streamCategory}
             </Badge>
           )}
         </div>
 
-        {/* Right Side: REAL Real-Time Viewer Count + Co-Host Seat Button + End Stream / Leave Button */}
-        <div className="flex items-center gap-2">
+        {/* Right Side: Responsive Controls & Phone-Adjusted End Button */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Co-Host Button */}
           {!isHost ? (
             <Button
               size="sm"
               onClick={handleToggleCoHostRequest}
-              className={`h-9 px-3 text-xs font-bold rounded-full shadow-xl transition-all border border-emerald-400/30 ${
+              className={`h-8 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-xs font-bold rounded-full shadow-xl transition-all border border-emerald-400/30 shrink-0 ${
                 isCoHostAccepted
                   ? 'bg-emerald-500 text-white animate-pulse'
                   : isCoHostRequested
@@ -1444,16 +1446,17 @@ export default function LiveStreamView({
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white'
               }`}
             >
-              {isCoHostAccepted ? 'Co-Host Active 🎙️' : isCoHostRequested ? 'Requested ✓' : 'Request Co-Host'}
+              {isCoHostAccepted ? 'Co-Host 🎙️' : isCoHostRequested ? 'Requested ✓' : 'Co-Host'}
             </Button>
           ) : (
             <Button
               size="sm"
               onClick={() => setIsHostRequestsModalOpen(true)}
-              className="h-9 px-3 text-xs font-bold rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl flex items-center gap-1 border border-emerald-400/30"
+              className="h-8 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-xs font-bold rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl flex items-center gap-1 border border-emerald-400/30 shrink-0"
             >
-              <span>Co-Host Seats</span>
-              <Badge className="bg-white text-emerald-800 font-extrabold text-[10px] px-1.5 py-0 rounded-full">
+              <span className="hidden sm:inline">Co-Host Seats</span>
+              <span className="sm:hidden">Guests</span>
+              <Badge className="bg-white text-emerald-800 font-extrabold text-[9px] sm:text-[10px] px-1.5 py-0 rounded-full">
                 {coHostRequests.filter(r => r.status === 'pending').length}
               </Badge>
             </Button>
@@ -1464,24 +1467,24 @@ export default function LiveStreamView({
             type="button"
             onClick={() => setIsContributorsModalOpen(true)}
             title="Top Contributors & Leaderboard"
-            className="flex items-center gap-1.5 bg-slate-950/75 hover:bg-slate-900 backdrop-blur-md border border-amber-500/40 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-xl transition-all transform hover:scale-105 active:scale-95"
+            className="flex items-center gap-1 bg-slate-950/80 hover:bg-slate-900 backdrop-blur-md border border-amber-500/40 text-white text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full shadow-xl transition-all transform hover:scale-105 active:scale-95 shrink-0"
           >
-            <Trophy className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            <Trophy className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
             {contributors.length === 0 ? (
-              <span className="text-amber-300 text-[11px] font-semibold hidden sm:inline">Top Gifters</span>
+              <span className="text-amber-300 text-[10px] sm:text-[11px] font-semibold hidden sm:inline">Top Gifters</span>
             ) : (
               <div className="flex items-center -space-x-1.5">
                 {contributors.slice(0, 3).map((c, idx) => (
                   <div key={c.uid} className="relative">
-                    <Avatar className={`h-6 w-6 border-2 ${
+                    <Avatar className={`h-5 w-5 sm:h-6 sm:w-6 border-2 ${
                       idx === 0 ? 'border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]' : idx === 1 ? 'border-slate-300' : 'border-amber-700'
                     } shadow shrink-0`}>
                       <AvatarImage src={c.avatarUrl} alt={c.name} />
-                      <AvatarFallback className="bg-indigo-600 text-[8px] font-bold text-white">
+                      <AvatarFallback className="bg-indigo-600 text-[7px] sm:text-[8px] font-bold text-white">
                         {c.name ? c.name.charAt(0) : 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="absolute -bottom-1 -right-1 text-[8px] leading-none pointer-events-none">
+                    <span className="absolute -bottom-1 -right-1 text-[7px] sm:text-[8px] leading-none pointer-events-none">
                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
                     </span>
                   </div>
@@ -1490,11 +1493,14 @@ export default function LiveStreamView({
             )}
           </button>
 
-          <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-100 text-xs font-bold px-3 py-1.5 rounded-full shadow-xl">
-            <Eye className="h-3.5 w-3.5 text-indigo-400" />
-            <span>👁 {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}</span>
+          {/* Real-Time Viewer Count */}
+          <div className="flex items-center gap-1 bg-slate-950/80 backdrop-blur-md border border-white/15 text-slate-100 text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full shadow-xl shrink-0">
+            <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-indigo-400" />
+            <span>{viewerCount}</span>
+            <span className="hidden sm:inline">{viewerCount === 1 ? 'viewer' : 'viewers'}</span>
           </div>
 
+          {/* Zego Settings (Desktop only) */}
           <Button
             size="icon"
             variant="ghost"
@@ -1503,22 +1509,30 @@ export default function LiveStreamView({
               setShowSecretModal(true);
             }}
             title="ZEGOCLOUD Credentials Settings"
-            className="h-9 w-9 rounded-full bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-300 hover:text-white hover:bg-slate-800 shadow-xl"
+            className="hidden md:flex h-9 w-9 rounded-full bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-300 hover:text-white hover:bg-slate-800 shadow-xl shrink-0"
           >
             <KeyRound className="h-3.5 w-3.5" />
           </Button>
 
+          {/* 🔴 Phone-Adjusted End Live / Leave Button */}
           <Button
             size="sm"
-            onClick={handleEndStream}
-            className={`h-9 px-3.5 text-xs font-bold rounded-full shadow-xl transition-all flex items-center gap-1.5 border border-white/20 ${
+            onClick={() => {
+              if (isHost) {
+                setIsEndConfirmModalOpen(true);
+              } else {
+                handleEndStream();
+              }
+            }}
+            className={`h-8 px-2.5 sm:h-9 sm:px-3.5 text-[11px] sm:text-xs font-black rounded-full shadow-2xl transition-all flex items-center gap-1 border shrink-0 z-10 active:scale-95 ${
               isHost
-                ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200'
+                ? 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white border-rose-400/50 shadow-rose-600/30'
+                : 'bg-slate-800/95 hover:bg-slate-700 text-slate-100 border-white/20'
             }`}
           >
-            <Power className="h-3.5 w-3.5" />
-            {isHost ? 'End Stream' : 'Leave'}
+            <Power className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+            <span>{isHost ? 'End' : 'Leave'}</span>
+            <span className="hidden sm:inline">{isHost ? ' Stream' : ''}</span>
           </Button>
         </div>
       </div>
@@ -2420,6 +2434,39 @@ export default function LiveStreamView({
                 className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-black font-extrabold text-xs rounded-xl h-10 px-5 shadow-lg"
               >
                 Pin Notice 📌
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔴 Host End Stream Confirmation Modal */}
+      {isEndConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-slate-950 border border-white/15 rounded-3xl p-5 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
+            <div className="h-14 w-14 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 mx-auto mb-3 shadow-inner">
+              <Power className="h-7 w-7 animate-pulse" />
+            </div>
+            <h3 className="font-black text-white text-base sm:text-lg mb-1.5">End Live Stream?</h3>
+            <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+              Are you sure you want to end your broadcast? This will disconnect all active viewers and conclude your stream across Lonkind.
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="outline"
+                onClick={() => setIsEndConfirmModalOpen(false)}
+                className="w-1/2 border-white/15 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-bold rounded-xl h-11"
+              >
+                Continue Live
+              </Button>
+              <Button
+                onClick={() => {
+                  setIsEndConfirmModalOpen(false);
+                  handleEndStream();
+                }}
+                className="w-1/2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs rounded-xl h-11 shadow-lg shadow-rose-600/30 active:scale-95 transition-all"
+              >
+                End Now 🔴
               </Button>
             </div>
           </div>
