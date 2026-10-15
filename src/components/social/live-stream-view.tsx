@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import KingLionGift from './gifts/KingLionGift';
+import UniverseGift from './gifts/UniverseGift';
 
 interface LiveMessage {
   id: string;
@@ -240,6 +241,11 @@ export default function LiveStreamView({
     combo: number;
   } | null>(null);
   const [activeKingLionGift, setActiveKingLionGift] = useState<{
+    senderName: string;
+    senderAvatar?: string;
+    combo: number;
+  } | null>(null);
+  const [activeUniverseGift, setActiveUniverseGift] = useState<{
     senderName: string;
     senderAvatar?: string;
     combo: number;
@@ -774,9 +780,15 @@ export default function LiveStreamView({
       setVipBanner(null);
     }, 4200);
 
-    // 3. Center Screen Showcase Animation (King Lion has dedicated 7-scene cinematic engine)
+    // 3. Center Screen Showcase Animation (King Lion & Universe have dedicated supreme cinematic engines)
     if (gift.id === 'lion') {
       setActiveKingLionGift({
+        senderName,
+        senderAvatar,
+        combo: currentCombo,
+      });
+    } else if (gift.id === 'universe') {
+      setActiveUniverseGift({
         senderName,
         senderAvatar,
         combo: currentCombo,
@@ -1804,6 +1816,16 @@ export default function LiveStreamView({
         />
       )}
 
+      {/* 🌌 UNIVERSE Cinematic Real-Time Supreme Virtual Gift Overlay */}
+      {activeUniverseGift && (
+        <UniverseGift
+          senderName={activeUniverseGift.senderName}
+          senderAvatar={activeUniverseGift.senderAvatar}
+          combo={activeUniverseGift.combo}
+          onComplete={() => setActiveUniverseGift(null)}
+        />
+      )}
+
       {/* 🌟 Center Screen Gifting Showcase Overlay for All Gift Tiers */}
       {activeCenterGift && (
         <>
@@ -1849,17 +1871,6 @@ export default function LiveStreamView({
                 <span className="text-3xl animate-pulse">🔥💨</span>
                 <span className="text-sm font-black text-cyan-200 bg-blue-950/90 px-4 py-1.5 rounded-full border border-cyan-400 shadow-2xl mt-2 whitespace-nowrap">
                   🚀 @{activeCenterGift.senderName} Blasted Off Rocket!
-                </span>
-              </div>
-            </div>
-          )}
-
-          {activeCenterGift.gift.id === 'universe' && (
-            <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
-              <div className="animate-universe-explode flex flex-col items-center text-center">
-                <span className="text-9xl filter drop-shadow-[0_0_80px_rgba(168,85,247,1)]">🌌✨</span>
-                <span className="text-sm font-black text-pink-200 bg-purple-950/90 px-5 py-2 rounded-full border-2 border-purple-400 shadow-2xl mt-4 uppercase tracking-widest whitespace-nowrap">
-                  🌌 @{activeCenterGift.senderName} Gifted The Universe!
                 </span>
               </div>
             </div>
