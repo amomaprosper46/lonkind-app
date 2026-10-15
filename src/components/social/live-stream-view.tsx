@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
-import { ZEGO_APP_ID, ZEGO_APP_SIGN, getLiveRoomId, getZegoServerSecret, setZegoServerSecret, isValidZegoSecret } from '@/lib/zego';
+import { ZEGO_APP_ID, getLiveRoomId, getZegoServerSecret, isValidZegoSecret } from '@/lib/zego';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, KeyRound, ShieldAlert, ExternalLink, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers, Trophy, Target, Pin, PinOff, Crown } from 'lucide-react';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers, Trophy, Target, Pin, PinOff, Crown } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -281,63 +281,11 @@ export default function LiveStreamView({
   const [pinInputText, setPinInputText] = useState('');
   const [isEndConfirmModalOpen, setIsEndConfirmModalOpen] = useState(false);
 
-  // Authentication & Zego Connection State
-  const [serverSecret, setServerSecret] = useState<string>(() => getZegoServerSecret());
-  const [showSecretModal, setShowSecretModal] = useState<boolean>(() => !isValidZegoSecret(getZegoServerSecret()));
-  const [secretInputValue, setSecretInputValue] = useState<string>('');
-  const [isSavingSecret, setIsSavingSecret] = useState<boolean>(false);
+  // Authentication & Zego Connection State (Securely internalized; never exposed to viewers or UI)
+  const [serverSecret] = useState<string>(() => getZegoServerSecret());
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const hasJoinedRoomRef = useRef(false);
-
-  // Auto-fetch configured secret from server on mount if not in localStorage
-  useEffect(() => {
-    if (!isValidZegoSecret(serverSecret)) {
-      fetch('/api/live/zego-config')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.configured && data?.serverSecret && isValidZegoSecret(data.serverSecret)) {
-            setZegoServerSecret(data.serverSecret);
-            setServerSecret(data.serverSecret);
-            setShowSecretModal(false);
-            setConnectionError(null);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [serverSecret]);
-
-  const handleSaveSecret = async () => {
-    const trimmed = secretInputValue.trim();
-    if (!isValidZegoSecret(trimmed)) {
-      toast({
-        variant: 'destructive',
-        title: 'Invalid ServerSecret Format',
-        description: 'The ServerSecret must be exactly 32 alphanumeric characters from your ZEGOCLOUD Console.',
-      });
-      return;
-    }
-
-    setIsSavingSecret(true);
-    setZegoServerSecret(trimmed);
-    setServerSecret(trimmed);
-    setShowSecretModal(false);
-    setConnectionError(null);
-
-    try {
-      await fetch('/api/live/zego-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverSecret: trimmed }),
-      });
-    } catch (_) {}
-
-    setIsSavingSecret(false);
-    toast({
-      title: 'Credentials Saved! 🚀',
-      description: 'Connecting to live room...',
-    });
-  };
 
   // Lonkind 1v1 PK Battle State
   const [pkBattleScore, setPkBattleScore] = useState<{ host1Score: number; host2Score: number; active: boolean }>({
@@ -674,7 +622,7 @@ export default function LiveStreamView({
     if (!containerRef.current) return;
     if (isHost && !hasStartedLive) return; // Wait until host customizes and clicks "Go Live Now"
     if (!serverSecret || !isValidZegoSecret(serverSecret)) {
-      setShowSecretModal(true);
+      setConnectionError('Unable to connect to live stream service.');
       return;
     }
 
@@ -722,18 +670,16 @@ export default function LiveStreamView({
           if (hasJoinedRoomRef.current) {
             handleEndStream();
           } else {
-            console.warn('Zego onLeaveRoom triggered before successful join. Token or network error.');
+            console.warn('Zego onLeaveRoom triggered.');
             setIsConnecting(false);
-            setConnectionError('Failed to join room: token authentication error. Please verify your 32-character ServerSecret from ZEGOCLOUD Console.');
-            setShowSecretModal(true);
+            setConnectionError('Live stream disconnected. Please rejoin.');
           }
         },
       });
     } catch (err: any) {
       console.error('Error during ZegoUIKit initialization:', err);
       setIsConnecting(false);
-      setConnectionError(err.message || 'Error initializing live stream.');
-      setShowSecretModal(true);
+      setConnectionError('Unable to initialize live stream.');
     }
 
     return () => {
@@ -1639,19 +1585,6 @@ export default function LiveStreamView({
             <span className="hidden sm:inline">{viewerCount === 1 ? 'viewer' : 'viewers'}</span>
           </div>
 
-          {/* Zego Settings (Desktop only) */}
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => {
-              setSecretInputValue(serverSecret || '');
-              setShowSecretModal(true);
-            }}
-            title="ZEGOCLOUD Credentials Settings"
-            className="hidden md:flex h-9 w-9 rounded-full bg-slate-950/75 backdrop-blur-md border border-white/15 text-slate-300 hover:text-white hover:bg-slate-800 shadow-xl shrink-0"
-          >
-            <KeyRound className="h-3.5 w-3.5" />
-          </Button>
 
           {/* 🔴 Phone-Adjusted End Live / Leave Button */}
           <Button
@@ -2636,130 +2569,6 @@ export default function LiveStreamView({
         </div>
       )}
 
-      {/* 🔐 ZEGOCLOUD ServerSecret Setup & Error Recovery Modal */}
-      {showSecretModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-white relative animate-in fade-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
-                <KeyRound className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span>Live Stream Authentication</span>
-                  <Badge className="bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono">
-                    AppID: {ZEGO_APP_ID}
-                  </Badge>
-                </h3>
-                <p className="text-xs text-slate-400">ZEGOCLOUD 32-Character ServerSecret Configuration</p>
-              </div>
-            </div>
-
-            {/* Error banner if connection failed */}
-            {connectionError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold">Authentication Error</p>
-                  <p className="text-[11px] text-rose-300/90">{connectionError}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Explanatory description */}
-            <div className="space-y-2.5 text-xs text-slate-300 bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 mb-4">
-              <p className="leading-relaxed">
-                ZEGOCLOUD requires your project&apos;s <strong className="text-amber-300 font-semibold">32-character ServerSecret</strong> from the ZEGOCLOUD Console to authenticate WebRTC live video streams. (The 64-character AppSign is only for native mobile SDKs).
-              </p>
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-[11px] text-slate-400">
-                <div className="flex items-center gap-1.5 text-slate-300 font-medium">
-                  <span>How to find your ServerSecret:</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1 pl-1 text-slate-400">
-                  <li>
-                    Open{' '}
-                    <a
-                      href="https://console.zegocloud.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-indigo-400 hover:text-indigo-300 underline inline-flex items-center gap-0.5 font-medium"
-                    >
-                      console.zegocloud.com <ExternalLink className="h-3 w-3 inline" />
-                    </a>
-                  </li>
-                  <li>Go to <strong>Project Management</strong> &rarr; Click project (AppID: <code>{ZEGO_APP_ID}</code>)</li>
-                  <li>Under <strong>Project Information</strong>, click the 👁️ icon next to <strong>ServerSecret</strong> (32 characters)</li>
-                  <li>Copy and paste it below.</li>
-                </ol>
-              </div>
-            </div>
-
-            {/* Input field */}
-            <div className="space-y-1.5 mb-5">
-              <div className="flex items-center justify-between text-xs">
-                <label className="font-semibold text-slate-300">ServerSecret (32 Characters)</label>
-                <span
-                  className={`text-[11px] font-mono font-medium ${
-                    secretInputValue.trim().length === 32
-                      ? 'text-emerald-400'
-                      : secretInputValue.trim().length > 0
-                      ? 'text-amber-400'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  {secretInputValue.trim().length} / 32 chars
-                </span>
-              </div>
-              <Input
-                type="text"
-                placeholder="e.g. 9a4fe8923412ab34cd5678ef01234567"
-                value={secretInputValue}
-                onChange={(e) => setSecretInputValue(e.target.value.trim())}
-                className="bg-slate-950 border-slate-700 font-mono text-xs text-white placeholder:text-slate-600 focus:border-indigo-500"
-              />
-              {secretInputValue.trim().length === 64 && (
-                <p className="text-[11px] text-amber-400 flex items-center gap-1 mt-1">
-                  ⚠️ This is a 64-character AppSign. Please use the 32-character ServerSecret instead.
-                </p>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowSecretModal(false);
-                  onLeave();
-                }}
-                className="text-slate-400 hover:text-white hover:bg-slate-800 text-xs"
-              >
-                Return to Home Feed
-              </Button>
-              <Button
-                size="sm"
-                disabled={secretInputValue.trim().length !== 32 || isSavingSecret}
-                onClick={handleSaveSecret}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 flex items-center gap-1.5 shadow-lg shadow-indigo-600/30"
-              >
-                {isSavingSecret ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>Save &amp; Connect Stream</span>
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

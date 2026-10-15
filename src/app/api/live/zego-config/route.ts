@@ -10,8 +10,6 @@ export async function GET() {
   return NextResponse.json({
     appId: ZEGO_APP_ID,
     configured: isConfigured,
-    // Provide serverSecret to client if configured in server env
-    serverSecret: isConfigured ? envSecret : null,
   });
 }
 

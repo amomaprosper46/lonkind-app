@@ -31,8 +31,8 @@ export default function CallView({ roomId, userId, userName, callType, onEndCall
     if (!containerRef.current) return;
 
     const secret = getZegoServerSecret();
-    if (!isValidZegoSecret(secret)) {
-      setAuthError('ZEGOCLOUD 32-character ServerSecret is required to connect audio/video calls.');
+    if (!secret || !isValidZegoSecret(secret)) {
+      setAuthError('Call connection service is currently unavailable. Please try again later.');
       return;
     }
 
