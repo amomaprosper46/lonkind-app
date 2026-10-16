@@ -55,13 +55,13 @@ export const GIFT_CATALOG: Array<{
   { id: 'star', name: 'Star', icon: '⭐', price: 50, color: 'from-indigo-500 to-purple-600' },
   { id: 'coffee', name: 'Coffee', icon: '☕', price: 100, color: 'from-amber-600 to-amber-800' },
   { id: 'heart', name: 'Heart', icon: '❤️', price: 500, color: 'from-rose-600 to-red-600' },
-  { id: 'diamond', name: 'Diamond', icon: '💎', price: 1500, color: 'from-cyan-400 to-blue-600', image3d: '/gifts/diamond-3d.jpg' },
-  { id: 'crown', name: 'Crown', icon: '👑', price: 5000, color: 'from-amber-400 to-yellow-600', image3d: '/gifts/crown-3d.jpg' },
-  { id: 'lion', name: 'King Lion', icon: '🦁', price: 20000, color: 'from-amber-500 via-orange-600 to-yellow-500', isSuper: true, image3d: '/gifts/lion-roar.jpg' },
-  { id: 'dragon', name: 'Golden Dragon', icon: '🐉', price: 25000, color: 'from-amber-500 via-red-600 to-yellow-500', isSuper: true, image3d: '/gifts/dragon-3d.jpg' },
-  { id: 'car', name: 'Sports Car', icon: '🏎️', price: 50000, color: 'from-purple-600 to-indigo-700', isSuper: true, image3d: '/gifts/car-3d.jpg' },
-  { id: 'rocket', name: 'Rocket', icon: '🚀', price: 100000, color: 'from-blue-600 to-cyan-500', isSuper: true, image3d: '/gifts/rocket-3d.jpg' },
-  { id: 'universe', name: 'Universe', icon: '🌌', price: 500000, color: 'from-indigo-600 via-purple-600 to-pink-600', isSuper: true, image3d: '/gifts/universe-3d.jpg' },
+  { id: 'diamond', name: 'Diamond', icon: '💎', price: 1500, color: 'from-cyan-400 to-blue-600', videoUrl: '/gifts/diamond.mp4' },
+  { id: 'crown', name: 'Crown', icon: '👑', price: 5000, color: 'from-amber-400 to-yellow-600', videoUrl: '/gifts/crown.mp4' },
+  { id: 'lion', name: 'King Lion', icon: '🦁', price: 20000, color: 'from-amber-500 via-orange-600 to-yellow-500', isSuper: true, videoUrl: '/gifts/lion.mp4' },
+  { id: 'dragon', name: 'Golden Dragon', icon: '🐉', price: 25000, color: 'from-amber-500 via-red-600 to-yellow-500', isSuper: true, videoUrl: '/gifts/dragon.mp4' },
+  { id: 'car', name: 'Sports Car', icon: '🏎️', price: 50000, color: 'from-purple-600 to-indigo-700', isSuper: true, videoUrl: '/gifts/car.mp4' },
+  { id: 'rocket', name: 'Rocket', icon: '🚀', price: 100000, color: 'from-blue-600 to-cyan-500', isSuper: true, videoUrl: '/gifts/rocket.mp4' },
+  { id: 'universe', name: 'Universe', icon: '🌌', price: 500000, color: 'from-indigo-600 via-purple-600 to-pink-600', isSuper: true, videoUrl: '/gifts/universe-blackhole.mp4' },
 ];
 
 interface LiveStreamViewProps {
@@ -1835,26 +1835,23 @@ export default function LiveStreamView({
         />
       )}
 
-      {/* 🌟 Center Screen Photorealistic 3D CGI Gifting Showcase Overlay */}
+      {/* 🌟 Center Screen Real HD .MP4 Video Gifting Showcase Overlay */}
       {activeCenterGift && (
         <>
           {activeCenterGift.gift.id === 'crown' && (
             <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-crown-drop">
-              <div className="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center">
-                <div className="absolute inset-4 rounded-full bg-amber-500/30 blur-3xl animate-pulse" />
-                <img
-                  src="/gifts/crown-3d.jpg"
-                  alt="Royal Crown 3D CGI"
-                  className="w-full h-full object-contain select-none"
-                  style={{
-                    mixBlendMode: 'screen',
-                    filter: 'contrast(1.18) saturate(1.25) drop-shadow(0 0 40px rgba(245,158,11,0.95))',
-                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 58%, transparent 98%)',
-                    maskImage: 'radial-gradient(ellipse at center, black 58%, transparent 98%)',
-                  }}
+              <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-[32px] overflow-hidden shadow-[0_0_70px_rgba(245,158,11,0.95)] border-2 border-amber-400/70">
+                <video
+                  src="/gifts/crown.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover pointer-events-none"
                 />
+                <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_40px_rgba(0,0,0,0.85)] rounded-[32px]" />
               </div>
-              <div className="mt-2 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_35px_rgba(245,158,11,0.9)] uppercase tracking-wider flex items-center gap-2 border border-amber-200">
+              <div className="mt-3 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_35px_rgba(245,158,11,0.9)] uppercase tracking-wider flex items-center gap-2 border border-amber-200">
                 <span>👑 @{activeCenterGift.senderName} gifted Royal Crown!</span>
                 {activeCenterGift.combo > 1 && (
                   <span className="bg-black text-amber-400 px-2 py-0.5 rounded-full text-xs">x{activeCenterGift.combo}</span>
@@ -1865,21 +1862,18 @@ export default function LiveStreamView({
 
           {activeCenterGift.gift.id === 'diamond' && (
             <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center animate-diamond-radiance">
-              <div className="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center">
-                <div className="absolute inset-4 rounded-full bg-cyan-500/30 blur-3xl animate-pulse" />
-                <img
-                  src="/gifts/diamond-3d.jpg"
-                  alt="Diamond Radiance 3D CGI"
-                  className="w-full h-full object-contain select-none"
-                  style={{
-                    mixBlendMode: 'screen',
-                    filter: 'contrast(1.2) saturate(1.3) drop-shadow(0 0 45px rgba(6,182,212,0.95))',
-                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 58%, transparent 98%)',
-                    maskImage: 'radial-gradient(ellipse at center, black 58%, transparent 98%)',
-                  }}
+              <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-[32px] overflow-hidden shadow-[0_0_75px_rgba(6,182,212,0.95)] border-2 border-cyan-400/70">
+                <video
+                  src="/gifts/diamond.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover pointer-events-none"
                 />
+                <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_40px_rgba(0,0,0,0.85)] rounded-[32px]" />
               </div>
-              <div className="mt-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600 text-white font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_35px_rgba(6,182,212,0.9)] uppercase tracking-wider flex items-center gap-2 border border-cyan-200/50">
+              <div className="mt-3 bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600 text-white font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_35px_rgba(6,182,212,0.9)] uppercase tracking-wider flex items-center gap-2 border border-cyan-200/50">
                 <span>💎 @{activeCenterGift.senderName} gifted Diamond Radiance!</span>
                 {activeCenterGift.combo > 1 && (
                   <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">x{activeCenterGift.combo}</span>
@@ -1891,21 +1885,27 @@ export default function LiveStreamView({
           {activeCenterGift.gift.id === 'car' && (
             <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center overflow-hidden">
               <div className="animate-drive-forward flex flex-col items-center">
-                <div className="relative w-80 h-80 sm:w-96 sm:h-96 flex items-center justify-center">
-                  <div className="absolute inset-8 rounded-full bg-purple-600/35 blur-3xl animate-pulse" />
-                  <img
-                    src="/gifts/car-3d.jpg"
-                    alt="Luxury Hypercar 3D CGI"
-                    className="w-full h-full object-contain select-none"
-                    style={{
-                      mixBlendMode: 'screen',
-                      filter: 'contrast(1.2) saturate(1.25) drop-shadow(0 20px 45px rgba(168,85,247,0.9))',
-                      WebkitMaskImage: 'radial-gradient(ellipse at center, black 62%, transparent 98%)',
-                      maskImage: 'radial-gradient(ellipse at center, black 62%, transparent 98%)',
-                    }}
+                <div className="relative w-80 h-64 sm:w-[440px] sm:h-80 rounded-[32px] overflow-hidden shadow-[0_0_80px_rgba(168,85,247,0.95)] border-2 border-amber-400/80">
+                  <video
+                    src="/gifts/car.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover pointer-events-none"
                   />
+                  <video
+                    src="/gifts/fire-burst.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-60"
+                    style={{ mixBlendMode: 'screen' }}
+                  />
+                  <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_40px_rgba(0,0,0,0.8)] rounded-[32px]" />
                 </div>
-                <span className="-mt-6 text-xs sm:text-sm font-black text-amber-300 bg-black/90 px-5 py-2 rounded-full border-2 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.8)] whitespace-nowrap uppercase tracking-wider">
+                <span className="mt-3 text-xs sm:text-sm font-black text-amber-300 bg-black/90 px-5 py-2 rounded-full border-2 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.8)] whitespace-nowrap uppercase tracking-wider">
                   🏎️ @{activeCenterGift.senderName}&apos;s Luxury Supercar Drift!
                 </span>
               </div>
@@ -1915,21 +1915,27 @@ export default function LiveStreamView({
           {activeCenterGift.gift.id === 'rocket' && (
             <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center">
               <div className="animate-rocket-launch flex flex-col items-center">
-                <div className="relative w-72 h-72 sm:w-96 sm:h-96 flex items-center justify-center">
-                  <div className="absolute inset-6 rounded-full bg-cyan-500/35 blur-3xl animate-pulse" />
-                  <img
-                    src="/gifts/rocket-3d.jpg"
-                    alt="Spacecraft Rocket 3D CGI"
-                    className="w-full h-full object-contain select-none"
-                    style={{
-                      mixBlendMode: 'screen',
-                      filter: 'contrast(1.2) saturate(1.3) drop-shadow(0 20px 50px rgba(59,130,246,0.95))',
-                      WebkitMaskImage: 'radial-gradient(ellipse at center, black 60%, transparent 98%)',
-                      maskImage: 'radial-gradient(ellipse at center, black 60%, transparent 98%)',
-                    }}
+                <div className="relative w-72 h-96 sm:w-96 sm:h-[460px] rounded-[36px] overflow-hidden shadow-[0_0_85px_rgba(59,130,246,0.95)] border-2 border-cyan-400/80">
+                  <video
+                    src="/gifts/rocket.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover pointer-events-none"
                   />
+                  <video
+                    src="/gifts/fire-burst.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-75"
+                    style={{ mixBlendMode: 'screen' }}
+                  />
+                  <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_45px_rgba(0,0,0,0.85)] rounded-[36px]" />
                 </div>
-                <span className="-mt-4 text-xs sm:text-sm font-black text-cyan-200 bg-blue-950/90 px-5 py-2 rounded-full border-2 border-cyan-400 shadow-[0_0_35px_rgba(6,182,212,0.9)] whitespace-nowrap uppercase tracking-wider">
+                <span className="mt-3 text-xs sm:text-sm font-black text-cyan-200 bg-blue-950/90 px-5 py-2 rounded-full border-2 border-cyan-400 shadow-[0_0_35px_rgba(6,182,212,0.9)] whitespace-nowrap uppercase tracking-wider">
                   🚀 @{activeCenterGift.senderName} Blasted Off Orbital Rocket!
                 </span>
               </div>
@@ -1938,25 +1944,31 @@ export default function LiveStreamView({
 
           {activeCenterGift.gift.id === 'dragon' && (
             <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center overflow-hidden">
-              {/* 🐉 Mythical 3D CGI Flying Dragon with Full 5.8s Cinematic Choreography */}
+              {/* 🐉 Mythical Real HD .MP4 Flying Dragon + Blazing Fire Burst Choreography */}
               <div className="relative flex flex-col items-center animate-dragon-flight">
-                {/* Fiery Dragon Aura & Shockwaves */}
-                <div className="absolute -inset-6 rounded-full bg-gradient-to-tr from-amber-600/45 via-red-600/35 to-yellow-500/45 blur-3xl animate-dragon-fire-aura" />
-                <div className="relative w-80 h-80 sm:w-[420px] sm:h-[420px] flex items-center justify-center">
-                  <img
-                    src="/gifts/dragon-3d.jpg"
-                    alt="Golden Dragon 3D CGI"
-                    className="w-full h-full object-contain select-none"
-                    style={{
-                      mixBlendMode: 'screen',
-                      filter: 'contrast(1.22) saturate(1.3) drop-shadow(0 0 55px rgba(255,69,0,0.95))',
-                      WebkitMaskImage: 'radial-gradient(ellipse at center, black 62%, transparent 98%)',
-                      maskImage: 'radial-gradient(ellipse at center, black 62%, transparent 98%)',
-                    }}
+                <div className="absolute -inset-6 rounded-full bg-gradient-to-tr from-amber-600/50 via-red-600/40 to-yellow-500/50 blur-3xl animate-dragon-fire-aura" />
+                <div className="relative w-80 h-80 sm:w-[440px] sm:h-[440px] rounded-[36px] overflow-hidden shadow-[0_0_90px_rgba(255,69,0,0.95)] border-2 border-amber-400">
+                  <video
+                    src="/gifts/dragon.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover pointer-events-none scale-105"
                   />
+                  <video
+                    src="/gifts/fire-burst.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-90"
+                    style={{ mixBlendMode: 'screen' }}
+                  />
+                  <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_50px_rgba(0,0,0,0.85)] rounded-[36px]" />
                 </div>
 
-                <div className="-mt-4 bg-gradient-to-r from-amber-600 via-red-600 to-yellow-500 text-white font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_40px_rgba(255,69,0,0.9)] border-2 border-amber-300 uppercase tracking-widest whitespace-nowrap flex items-center gap-2">
+                <div className="mt-3 bg-gradient-to-r from-amber-600 via-red-600 to-yellow-500 text-white font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-[0_0_40px_rgba(255,69,0,0.9)] border-2 border-amber-300 uppercase tracking-widest whitespace-nowrap flex items-center gap-2">
                   <span>🐉 @{activeCenterGift.senderName} Summoned The Golden Dragon!</span>
                   {activeCenterGift.combo > 1 && (
                     <span className="bg-black/80 text-amber-300 px-2 py-0.5 rounded-full text-xs">
@@ -2183,18 +2195,20 @@ export default function LiveStreamView({
                     gift.isSuper ? 'border-amber-400/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'border-white/10 hover:border-indigo-400/50'
                   } transition-all group text-center transform hover:scale-105 active:scale-95 disabled:opacity-50 relative`}
                 >
-                  {gift.isSuper && (
+                  {gift.videoUrl && (
                     <span className="absolute -top-1.5 -right-1 z-10 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase shadow">
-                      3D CGI
+                      HD VIDEO
                     </span>
                   )}
-                  {gift.image3d ? (
-                    <div className="w-12 h-12 mb-1 flex items-center justify-center rounded-xl overflow-hidden bg-black/60 border border-white/10 group-hover:scale-110 transition-transform">
-                      <img
-                        src={gift.image3d}
-                        alt={gift.name}
-                        className="w-full h-full object-cover select-none"
-                        style={{ mixBlendMode: 'screen' }}
+                  {gift.videoUrl ? (
+                    <div className="w-14 h-14 mb-1.5 flex items-center justify-center rounded-xl overflow-hidden bg-black border border-amber-400/50 shadow-md group-hover:scale-110 transition-transform">
+                      <video
+                        src={gift.videoUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover pointer-events-none"
                       />
                     </div>
                   ) : (

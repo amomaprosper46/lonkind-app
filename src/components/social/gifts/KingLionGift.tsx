@@ -533,88 +533,66 @@ export default function KingLionGift({
               : 'scale-90 opacity-0 translate-x-24 transition-all duration-1000 ease-in-out'
           }`}
         >
-          <div className="relative w-80 h-[440px] sm:w-96 sm:h-[520px] flex items-center justify-center">
+          <div className="relative w-80 h-[440px] sm:w-[420px] sm:h-[540px] flex items-center justify-center">
             {/* Ambient Golden Core Radiance */}
             <div
-              className={`absolute inset-6 rounded-full bg-gradient-to-b from-amber-400/35 via-yellow-500/25 to-amber-700/35 blur-3xl transition-opacity duration-500 pointer-events-none ${
-                scene >= 3 ? 'opacity-100 animate-pulse' : 'opacity-50'
+              className={`absolute inset-4 rounded-full bg-gradient-to-b from-amber-400/45 via-yellow-500/30 to-amber-700/45 blur-3xl transition-opacity duration-500 pointer-events-none ${
+                scene >= 3 ? 'opacity-100 animate-pulse' : 'opacity-60'
               }`}
             />
 
-            {/* Optional Custom Real .MP4 / .WebM Video Stream (Luma-Keyed Screen Blend) */}
-            {videoUrl ? (
+            {/* Primary Real HD .MP4 Video Stream — Majestic Adult Male Lion */}
+            <div className="relative w-full h-full rounded-[36px] overflow-hidden shadow-[0_0_80px_rgba(245,158,11,0.85)] border-2 border-amber-400/60">
               <video
-                src={videoUrl}
+                src={videoUrl || '/gifts/lion.mp4'}
                 autoPlay
+                loop
+                muted
                 playsInline
-                muted={false}
-                onEnded={onComplete}
-                className="w-full h-full object-contain pointer-events-none"
+                className="w-full h-full object-cover pointer-events-none scale-105"
                 style={{
-                  mixBlendMode: 'screen',
-                  WebkitMaskImage: 'radial-gradient(ellipse at center, black 68%, transparent 99%)',
-                  maskImage: 'radial-gradient(ellipse at center, black 68%, transparent 99%)',
+                  filter:
+                    scene === 3
+                      ? 'contrast(1.3) saturate(1.35) brightness(1.15)'
+                      : scene === 4 || scene === 5
+                      ? 'contrast(1.35) saturate(1.4) brightness(1.2)'
+                      : 'contrast(1.18) saturate(1.22)',
                 }}
               />
-            ) : (
-              <>
-                {/* 3D CGI Royal Crown Floating Above Lion in Scene 6 (King Moment) */}
-                {scene >= 6 && (
-                  <img
-                    src="/gifts/crown-3d.jpg"
-                    alt="Royal Crown 3D"
-                    className="absolute -top-14 w-28 h-28 object-contain z-30 animate-bounce pointer-events-none"
-                    style={{
-                      mixBlendMode: 'screen',
-                      WebkitMaskImage: 'radial-gradient(circle at center, black 55%, transparent 95%)',
-                      maskImage: 'radial-gradient(circle at center, black 55%, transparent 95%)',
-                    }}
-                  />
-                )}
 
-                {/* Pose 1: Noble 3D CGI Lion with Golden Sun Halo (Scenes 1, 2, 6, 7) */}
-                <img
-                  src="/gifts/lion-noble.jpg"
-                  alt="King Lion Noble 3D CGI"
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-300 pointer-events-none ${
-                    scene === 1 || scene === 2 || scene >= 6 ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                  }`}
+              {/* Real HD Blazing Fire Burst Video Layer (Luma-Keyed Over the Lion Video during Roar & Charge) */}
+              <video
+                src="/gifts/fire-burst.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+                className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-300 ${
+                  scene === 3 || scene === 4 || scene === 5 ? 'opacity-95' : 'opacity-45'
+                }`}
+                style={{
+                  mixBlendMode: 'screen',
+                }}
+              />
+
+              {/* Real HD Golden Sparks 3D Video Layer (Luma-Keyed during Scene 6 King Moment) */}
+              {scene >= 6 && (
+                <video
+                  src="/gifts/crown.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-90"
                   style={{
                     mixBlendMode: 'screen',
-                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
-                    maskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
                   }}
                 />
+              )}
 
-                {/* Pose 2: Ferocious Roaring 3D CGI Lion (Scene 3 — The Roar) */}
-                <img
-                  src="/gifts/lion-roar.jpg"
-                  alt="King Lion Roar 3D CGI"
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-200 pointer-events-none ${
-                    scene === 3 ? 'opacity-100 scale-110' : 'opacity-0 scale-95'
-                  }`}
-                  style={{
-                    mixBlendMode: 'screen',
-                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
-                    maskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
-                  }}
-                />
-
-                {/* Pose 3: Leaping & Charging 3D CGI Lion with Extended Claws (Scenes 4 & 5 — Charge & Impact) */}
-                <img
-                  src="/gifts/lion-charge.jpg"
-                  alt="King Lion Charge 3D CGI"
-                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-200 pointer-events-none ${
-                    scene === 4 || scene === 5 ? 'opacity-100 scale-115' : 'opacity-0 scale-90'
-                  }`}
-                  style={{
-                    mixBlendMode: 'screen',
-                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 66%, transparent 98%)',
-                    maskImage: 'radial-gradient(ellipse at center, black 66%, transparent 98%)',
-                  }}
-                />
-              </>
-            )}
+              {/* Golden Vignette Rim */}
+              <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_50px_rgba(0,0,0,0.85)] rounded-[36px]" />
+            </div>
           </div>
         </div>
 
