@@ -8,6 +8,7 @@ interface UniverseGiftProps {
   senderName: string;
   senderAvatar?: string;
   combo?: number;
+  videoUrl?: string;
   onComplete: () => void;
 }
 
@@ -59,6 +60,7 @@ export default function UniverseGift({
   senderName,
   senderAvatar,
   combo = 1,
+  videoUrl,
   onComplete,
 }: UniverseGiftProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -845,6 +847,50 @@ export default function UniverseGift({
       {/* Screen Flash Overlay on Big Bang & Cosmic Explosion */}
       {screenFlash && (
         <div className="absolute inset-0 bg-white/80 pointer-events-none z-40 animate-in fade-in duration-75" />
+      )}
+
+      {/* Photorealistic 8K 3D CGI Interstellar Black Hole & Galaxies Layer (Luma-Keyed) */}
+      {videoUrl ? (
+        <video
+          src={videoUrl}
+          autoPlay
+          playsInline
+          muted={false}
+          onEnded={onComplete}
+          className="absolute inset-0 w-full h-full object-cover z-15 pointer-events-none"
+          style={{ mixBlendMode: 'screen' }}
+        />
+      ) : (
+        <div
+          className={`absolute inset-0 z-15 flex items-center justify-center pointer-events-none transition-all duration-1000 ${
+            scene === 1 || scene === 2
+              ? 'opacity-0 scale-50'
+              : scene === 3 || scene === 4
+              ? 'opacity-75 scale-100'
+              : scene === 5
+              ? 'opacity-85 scale-125'
+              : scene === 6
+              ? 'opacity-100 scale-110'
+              : scene === 7
+              ? 'opacity-95 scale-[1.85] rotate-12'
+              : scene === 8
+              ? 'opacity-100 scale-150 brightness-150'
+              : scene === 9 || scene === 10
+              ? 'opacity-90 scale-105'
+              : 'opacity-0 scale-0'
+          }`}
+          style={{ mixBlendMode: 'screen' }}
+        >
+          <img
+            src="/gifts/universe-3d.jpg"
+            alt="Universe 3D CGI"
+            className="w-full h-full max-w-2xl object-contain"
+            style={{
+              WebkitMaskImage: 'radial-gradient(ellipse at center, black 60%, transparent 98%)',
+              maskImage: 'radial-gradient(ellipse at center, black 60%, transparent 98%)',
+            }}
+          />
+        </div>
       )}
 
       {/* High-Performance 60 FPS HTML5 Cosmic Canvas */}

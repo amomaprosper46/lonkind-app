@@ -8,6 +8,7 @@ interface KingLionGiftProps {
   senderName: string;
   senderAvatar?: string;
   combo?: number;
+  videoUrl?: string;
   onComplete: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function KingLionGift({
   senderName,
   senderAvatar,
   combo = 1,
+  videoUrl,
   onComplete,
 }: KingLionGiftProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -513,7 +515,7 @@ export default function KingLionGift({
           <div className="absolute -top-16 w-80 h-80 rounded-full bg-gradient-to-tr from-amber-500/30 via-yellow-400/40 to-amber-600/30 blur-2xl animate-pulse pointer-events-none" />
         )}
 
-        {/* Dynamic Multi-Scene Lion Container with 3D Perspective Transformations */}
+        {/* Dynamic Multi-Scene 3D CGI Lion & Real Video Stage */}
         <div
           className={`relative transition-all duration-500 flex flex-col items-center ${
             scene === 1
@@ -521,187 +523,98 @@ export default function KingLionGift({
               : scene === 2
               ? 'scale-100 opacity-100 blur-0 translate-y-0 transition-transform duration-700 ease-out'
               : scene === 3
-              ? 'scale-125 translate-y-[-10px] drop-shadow-[0_0_60px_rgba(245,158,11,1)]'
+              ? 'scale-125 translate-y-[-10px] drop-shadow-[0_0_70px_rgba(245,158,11,0.95)]'
               : scene === 4
-              ? 'scale-[2.6] translate-y-16 blur-[1px] transition-all duration-700 ease-in'
+              ? 'scale-[1.95] translate-y-8 transition-all duration-700 ease-in'
               : scene === 5
-              ? 'scale-[1.8] translate-y-4 filter contrast-125'
+              ? 'scale-[1.55] translate-y-2 filter contrast-125'
               : scene === 6
-              ? 'scale-110 translate-y-[-15px] opacity-100 transition-all duration-700 ease-out'
+              ? 'scale-110 translate-y-[-12px] opacity-100 transition-all duration-700 ease-out'
               : 'scale-90 opacity-0 translate-x-24 transition-all duration-1000 ease-in-out'
           }`}
         >
-          {/* Majestic Male Lion Vector Composition */}
-          <div className="relative w-72 h-72 sm:w-84 sm:h-84 flex items-center justify-center">
+          <div className="relative w-80 h-[440px] sm:w-96 sm:h-[520px] flex items-center justify-center">
             {/* Ambient Golden Core Radiance */}
             <div
-              className={`absolute inset-0 rounded-full bg-gradient-to-b from-amber-400/40 via-yellow-500/30 to-amber-700/40 blur-2xl transition-opacity duration-500 ${
+              className={`absolute inset-6 rounded-full bg-gradient-to-b from-amber-400/35 via-yellow-500/25 to-amber-700/35 blur-3xl transition-opacity duration-500 pointer-events-none ${
                 scene >= 3 ? 'opacity-100 animate-pulse' : 'opacity-50'
               }`}
             />
 
-            {/* Custom High-Res Majestic Lion Artwork (SVG) */}
-            <svg
-              viewBox="0 0 512 512"
-              className={`w-full h-full filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] transition-transform duration-300 ${
-                isRoaring ? 'scale-110' : ''
-              }`}
-            >
-              <defs>
-                <radialGradient id="sunHalo" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#fef08a" stopOpacity="0.9" />
-                  <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#78350f" stopOpacity="0" />
-                </radialGradient>
-
-                <linearGradient id="maneGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#fbbf24" />
-                  <stop offset="35%" stopColor="#d97706" />
-                  <stop offset="70%" stopColor="#b45309" />
-                  <stop offset="100%" stopColor="#451a03" />
-                </linearGradient>
-
-                <linearGradient id="furGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#fde68a" />
-                  <stop offset="40%" stopColor="#f59e0b" />
-                  <stop offset="100%" stopColor="#b45309" />
-                </linearGradient>
-
-                <linearGradient id="goldGleam" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#fef08a" />
-                  <stop offset="50%" stopColor="#ffffff" />
-                  <stop offset="100%" stopColor="#fbbf24" />
-                </linearGradient>
-
-                <filter id="eyeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="6" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* Sun Disc Backdrop Halo */}
-              {scene >= 2 && (
-                <circle cx="256" cy="245" r="195" fill="url(#sunHalo)" className="animate-pulse" />
-              )}
-
-              {/* Majestic Flowing Outer Mane Layers */}
-              <g id="outerMane">
-                <path
-                  d="M256 50 C180 50 110 90 85 160 C65 215 70 280 95 330 C125 390 180 435 256 455 C332 435 387 390 417 330 C442 280 447 215 427 160 C402 90 332 50 256 50 Z"
-                  fill="url(#maneGrad)"
-                />
-                {/* Windblown Mane Tufts Left & Right */}
-                <path
-                  d="M100 170 Q40 210 70 260 Q50 310 110 350 Q160 440 256 470 Q352 440 402 350 Q462 310 442 260 Q472 210 412 170 C360 80 152 80 100 170 Z"
-                  fill="#78350f"
-                  opacity="0.85"
-                />
-                <path
-                  d="M125 180 C80 230 90 300 130 350 C170 400 210 430 256 445 C302 430 342 400 382 350 C422 300 432 230 387 180 C340 100 172 100 125 180 Z"
-                  fill="url(#maneGrad)"
-                />
-              </g>
-
-              {/* Muscular Lion Face & Jaw Structure */}
-              <g id="lionHead">
-                {/* Cheeks & Forehead */}
-                <path
-                  d="M190 180 C175 230 180 290 205 330 C220 355 240 370 256 372 C272 370 292 355 307 330 C332 290 337 230 322 180 C305 140 207 140 190 180 Z"
-                  fill="url(#furGrad)"
-                />
-
-                {/* Ears */}
-                <path d="M165 145 C150 120 175 90 200 115 Z" fill="#92400e" />
-                <path d="M172 138 C162 122 178 102 195 120 Z" fill="#fde68a" />
-                <path d="M347 145 C362 120 337 90 312 115 Z" fill="#92400e" />
-                <path d="M340 138 C350 122 334 102 317 120 Z" fill="#fde68a" />
-
-                {/* Broad Muscular Muzzle */}
-                <path
-                  d="M215 285 C210 320 235 345 256 345 C277 345 302 320 297 285 C295 265 217 265 215 285 Z"
-                  fill="#fef3c7"
-                />
-
-                {/* Dark Nose Pad */}
-                <path
-                  d="M242 270 L270 270 C274 270 276 274 274 278 L260 294 C258 296 254 296 252 294 L238 278 C236 274 238 270 242 270 Z"
-                  fill="#1c1917"
-                />
-
-                {/* Piercing Glowing Amber Eyes */}
-                <g id="eyes" filter="url(#eyeGlow)">
-                  {/* Left Eye */}
-                  <polygon points="208,215 232,222 215,228" fill="#f59e0b" />
-                  <circle cx="218" cy="222" r="3.5" fill="#451a03" />
-                  <circle cx="217" cy="221" r="1.5" fill="#ffffff" />
-
-                  {/* Right Eye */}
-                  <polygon points="304,215 280,222 297,228" fill="#f59e0b" />
-                  <circle cx="294" cy="222" r="3.5" fill="#451a03" />
-                  <circle cx="295" cy="221" r="1.5" fill="#ffffff" />
-                </g>
-
-                {/* Roaring Open Mouth (Active in Scene 3, closed/noble in others) */}
-                {isRoaring ? (
-                  <g id="roaringMouth">
-                    {/* Deep Cavity */}
-                    <path
-                      d="M225 315 C220 375 292 375 287 315 C270 325 242 325 225 315 Z"
-                      fill="#450a0a"
-                    />
-                    {/* Fiery Inner Glow */}
-                    <ellipse cx="256" cy="342" rx="24" ry="14" fill="#ea580c" opacity="0.8" />
-                    <ellipse cx="256" cy="342" rx="14" ry="8" fill="#fbbf24" />
-
-                    {/* Sharp White Upper Fangs */}
-                    <polygon points="230,314 235,328 238,314" fill="#ffffff" />
-                    <polygon points="274,314 277,328 282,314" fill="#ffffff" />
-                    <polygon points="244,316 248,322 251,316" fill="#fef08a" />
-                    <polygon points="261,316 264,322 268,316" fill="#fef08a" />
-
-                    {/* Lower Fangs */}
-                    <polygon points="236,360 240,348 243,360" fill="#ffffff" />
-                    <polygon points="269,360 272,348 276,360" fill="#ffffff" />
-                  </g>
-                ) : (
-                  <path
-                    d="M242 305 Q256 314 270 305"
-                    stroke="#292524"
-                    strokeWidth="3.5"
-                    fill="none"
-                    strokeLinecap="round"
+            {/* Optional Custom Real .MP4 / .WebM Video Stream (Luma-Keyed Screen Blend) */}
+            {videoUrl ? (
+              <video
+                src={videoUrl}
+                autoPlay
+                playsInline
+                muted={false}
+                onEnded={onComplete}
+                className="w-full h-full object-contain pointer-events-none"
+                style={{
+                  mixBlendMode: 'screen',
+                  WebkitMaskImage: 'radial-gradient(ellipse at center, black 68%, transparent 99%)',
+                  maskImage: 'radial-gradient(ellipse at center, black 68%, transparent 99%)',
+                }}
+              />
+            ) : (
+              <>
+                {/* 3D CGI Royal Crown Floating Above Lion in Scene 6 (King Moment) */}
+                {scene >= 6 && (
+                  <img
+                    src="/gifts/crown-3d.jpg"
+                    alt="Royal Crown 3D"
+                    className="absolute -top-14 w-28 h-28 object-contain z-30 animate-bounce pointer-events-none"
+                    style={{
+                      mixBlendMode: 'screen',
+                      WebkitMaskImage: 'radial-gradient(circle at center, black 55%, transparent 95%)',
+                      maskImage: 'radial-gradient(circle at center, black 55%, transparent 95%)',
+                    }}
                   />
                 )}
 
-                {/* Whiskers */}
-                <line x1="190" y1="290" x2="140" y2="280" stroke="#fef08a" strokeWidth="1.5" opacity="0.7" />
-                <line x1="192" y1="296" x2="145" y2="295" stroke="#fef08a" strokeWidth="1.5" opacity="0.7" />
-                <line x1="190" y1="302" x2="142" y2="310" stroke="#fef08a" strokeWidth="1.5" opacity="0.7" />
-                <line x1="322" y1="290" x2="372" y2="280" stroke="#fef08a" strokeWidth="1.5" opacity="0.7" />
-                <line x1="320" y1="296" x2="367" y2="295" stroke="#fef08a" strokeWidth="1.5" opacity="0.7" />
-                <line x1="322" y1="302" x2="370" y2="310" stroke="#fef08a" strokeWidth="1.5" opacity="0.7" />
-              </g>
+                {/* Pose 1: Noble 3D CGI Lion with Golden Sun Halo (Scenes 1, 2, 6, 7) */}
+                <img
+                  src="/gifts/lion-noble.jpg"
+                  alt="King Lion Noble 3D CGI"
+                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-300 pointer-events-none ${
+                    scene === 1 || scene === 2 || scene >= 6 ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                  }`}
+                  style={{
+                    mixBlendMode: 'screen',
+                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
+                    maskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
+                  }}
+                />
 
-              {/* Royal Crown Ornamentation (Scene 6 King Moment) */}
-              {scene >= 6 && (
-                <g id="royalCrown" className="animate-bounce">
-                  <path
-                    d="M206 90 L226 130 L256 80 L286 130 L306 90 L300 145 L212 145 Z"
-                    fill="url(#goldGleam)"
-                    stroke="#b45309"
-                    strokeWidth="2"
-                    filter="url(#eyeGlow)"
-                  />
-                  {/* Ruby & Emerald jewels on crown */}
-                  <circle cx="256" cy="115" r="5" fill="#dc2626" />
-                  <circle cx="230" cy="125" r="3.5" fill="#059669" />
-                  <circle cx="282" cy="125" r="3.5" fill="#2563eb" />
-                </g>
-              )}
-            </svg>
+                {/* Pose 2: Ferocious Roaring 3D CGI Lion (Scene 3 — The Roar) */}
+                <img
+                  src="/gifts/lion-roar.jpg"
+                  alt="King Lion Roar 3D CGI"
+                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-200 pointer-events-none ${
+                    scene === 3 ? 'opacity-100 scale-110' : 'opacity-0 scale-95'
+                  }`}
+                  style={{
+                    mixBlendMode: 'screen',
+                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
+                    maskImage: 'radial-gradient(ellipse at center, black 64%, transparent 98%)',
+                  }}
+                />
+
+                {/* Pose 3: Leaping & Charging 3D CGI Lion with Extended Claws (Scenes 4 & 5 — Charge & Impact) */}
+                <img
+                  src="/gifts/lion-charge.jpg"
+                  alt="King Lion Charge 3D CGI"
+                  className={`absolute inset-0 w-full h-full object-contain transition-all duration-200 pointer-events-none ${
+                    scene === 4 || scene === 5 ? 'opacity-100 scale-115' : 'opacity-0 scale-90'
+                  }`}
+                  style={{
+                    mixBlendMode: 'screen',
+                    WebkitMaskImage: 'radial-gradient(ellipse at center, black 66%, transparent 98%)',
+                    maskImage: 'radial-gradient(ellipse at center, black 66%, transparent 98%)',
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
 
