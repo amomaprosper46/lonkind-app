@@ -1,59 +1,148 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Sparkles } from 'lucide-react';
+import { Volume2, VolumeX, Activity, Sparkles, X, RotateCcw } from 'lucide-react';
+
+export interface UniverseGiftPayload {
+  giftId: 'lonkind.universe';
+  sender: string;
+  senderAvatar?: string;
+  combo?: number;
+  timestamp: number;
+  seed: number;
+  qualityTier: 'low' | 'medium' | 'high';
+}
 
 interface UniverseGiftProps {
   senderName: string;
   senderAvatar?: string;
   combo?: number;
   videoUrl?: string;
+  seed?: number;
+  timestamp?: number;
+  qualityTier?: 'low' | 'medium' | 'high';
+  showStudioControls?: boolean;
   onComplete: () => void;
 }
 
-interface Star3D {
+type QualityTier = 'low' | 'medium' | 'high';
+
+interface StarParticle {
   x: number;
   y: number;
   z: number;
-  prevZ: number;
-  color: string;
-  size: number;
-  speed: number;
+  r: number;
+  hue: number;
+  tw: number;
 }
 
-interface NebulaCloud {
+interface DustParticle {
+  a: number;
+  r: number;
+  z: number;
+  s: number;
+  h: number;
+}
+
+interface GalaxyItem {
   x: number;
   y: number;
-  radius: number;
-  color: string;
-  opacity: number;
-  growth: number;
+  z: number;
+  r: number;
+  rot: number;
+  tint: number;
 }
 
-interface AccretionParticle {
-  angle: number;
-  radius: number;
-  speed: number;
-  size: number;
-  color: string;
-}
+const PHASES: [string, number, number][] = [
+  ['DARKNESS', 0, 1.8],
+  ['SINGULARITY', 1.8, 4.6],
+  ['BIRTH', 4.6, 8],
+  ['GALAXIES', 8, 11],
+  ['VOYAGE', 11, 16.3],
+  ['BLACK HOLE', 16.3, 20.4],
+  ['GRAVITY', 20.4, 23.3],
+  ['SILENCE', 23.3, 23.75],
+  ['EXPLOSION', 23.75, 26.7],
+  ['INFINITY', 26.7, 31],
+  ['SIGNATURE', 31, 33.4],
+  ['COLLAPSE', 33.4, 37.5],
+];
 
-interface ShockwaveRing {
-  radius: number;
-  maxRadius: number;
-  opacity: number;
-  width: number;
-  color: string;
-}
+const PHASE_CAPTIONS: Record<string, { caption: string; description: string }> = {
+  IDLE: {
+    caption: 'THE MOMENT BEFORE EVERYTHING',
+    description: 'A universe waits in a single point of light.',
+  },
+  DARKNESS: {
+    caption: 'SCENE 01 / TOTAL DARKNESS',
+    description: 'Deep space falls silent as the first faint stars awaken.',
+  },
+  SINGULARITY: {
+    caption: 'SCENE 02 / THE FIRST LIGHT',
+    description: 'A pulsing singularity bends space and draws matter inward.',
+  },
+  BIRTH: {
+    caption: 'SCENE 03 / BIRTH OF THE UNIVERSE',
+    description: 'Primordial light erupts outward into cosmic clouds and starlight.',
+  },
+  GALAXIES: {
+    caption: 'SCENE 04 / GALAXIES FORM',
+    description: 'Spiral galaxies, nebulae, and star clusters ignite across the void.',
+  },
+  VOYAGE: {
+    caption: 'SCENE 05 / INTERSTELLAR VOYAGE',
+    description: 'Accelerating past a ringed gas giant and a radiant golden star.',
+  },
+  'BLACK HOLE': {
+    caption: 'SCENE 06 / SUPERMASSIVE HORIZON',
+    description: 'Gravitational lensing bends starlight around the accretion disk.',
+  },
+  GRAVITY: {
+    caption: 'SCENE 07 / GRAVITATIONAL PULL',
+    description: 'Relativistic matter spirals inward toward the event horizon.',
+  },
+  SILENCE: {
+    caption: 'SCENE 07.5 / ABSOLUTE ZERO',
+    description: '...',
+  },
+  EXPLOSION: {
+    caption: 'SCENE 08 / THE COSMIC EXPLOSION',
+    description: 'A cataclysmic shockwave expands the universe at hyper-velocity.',
+  },
+  INFINITY: {
+    caption: 'SCENE 09 / INFINITE COSMOS',
+    description: 'Floating across an endless horizon of galaxies and starlight.',
+  },
+  SIGNATURE: {
+    caption: 'SCENE 10 / LONKIND IDENTITY',
+    description: 'Procedural light · Synchronized moments · One Universe.',
+  },
+  COLLAPSE: {
+    caption: 'SCENE 11 / SINGULARITY RETURN',
+    description: 'All creation folds gently back into a single point of light.',
+  },
+};
 
-interface CometParticle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  length: number;
-  color: string;
+const DURATION = 37.5;
+const DENSITIES: Record<QualityTier, number> = { low: 260, medium: 650, high: 1200 };
+const TAU = Math.PI * 2;
+
+const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const smooth = (v: number) => {
+  const c = clamp(v);
+  return c * c * (3 - 2 * c);
+};
+
+function seeded(seed: number) {
+  let x = seed >>> 0;
+  return () => {
+    x = (x + 0x6d2b79f5) | 0;
+    let t = x;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export default function UniverseGift({
@@ -61,823 +150,878 @@ export default function UniverseGift({
   senderAvatar,
   combo = 1,
   videoUrl,
+  seed: initialSeed,
+  timestamp: initialTimestamp,
+  qualityTier: initialQualityTier,
+  showStudioControls = false,
   onComplete,
 }: UniverseGiftProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
-  // Scenes: 1 to 11
-  // 1: Total Darkness -> 2: First Light -> 3: Big Bang -> 4: Galaxies Form -> 5: Flight Through Space
-  // 6: Black Hole -> 7: Infall -> 8: Cosmic Explosion -> 9: Panorama -> 10: Lonkind Badge -> 11: Collapse
-  const [scene, setScene] = useState<number>(1);
-  const [screenShake, setScreenShake] = useState<boolean>(false);
-  const [screenFlash, setScreenFlash] = useState<boolean>(false);
-  const [showTypography, setShowTypography] = useState<boolean>(false);
-  const [showLonkindSignature, setShowLonkindSignature] = useState<boolean>(false);
+  // Telemetry & UI States matching the Lonkind Gift Engine specification
+  const [statusValue, setStatusValue] = useState<string>('EVENT RECEIVED');
+  const [offsetValue, setOffsetValue] = useState<string>('+38 ms');
+  const [phaseValue, setPhaseValue] = useState<string>('DARKNESS');
+  const [fpsValue, setFpsValue] = useState<string>('60');
+  const [quality, setQuality] = useState<QualityTier>(() => {
+    if (initialQualityTier) return initialQualityTier;
+    if (typeof window !== 'undefined') {
+      const cores = navigator.hardwareConcurrency || 4;
+      return cores <= 4 || window.innerWidth < 380 ? 'low' : 'high';
+    }
+    return 'medium';
+  });
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [notice, setNotice] = useState<string>('Playing synchronized UNIVERSE event');
+  const [showTelemetry, setShowTelemetry] = useState<boolean>(showStudioControls);
 
-  // 1. HIGH-END PROCEDURAL WEB AUDIO ENGINE (ZERO EXTERNAL ASSET DEPENDENCY)
-  useEffect(() => {
+  // Mutable engine refs for 60fps lock-free loop
+  const soundEnabledRef = useRef<boolean>(true);
+  const qualityRef = useRef<QualityTier>(quality);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const masterGainRef = useRef<GainNode | null>(null);
+  const voicesRef = useRef<(OscillatorNode | AudioBufferSourceNode)[]>([]);
+  const eventRef = useRef<UniverseGiftPayload | null>(null);
+  const clockOffsetRef = useRef<number>(38);
+  const phaseRef = useRef<string>('');
+  const rafRef = useRef<number>(0);
+
+  const stopVoices = useCallback(() => {
+    for (const v of voicesRef.current) {
+      try {
+        v.stop();
+      } catch (_) {}
+    }
+    voicesRef.current = [];
+  }, []);
+
+  const ensureAudio = useCallback(() => {
     if (typeof window === 'undefined') return;
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-
-      // Master Gain for graceful fadeout / sudden cut
-      const masterGain = ctx.createGain();
-      masterGain.connect(ctx.destination);
-      masterGain.gain.setValueAtTime(1.0, ctx.currentTime);
-
-      // Sound 1: Deep Cosmic Sub-Bass Rumble (t = 0.0s, Scene 1)
-      const rumbleOsc = ctx.createOscillator();
-      const rumbleGain = ctx.createGain();
-      rumbleOsc.type = 'sine';
-      rumbleOsc.frequency.setValueAtTime(36, ctx.currentTime);
-      rumbleOsc.frequency.exponentialRampToValueAtTime(54, ctx.currentTime + 1.2);
-      rumbleGain.gain.setValueAtTime(0.01, ctx.currentTime);
-      rumbleGain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 1.0);
-      rumbleOsc.connect(rumbleGain);
-      rumbleGain.connect(masterGain);
-      rumbleOsc.start();
-      rumbleOsc.stop(ctx.currentTime + 1.5);
-
-      // Sound 2: Rising Heartbeat Energy Pulses (t = 1.2s - 2.4s, Scene 2)
-      [1.2, 1.6, 2.0].forEach((startTime, idx) => {
-        setTimeout(() => {
-          try {
-            const pulseOsc = ctx.createOscillator();
-            const pulseGain = ctx.createGain();
-            pulseOsc.type = 'sawtooth';
-            pulseOsc.frequency.setValueAtTime(60 + idx * 45, ctx.currentTime);
-            pulseOsc.frequency.exponentialRampToValueAtTime(220 + idx * 60, ctx.currentTime + 0.35);
-            pulseGain.gain.setValueAtTime(0.01, ctx.currentTime);
-            pulseGain.gain.linearRampToValueAtTime(0.3 + idx * 0.15, ctx.currentTime + 0.15);
-            pulseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
-            pulseOsc.connect(pulseGain);
-            pulseGain.connect(masterGain);
-            pulseOsc.start();
-            pulseOsc.stop(ctx.currentTime + 0.4);
-          } catch (_) {}
-        }, (startTime - 0.2) * 1000);
-      });
-
-      // Sound 3: Big Bang Detonation & Expanding Stellar Winds (t = 2.4s, Scene 3)
-      setTimeout(() => {
-        try {
-          const bangOsc = ctx.createOscillator();
-          const bangGain = ctx.createGain();
-          bangOsc.type = 'sine';
-          bangOsc.frequency.setValueAtTime(180, ctx.currentTime);
-          bangOsc.frequency.exponentialRampToValueAtTime(28, ctx.currentTime + 1.2);
-          bangGain.gain.setValueAtTime(0.9, ctx.currentTime);
-          bangGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.4);
-          bangOsc.connect(bangGain);
-          bangGain.connect(masterGain);
-          bangOsc.start();
-          bangOsc.stop(ctx.currentTime + 1.5);
-
-          // Stellar Chimes Shower
-          [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
-            const chimeOsc = ctx.createOscillator();
-            const chimeGain = ctx.createGain();
-            chimeOsc.type = 'triangle';
-            chimeOsc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
-            chimeGain.gain.setValueAtTime(0.01, ctx.currentTime + idx * 0.12);
-            chimeGain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + idx * 0.12 + 0.05);
-            chimeGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 1.2);
-            chimeOsc.connect(chimeGain);
-            chimeGain.connect(masterGain);
-            chimeOsc.start(ctx.currentTime + idx * 0.12);
-            chimeOsc.stop(ctx.currentTime + idx * 0.12 + 1.3);
-          });
-        } catch (_) {}
-      }, 2400);
-
-      // Sound 4: Hyperspace Slipstream Whoosh (t = 6.0s, Scene 5)
-      setTimeout(() => {
-        try {
-          const whooshOsc = ctx.createOscillator();
-          const whooshGain = ctx.createGain();
-          whooshOsc.type = 'sine';
-          whooshOsc.frequency.setValueAtTime(80, ctx.currentTime);
-          whooshOsc.frequency.exponentialRampToValueAtTime(450, ctx.currentTime + 1.4);
-          whooshGain.gain.setValueAtTime(0.05, ctx.currentTime);
-          whooshGain.gain.linearRampToValueAtTime(0.45, ctx.currentTime + 0.8);
-          whooshGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.6);
-          whooshOsc.connect(whooshGain);
-          whooshGain.connect(masterGain);
-          whooshOsc.start();
-          whooshOsc.stop(ctx.currentTime + 1.7);
-        } catch (_) {}
-      }, 6000);
-
-      // Sound 5: Black Hole Infall Vortex & Gravitational Resonance (t = 8.0s - 9.8s, Scene 6 & 7)
-      setTimeout(() => {
-        try {
-          const bhOsc = ctx.createOscillator();
-          const bhGain = ctx.createGain();
-          bhOsc.type = 'sawtooth';
-          bhOsc.frequency.setValueAtTime(45, ctx.currentTime);
-          bhOsc.frequency.linearRampToValueAtTime(110, ctx.currentTime + 2.4);
-          bhGain.gain.setValueAtTime(0.01, ctx.currentTime);
-          bhGain.gain.linearRampToValueAtTime(0.55, ctx.currentTime + 2.0);
-          bhGain.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + 2.4);
-          bhOsc.connect(bhGain);
-          bhGain.connect(masterGain);
-          bhOsc.start();
-          bhOsc.stop(ctx.currentTime + 2.5);
-        } catch (_) {}
-      }, 8000);
-
-      // Sound 6: SUDDEN COMPLETE DEAD SILENCE AT t = 10.7s (Tense Pre-Explosion Void)
-      setTimeout(() => {
-        try {
-          masterGain.gain.setValueAtTime(0.0, ctx.currentTime);
-          setTimeout(() => {
-            masterGain.gain.setValueAtTime(1.0, ctx.currentTime);
-          }, 300);
-        } catch (_) {}
-      }, 10700);
-
-      // Sound 7: MASSIVE COSMIC EXPLOSION / REBIRTH (t = 11.0s, Scene 8)
-      setTimeout(() => {
-        try {
-          // Thunderous Sub-Bass Drop
-          const boomOsc = ctx.createOscillator();
-          const boomGain = ctx.createGain();
-          boomOsc.type = 'sawtooth';
-          boomOsc.frequency.setValueAtTime(220, ctx.currentTime);
-          boomOsc.frequency.exponentialRampToValueAtTime(22, ctx.currentTime + 1.6);
-          boomGain.gain.setValueAtTime(1.0, ctx.currentTime);
-          boomGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.8);
-          boomOsc.connect(boomGain);
-          boomGain.connect(masterGain);
-          boomOsc.start();
-          boomOsc.stop(ctx.currentTime + 1.9);
-
-          // Deep Resonant Shockwave Ring
-          const shockOsc = ctx.createOscillator();
-          const shockGain = ctx.createGain();
-          shockOsc.type = 'sine';
-          shockOsc.frequency.setValueAtTime(85, ctx.currentTime);
-          shockOsc.frequency.exponentialRampToValueAtTime(32, ctx.currentTime + 2.2);
-          shockGain.gain.setValueAtTime(0.7, ctx.currentTime);
-          shockGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.4);
-          shockOsc.connect(shockGain);
-          shockGain.connect(masterGain);
-          shockOsc.start();
-          shockOsc.stop(ctx.currentTime + 2.5);
-        } catch (_) {}
-      }, 11000);
-
-      // Sound 8: Harmonious Celestial Symphony & Cosmic Shimmer (t = 12.8s, Scene 9 & 10)
-      setTimeout(() => {
-        try {
-          const celestialHarmonics = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.5];
-          celestialHarmonics.forEach((freq, i) => {
-            const hOsc = ctx.createOscillator();
-            const hGain = ctx.createGain();
-            hOsc.type = 'sine';
-            hOsc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.08);
-            hGain.gain.setValueAtTime(0.01, ctx.currentTime + i * 0.08);
-            hGain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.08 + 0.1);
-            hGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.08 + 2.4);
-            hOsc.connect(hGain);
-            hGain.connect(masterGain);
-            hOsc.start(ctx.currentTime + i * 0.08);
-            hOsc.stop(ctx.currentTime + i * 0.08 + 2.5);
-          });
-        } catch (_) {}
-      }, 12800);
-    } catch (e) {
-      console.warn('Universe procedural sound engine initialization:', e);
+    if (!audioCtxRef.current) {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      const audio = new AC();
+      const master = audio.createGain();
+      master.gain.value = soundEnabledRef.current ? 0.42 : 0;
+      master.connect(audio.destination);
+      audioCtxRef.current = audio;
+      masterGainRef.current = master;
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
     }
   }, []);
 
-  // 2. TIMELINE DIRECTOR (11-SCENE CHOREOGRAPHY WITH PRECISE TIMESTAMPS)
-  useEffect(() => {
-    // Scene 1 -> 2: First Light (1.2s)
-    const t1 = setTimeout(() => setScene(2), 1200);
+  const tone = useCallback(
+    (freq: number, length: number, type: OscillatorType = 'sine', gain = 0.12, slide = 1, delay = 0) => {
+      const audio = audioCtxRef.current;
+      const master = masterGainRef.current;
+      if (!audio || !master || !soundEnabledRef.current) return;
+      try {
+        const at = audio.currentTime + delay;
+        const o = audio.createOscillator();
+        const g = audio.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, at);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * slide), at + length);
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), at + 0.025);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + length);
+        o.connect(g);
+        g.connect(master);
+        o.start(at);
+        o.stop(at + length + 0.04);
+        voicesRef.current.push(o);
+        o.onended = () => {
+          voicesRef.current = voicesRef.current.filter((x) => x !== o);
+          try {
+            o.disconnect();
+            g.disconnect();
+          } catch (_) {}
+        };
+      } catch (_) {}
+    },
+    []
+  );
 
-    // Scene 2 -> 3: The Big Bang Eruption (2.4s)
-    const t2 = setTimeout(() => {
-      setScene(3);
-      setScreenFlash(true);
-      setScreenShake(true);
-      setTimeout(() => setScreenFlash(false), 240);
-      setTimeout(() => setScreenShake(false), 900);
-    }, 2400);
+  const noise = useCallback((length: number, gain = 0.1, filterFreq = 700, delay = 0) => {
+    const audio = audioCtxRef.current;
+    const master = masterGainRef.current;
+    if (!audio || !master || !soundEnabledRef.current) return;
+    try {
+      const sr = audio.sampleRate;
+      const buffer = audio.createBuffer(1, Math.floor(sr * length), sr);
+      const data = buffer.getChannelData(0);
+      let x = eventRef.current ? eventRef.current.seed : 91;
+      for (let i = 0; i < data.length; i++) {
+        x = (Math.imul(x, 1664525) + 1013904223) | 0;
+        data[i] = ((x >>> 0) / 2147483648 - 1) * (0.5 + 0.5 * (1 - i / data.length));
+      }
+      const src = audio.createBufferSource();
+      const filter = audio.createBiquadFilter();
+      const g = audio.createGain();
+      const at = audio.currentTime + delay;
+      src.buffer = buffer;
+      filter.type = 'lowpass';
+      filter.frequency.value = filterFreq;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime(gain, at + Math.min(0.35, length * 0.25));
+      g.gain.exponentialRampToValueAtTime(0.0001, at + length);
+      src.connect(filter);
+      filter.connect(g);
+      g.connect(master);
+      src.start(at);
+      src.stop(at + length + 0.01);
+      voicesRef.current.push(src);
+      src.onended = () => {
+        voicesRef.current = voicesRef.current.filter((v) => v !== src);
+        try {
+          src.disconnect();
+          filter.disconnect();
+          g.disconnect();
+        } catch (_) {}
+      };
+    } catch (_) {}
+  }, []);
 
-    // Scene 3 -> 4: Galaxies Form (4.2s)
-    const t3 = setTimeout(() => setScene(4), 4200);
+  const audioPhase = useCallback(
+    (name: string) => {
+      if (name === 'SILENCE') {
+        stopVoices();
+        return;
+      }
+      if (!soundEnabledRef.current) return;
+      ensureAudio();
+      switch (name) {
+        case 'DARKNESS':
+          tone(43, 2.2, 'sine', 0.12, 0.78);
+          noise(1.7, 0.045, 105);
+          break;
+        case 'SINGULARITY':
+          tone(56, 2.6, 'sine', 0.15, 1.7);
+          tone(180, 1.9, 'sine', 0.035, 2.3);
+          break;
+        case 'BIRTH':
+          noise(2.9, 0.21, 1250);
+          tone(55, 2.5, 'sawtooth', 0.11, 0.54);
+          tone(440, 1.9, 'sine', 0.055, 2.1);
+          break;
+        case 'GALAXIES':
+          tone(330, 2.8, 'sine', 0.035, 1.5);
+          tone(660, 2.3, 'sine', 0.02, 1.3);
+          break;
+        case 'VOYAGE':
+          noise(4.8, 0.09, 500);
+          tone(82, 4, 'sine', 0.08, 1.3);
+          break;
+        case 'BLACK HOLE':
+          tone(67, 4, 'sawtooth', 0.09, 0.61);
+          noise(3.5, 0.065, 180);
+          break;
+        case 'GRAVITY':
+          tone(58, 2.85, 'sawtooth', 0.16, 0.5);
+          tone(110, 2.75, 'sine', 0.08, 0.65);
+          break;
+        case 'EXPLOSION':
+          tone(79, 2.2, 'sine', 0.31, 0.35);
+          noise(2.4, 0.3, 1800);
+          tone(830, 1.4, 'sine', 0.045, 1.7);
+          break;
+        case 'INFINITY':
+          noise(3.6, 0.03, 1400);
+          tone(392, 3.5, 'sine', 0.045, 0.85);
+          tone(784, 2.7, 'sine', 0.018, 1.12);
+          break;
+        case 'SIGNATURE':
+          tone(523, 2.1, 'sine', 0.035, 0.76);
+          break;
+        case 'COLLAPSE':
+          tone(92, 3.6, 'sine', 0.17, 0.28);
+          tone(41, 2.6, 'sine', 0.1, 0.58, 1);
+          break;
+      }
+    },
+    [ensureAudio, noise, stopVoices, tone]
+  );
 
-    // Scene 4 -> 5: Flight Through Space (6.0s)
-    const t4 = setTimeout(() => setScene(5), 6000);
-
-    // Scene 5 -> 6: Black Hole Reveals (8.0s)
-    const t5 = setTimeout(() => setScene(6), 8000);
-
-    // Scene 6 -> 7: Gravitational Pull & Void Cut (9.8s)
-    const t6 = setTimeout(() => setScene(7), 9800);
-
-    // Scene 7 -> 8: Cosmic Explosion (BOOM!) (11.0s)
-    const t7 = setTimeout(() => {
-      setScene(8);
-      setScreenFlash(true);
-      setScreenShake(true);
-      setTimeout(() => setScreenFlash(false), 300);
-      setTimeout(() => setScreenShake(false), 1200);
-    }, 11000);
-
-    // Scene 8 -> 9: Universe Panorama & Title (12.6s)
-    const t8 = setTimeout(() => {
-      setScene(9);
-      setShowTypography(true);
-    }, 12600);
-
-    // Scene 9 -> 10: Lonkind Signature (14.2s)
-    const t9 = setTimeout(() => {
-      setScene(10);
-      setShowLonkindSignature(true);
-    }, 14200);
-
-    // Scene 10 -> 11: Final Cosmic Collapse (15.8s)
-    const t10 = setTimeout(() => {
-      setScene(11);
-      setShowTypography(false);
-      setShowLonkindSignature(false);
-    }, 15800);
-
-    // Complete and return screen (17.4s)
-    const t11 = setTimeout(() => {
-      onComplete();
-    }, 17400);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-      clearTimeout(t5);
-      clearTimeout(t6);
-      clearTimeout(t7);
-      clearTimeout(t8);
-      clearTimeout(t9);
-      clearTimeout(t10);
-      clearTimeout(t11);
-    };
-  }, [onComplete]);
-
-  // 3. FULL-SCREEN 60 FPS HTML5 CANVAS 3D COSMIC ENGINE
+  // Main 12-Phase UNIVERSE Procedural Canvas + Synchronized Stream Engine
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const stage = stageRef.current;
+    if (!canvas || !stage) return;
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    let animationFrameId: number;
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
+    let dpr = 1;
+    let w = 0;
+    let h = 0;
+    let stars: StarParticle[] = [];
+    let dust: DustParticle[] = [];
+    let galaxies: GalaxyItem[] = [];
+    let rng: () => number = seeded(42);
+    let frameCount = 0;
+    let fpsStamp = performance.now();
 
-    const handleResize = () => {
-      if (!canvas) return;
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-    };
-    window.addEventListener('resize', handleResize);
-
-    // Adaptive particle scale for budget mobile phones vs high-end screens
-    const isMobile = width < 640;
-    const starCount = isMobile ? 260 : 520;
-    const accretionParticleCount = isMobile ? 120 : 220;
-
-    // A. 3D Warp Starfield
-    const stars: Star3D[] = [];
-    const starPalette = ['#ffffff', '#bae6fd', '#fde047', '#fed7aa', '#ddd6fe', '#67e8f9'];
-    for (let i = 0; i < starCount; i++) {
-      stars.push({
-        x: (Math.random() - 0.5) * width * 3.5,
-        y: (Math.random() - 0.5) * height * 3.5,
-        z: Math.random() * 2000,
-        prevZ: 2000,
-        color: starPalette[Math.floor(Math.random() * starPalette.length)],
-        size: Math.random() * 2.2 + 0.8,
-        speed: Math.random() * 8 + 4,
-      });
+    function fill(color: string) {
+      if (!ctx) return;
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, w, h);
     }
 
-    // B. Nebula Clouds
-    const nebulae: NebulaCloud[] = [
-      { x: width * 0.25, y: height * 0.35, radius: 140, color: 'rgba(99, 102, 241, 0.28)', opacity: 0, growth: 0.4 },
-      { x: width * 0.75, y: height * 0.45, radius: 180, color: 'rgba(168, 85, 247, 0.25)', opacity: 0, growth: 0.3 },
-      { x: width * 0.45, y: height * 0.65, radius: 160, color: 'rgba(236, 72, 153, 0.22)', opacity: 0, growth: 0.35 },
-      { x: width * 0.5, y: height * 0.2, radius: 150, color: 'rgba(6, 182, 212, 0.24)', opacity: 0, growth: 0.25 },
-      { x: width * 0.8, y: height * 0.8, radius: 170, color: 'rgba(245, 158, 11, 0.2)', opacity: 0, growth: 0.3 },
-    ];
-
-    // C. Accretion Disk Particles for Black Hole (Scene 6 & 7)
-    const accretionDisk: AccretionParticle[] = [];
-    const accretionPalette = ['#f59e0b', '#ef4444', '#fbbf24', '#ffffff', '#f97316', '#7c3aed'];
-    for (let i = 0; i < accretionParticleCount; i++) {
-      accretionDisk.push({
-        angle: Math.random() * Math.PI * 2,
-        radius: Math.random() * 110 + 45,
-        speed: (Math.random() * 0.05 + 0.035) * (Math.random() > 0.5 ? 1 : 1),
-        size: Math.random() * 2.5 + 1.2,
-        color: accretionPalette[Math.floor(Math.random() * accretionPalette.length)],
-      });
+    function glow(x: number, y: number, r: number, color: string, alpha = 1) {
+      if (!ctx || r < 0.3) return;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, color.replace('ALPHA', String(alpha)));
+      g.addColorStop(0.3, color.replace('ALPHA', String(alpha * 0.32)));
+      g.addColorStop(1, color.replace('ALPHA', '0'));
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
 
-    // D. Comets with Ion Tails
-    const comets: CometParticle[] = [
-      { x: width * 0.1, y: height * 0.2, vx: 5.5, vy: 3.2, length: 75, color: '#38bdf8' },
-      { x: width * 0.85, y: height * 0.15, vx: -6.0, vy: 4.5, length: 90, color: '#fbbf24' },
-      { x: width * 0.05, y: height * 0.65, vx: 7.2, vy: -2.8, length: 80, color: '#ec4899' },
-    ];
+    function dot(x: number, y: number, r: number, color: string, a = 1) {
+      if (!ctx) return;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(0.15, r), 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
-    // E. Dynamic Shockwaves
-    const shockwaves: ShockwaveRing[] = [];
-    const triggerShockwave = (color: string, maxR: number, strokeW = 4) => {
-      shockwaves.push({
-        radius: 10,
-        maxRadius: maxR,
-        opacity: 1.0,
-        width: strokeW,
-        color,
-      });
+    function line(x1: number, y1: number, x2: number, y2: number, color: string, width = 1, alpha = 1) {
+      if (!ctx) return;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    function idle() {
+      fill('#02050b');
+      const x = w / 2;
+      const y = h * 0.43;
+      glow(x, y, Math.min(w * 0.38, 160), 'rgba(87,113,171,ALPHA)', 0.08);
+      dot(x, y, 1.4, '#c7d8ed', 0.75);
+      const seededIdle = seeded(42);
+      for (let i = 0; i < 45; i++) {
+        dot(
+          seededIdle() * w,
+          seededIdle() * h * 0.88,
+          0.25 + seededIdle() * 0.55,
+          '#c9dcff',
+          0.12 + seededIdle() * 0.28
+        );
+      }
+    }
+
+    function resize() {
+      if (!stage || !canvas || !ctx) return;
+      const rect = stage.getBoundingClientRect();
+      w = rect.width || window.innerWidth;
+      h = rect.height || window.innerHeight;
+      const q = qualityRef.current;
+      dpr = Math.min(
+        window.devicePixelRatio || 1,
+        q === 'high' ? 1.7 : q === 'medium' ? 1.4 : 1.15
+      );
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!eventRef.current) idle();
+    }
+
+    function prepare(seedVal: number) {
+      rng = seeded(seedVal);
+      stars = [];
+      dust = [];
+      galaxies = [];
+      const q = qualityRef.current;
+      const n = DENSITIES[q];
+      for (let i = 0; i < n; i++) {
+        stars.push({
+          x: rng() * 2 - 1,
+          y: rng() * 2 - 1,
+          z: 0.08 + rng() * 0.92,
+          r: 0.35 + rng() * 1.3,
+          hue: rng(),
+          tw: rng() * TAU,
+        });
+      }
+      for (let i = 0; i < Math.floor(n * 0.55); i++) {
+        dust.push({
+          a: rng() * TAU,
+          r: Math.sqrt(rng()),
+          z: rng(),
+          s: rng(),
+          h: rng(),
+        });
+      }
+      const galaxyCount = q === 'high' ? 85 : q === 'medium' ? 52 : 28;
+      for (let i = 0; i < galaxyCount; i++) {
+        galaxies.push({
+          x: (rng() - 0.5) * 2.9,
+          y: (rng() - 0.5) * 3.6,
+          z: 0.25 + rng() * 1.5,
+          r: 1 + rng() * 2.8,
+          rot: rng() * TAU,
+          tint: rng(),
+        });
+      }
+    }
+
+    function disk(cx: number, cy: number, rx: number, ry: number, power = 1, angle = -0.22) {
+      if (!ctx) return;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < 5; k++) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rx * (0.8 + k * 0.12), ry * (0.75 + k * 0.2), 0, 0, TAU);
+        ctx.strokeStyle =
+          k % 2
+            ? 'rgba(236,184,123,' + 0.18 * power + ')'
+            : 'rgba(141,179,255,' + 0.17 * power + ')';
+        ctx.lineWidth = (6 - k) * 2.3;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = '#b5baff';
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function galaxy(x: number, y: number, size: number, rot: number, tint: number, opacity = 1) {
+      if (!ctx) return;
+      if (x < -size * 2 || x > w + size * 2 || y < -size * 2 || y > h + size * 2) return;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+      ctx.scale(1, 0.52);
+      glow(
+        0,
+        0,
+        size * 1.5,
+        tint > 0.55 ? 'rgba(91,147,246,ALPHA)' : 'rgba(192,123,220,ALPHA)',
+        opacity * 0.2
+      );
+      ctx.globalCompositeOperation = 'lighter';
+      for (let arm = 0; arm < 2; arm++) {
+        for (let j = 0; j < 16; j++) {
+          const q = j / 16;
+          const a = q * 5.8 + arm * Math.PI;
+          const rad = size * (0.12 + q * 0.85);
+          dot(
+            Math.cos(a) * rad,
+            Math.sin(a) * rad,
+            0.3 + (0.8 - q) * 1.2,
+            j % 4 === 0 ? '#fbe0ae' : tint > 0.55 ? '#9bc5ff' : '#c0a7e5',
+            opacity * (1 - q * 0.58)
+          );
+        }
+      }
+      dot(0, 0, Math.max(1, size * 0.07), '#ffedcb', opacity);
+      ctx.restore();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function starfield(t: number, strength = 1, warp = 0) {
+      if (!ctx) return;
+      ctx.globalCompositeOperation = 'lighter';
+      const cx = w * 0.5;
+      const cy = h * 0.47;
+      const scale = Math.min(w, h) * 0.9;
+      for (const p of stars) {
+        let depth = (p.z + t * warp * 0.085) % 1;
+        if (depth < 0.025) depth = 0.025;
+        const spread = (1.25 - depth) * 1.5;
+        const x = cx + p.x * scale * spread;
+        const y = cy + p.y * scale * spread;
+        if (x < 0 || x > w || y < 0 || y > h) continue;
+        const alpha = strength * (0.3 + 0.7 * (1 - depth)) * (0.82 + 0.18 * Math.sin(t * 2 + p.tw));
+        const color = p.hue < 0.16 ? '#ffe5bc' : p.hue < 0.63 ? '#b5d0ff' : '#ddd0ff';
+        dot(x, y, p.r * (1.3 - depth * 0.65), color, alpha);
+        if (warp && depth < 0.5) {
+          line(
+            x,
+            y,
+            x + (x - cx) * warp * 0.028,
+            y + (y - cy) * warp * 0.028,
+            color,
+            0.5,
+            alpha * 0.4
+          );
+        }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function clouds(t: number, intensity = 1) {
+      if (!ctx) return;
+      const cx = w * 0.5;
+      const cy = h * 0.47;
+      ctx.globalCompositeOperation = 'lighter';
+      glow(cx - w * 0.27 * Math.sin(t * 0.25), cy - h * 0.22, w * 0.75, 'rgba(43,73,179,ALPHA)', 0.11 * intensity);
+      glow(cx + w * 0.29, cy + h * 0.06, w * 0.6, 'rgba(113,52,169,ALPHA)', 0.09 * intensity);
+      glow(cx - w * 0.12, cy + h * 0.27, w * 0.52, 'rgba(186,114,79,ALPHA)', 0.055 * intensity);
+      for (const p of dust) {
+        const a = p.a + t * (0.018 + p.z * 0.03);
+        const r = p.r * w * 0.75 * (0.65 + p.z);
+        dot(
+          cx + Math.cos(a) * r,
+          cy + Math.sin(a) * r * 0.95,
+          0.25 + p.s * 0.7,
+          p.h > 0.77 ? '#ffe0a1' : p.h > 0.35 ? '#9cb8ff' : '#c1a1e8',
+          (0.09 + p.s * 0.22) * intensity
+        );
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function galaxiesView(t: number, progress = 0, spread = 1) {
+      for (const g of galaxies) {
+        const depth = ((g.z - progress * 0.42 + 2) % 2) + 0.15;
+        const zoom = 1 / depth;
+        galaxy(
+          w / 2 + g.x * w * 0.32 * zoom * spread,
+          h * 0.48 + g.y * h * 0.22 * zoom * spread,
+          g.r * 5.2 * zoom,
+          g.rot + t * 0.016,
+          g.tint,
+          clamp((2 - depth) * 0.75)
+        );
+      }
+    }
+
+    function ringPlanet(t: number) {
+      if (!ctx) return;
+      const approach = smooth((t - 11.5) / 3.7);
+      const leave = smooth((t - 14.2) / 2);
+      const p = approach * (1 - leave);
+      if (p < 0.01) return;
+      const x = w * (0.76 - 0.55 * approach);
+      const y = h * (0.67 - 0.18 * approach);
+      const r = w * (0.055 + 0.24 * approach);
+      ctx.save();
+      ctx.globalAlpha = p;
+      glow(x, y, r * 2, 'rgba(105,156,231,ALPHA)', 0.25);
+      disk(x, y, r * 1.7, r * 0.37, 0.7, -0.35);
+      const sphere = ctx.createRadialGradient(x - r * 0.38, y - r * 0.45, r * 0.04, x, y, r);
+      sphere.addColorStop(0, '#e2c79b');
+      sphere.addColorStop(0.35, '#667a9e');
+      sphere.addColorStop(0.75, '#26364f');
+      sphere.addColorStop(1, '#070d1b');
+      ctx.fillStyle = sphere;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#f6dbaf';
+      ctx.lineWidth = Math.max(1, r * 0.025);
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * 1.72, r * 0.36, -0.35, 0.1, Math.PI - 0.1);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function glowingStar(t: number) {
+      const v = smooth((t - 13) / 2) * (1 - smooth((t - 16) / 0.7));
+      if (!v) return;
+      const x = w * 0.79 - (t - 13) * w * 0.17;
+      const y = h * 0.28 + (t - 13) * h * 0.05;
+      const r = w * (0.025 + 0.035 * v);
+      glow(x, y, r * 5, 'rgba(255,192,104,ALPHA)', v * 0.55);
+      glow(x, y, r * 2, 'rgba(255,248,210,ALPHA)', v * 0.85);
+      dot(x, y, r * 0.5, '#fff9e4', v);
+      line(x - r * 3, y, x + r * 3, y, '#ffdfac', 1, v * 0.35);
+    }
+
+    function blackHole(t: number, pull = false) {
+      if (!ctx || dust.length === 0) return;
+      const cx = w * 0.52;
+      const cy = h * 0.46;
+      const entry = smooth((t - 16.2) / 1.6);
+      const growth = pull ? 1 + smooth((t - 20.4) / 3) * 0.7 : 1;
+      const r = w * 0.135 * entry * growth;
+      if (r < 2) return;
+      glow(cx, cy, r * 3.3, 'rgba(103,97,213,ALPHA)', 0.23);
+      // Offset light arcs suggest lensing around the dark gravitational silhouette
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-0.31);
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * (1.1 + k * 0.22), r * (1.1 + k * 0.22), 0, -2.3, 2.4);
+        ctx.strokeStyle = ['#a2b9ff', '#e9c494', '#8597db'][k];
+        ctx.globalAlpha = 0.48 - k * 0.1;
+        ctx.lineWidth = 2.2 - k * 0.3;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#a9c1ff';
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      disk(cx, cy, r * 2.15, r * 0.5, 0.95, -0.3);
+      const halo = ctx.createRadialGradient(cx, cy, r * 0.88, cx, cy, r * 1.21);
+      halo.addColorStop(0, '#010208');
+      halo.addColorStop(0.75, '#0b0c19');
+      halo.addColorStop(1, '#e9ba82');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 1.21, 0, TAU);
+      ctx.fill();
+      dot(cx, cy, r * 0.99, '#000105');
+      ctx.globalCompositeOperation = 'lighter';
+      const q = qualityRef.current;
+      const loops = q === 'high' ? 200 : q === 'medium' ? 125 : 70;
+      for (let i = 0; i < loops; i++) {
+        const p = dust[i % dust.length];
+        const angle =
+          p.a + t * (0.35 + p.z * 0.25) + (pull ? Math.pow(clamp((t - 20.4) / 3), 2) * 3 : 0);
+        const rad = r * (1.6 + p.r * 3) * (pull ? 1 - 0.38 * smooth((t - 20.4) / 3) : 1);
+        const x = cx + Math.cos(angle) * rad;
+        const y = cy + Math.sin(angle) * rad * 0.58;
+        dot(x, y, 0.4 + p.s * 0.8, p.h > 0.5 ? '#eac29c' : '#9ebaff', 0.2 + p.s * 0.4);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function shockwave(t: number, start: number, scale = 1) {
+      if (!ctx) return;
+      const p = clamp((t - start) / 2.2);
+      if (!p || p >= 1) return;
+      const radius = w * (0.03 + p * 1.22) * scale;
+      ctx.beginPath();
+      ctx.ellipse(w / 2, h * 0.46, radius, radius * 0.85, 0, 0, TAU);
+      ctx.strokeStyle = 'rgba(208,225,255,' + (1 - p) * 0.75 + ')';
+      ctx.lineWidth = (1 - p) * 5 + 0.5;
+      ctx.stroke();
+      glow(w / 2, h * 0.46, radius * 0.35, 'rgba(236,207,161,ALPHA)', (1 - p) * 0.16);
+    }
+
+    function title(text: string, t: number, from: number, to: number) {
+      if (!ctx) return;
+      const fade = smooth((t - from) / 1.15) * (1 - smooth((t - to + 0.7) / 0.8));
+      if (fade <= 0) return;
+      const size = text === 'UNIVERSE' ? Math.min(w * 0.112, 49) : Math.min(w * 0.086, 37);
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '500 ' + size + 'px Raleway, sans-serif';
+      (ctx as unknown as { letterSpacing?: string }).letterSpacing = '0.15em';
+      ctx.shadowColor = '#c4d6ff';
+      ctx.shadowBlur = 26 * fade;
+      ctx.globalAlpha = fade * 0.37;
+      ctx.fillStyle = '#8199ca';
+      ctx.fillText(text, w / 2, h * 0.47);
+      ctx.shadowBlur = 11;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = '#f5eddc';
+      ctx.fillText(text, w / 2, h * 0.47);
+      ctx.restore();
+    }
+
+    function draw(t: number) {
+      if (!ctx) return;
+      fill('#010309');
+      const cx = w / 2;
+      const cy = h * 0.46;
+      const active = PHASES.find((p) => t >= p[1] && t < p[2]);
+      const name = active ? active[0] : 'IDLE';
+      if (name !== phaseRef.current) {
+        phaseRef.current = name;
+        setPhaseValue(name);
+        audioPhase(name);
+      }
+
+      if (t < 1.8) {
+        starfield(t, smooth((t - 0.15) / 1.5) * 0.12);
+      } else if (t < 4.6) {
+        const p = smooth((t - 1.8) / 2.8);
+        starfield(t, 0.18 + p * 0.25);
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < Math.min(dust.length, 350); i++) {
+          const d = dust[i];
+          const r = w * (0.8 - d.z * 0.25) * (1 - p * 0.94);
+          dot(
+            cx + Math.cos(d.a + t * 0.3) * r,
+            cy + Math.sin(d.a + t * 0.3) * r,
+            0.35 + d.s,
+            d.h > 0.5 ? '#d9bda2' : '#a6baff',
+            p * 0.6
+          );
+        }
+        glow(cx, cy, w * (0.06 + p * 0.19), 'rgba(162,185,255,ALPHA)', 0.35 + p * 0.35);
+        dot(cx, cy, 1.5 + p * 5 + Math.sin(t * 10) * 1.2, '#fff9ed');
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (t < 8) {
+        const p = smooth((t - 4.6) / 2.2);
+        clouds(t, p);
+        starfield(t, 0.4 + p * 0.5, 0.7);
+        glow(cx, cy, w * (0.15 + p * 0.28), 'rgba(244,222,183,ALPHA)', (1 - p) * 0.95);
+        shockwave(t, 4.6);
+      } else if (t < 11) {
+        clouds(t, 0.9);
+        starfield(t, 0.8, 0.45);
+        galaxiesView(t, (t - 8) * 0.35);
+      } else if (t < 16.3) {
+        clouds(t, 0.7);
+        starfield(t, 1, 2.8);
+        galaxiesView(t, t - 8);
+        ringPlanet(t);
+        glowingStar(t);
+      } else if (t < 23.3) {
+        const pull = t >= 20.4;
+        clouds(t, 0.55);
+        starfield(t, pull ? 0.65 : 0.8, pull ? 1.5 : 0.6);
+        blackHole(t, pull);
+        if (pull) {
+          const p = smooth((t - 20.4) / 2.9);
+          glow(cx, cy, w * 0.9, 'rgba(41,46,101,ALPHA)', p * 0.25);
+          fill('rgba(0,0,0,' + p * 0.38 + ')');
+        }
+      } else if (t < 23.75) {
+        fill('#000000');
+      } else if (t < 26.7) {
+        const p = smooth((t - 23.75) / 2.7);
+        const shake = (1 - p) * Math.min(w * 0.018, 7);
+        ctx.save();
+        ctx.translate(Math.sin(t * 83) * shake, Math.cos(t * 67) * shake);
+        clouds(t, 1.5 - p * 0.2);
+        starfield(t, 1, 4);
+        galaxiesView(t, (t - 23.75) * 3, 1 + p * 1.6);
+        glow(cx, cy, w * (0.38 + p * 0.35), 'rgba(255,238,203,ALPHA)', (1 - p) * 0.85);
+        shockwave(t, 23.75, 1.25);
+        ctx.restore();
+      } else if (t < 33.4) {
+        clouds(t, 0.5);
+        starfield(t, 0.9, 0.35);
+        galaxiesView(t, 0, 0.85);
+        if (t < 31) title('UNIVERSE', t, 26.9, 31);
+        else title('LONKIND', t, 31, 33.4);
+      } else {
+        const p = smooth((t - 33.4) / 4.1);
+        ctx.save();
+        ctx.globalAlpha = 1 - p;
+        const shrink = 1 - p * 0.97;
+        ctx.translate(cx, cy);
+        ctx.scale(shrink, shrink);
+        ctx.translate(-cx, -cy);
+        clouds(t, 0.3);
+        starfield(t, 0.7);
+        galaxiesView(t, 0, 0.8);
+        ctx.restore();
+        glow(cx, cy, w * 0.16 * (1 - p), 'rgba(196,214,255,ALPHA)', (1 - p) * 0.6);
+        if (p < 0.93) dot(cx, cy, (1 - p) * 2 + 1, '#ffffff', 1 - p);
+      }
+    }
+
+    function finish() {
+      eventRef.current = null;
+      phaseRef.current = '';
+      setStatusValue('READY');
+      setPhaseValue('IDLE');
+      setFpsValue('—');
+      setNotice('Sequence complete. Ready to replay.');
+      stopVoices();
+      idle();
+      onComplete();
+    }
+
+    function frame(now: number) {
+      if (!eventRef.current) return;
+      const elapsed = (Date.now() + clockOffsetRef.current - eventRef.current.timestamp) / 1000;
+      if (elapsed >= DURATION) {
+        finish();
+        return;
+      }
+      draw(Math.max(0, elapsed));
+      frameCount++;
+      if (now - fpsStamp > 600) {
+        setFpsValue(String(Math.round((frameCount * 1000) / (now - fpsStamp || 600))));
+        frameCount = 0;
+        fpsStamp = now;
+      }
+      rafRef.current = requestAnimationFrame(frame);
+    }
+
+    // Stream & Engine Architecture matching window.LonkindGiftEngine
+    const listeners = new Set<(payload: UniverseGiftPayload) => void>();
+    const stream = {
+      listeners,
+      subscribe(fn: (payload: UniverseGiftPayload) => void) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      publish(payload: UniverseGiftPayload) {
+        for (const fn of listeners) fn(payload);
+      },
     };
 
-    let startTime = performance.now();
-    let hasTriggeredExplosionShock = false;
-    let hasTriggeredBigBangShock = false;
-
-    // Render Loop
-    const render = (now: number) => {
-      const elapsed = (now - startTime) / 1000;
-      const cx = width / 2;
-      const cy = height / 2;
-
-      // Clear Canvas with dynamic trail persistence
-      ctx.fillStyle = scene === 7 && elapsed > 10.7 ? '#000000' : 'rgba(5, 5, 12, 0.35)';
-      ctx.fillRect(0, 0, width, height);
-
-      // SCENE 1: Total Darkness (0.0s - 1.2s)
-      if (scene === 1) {
-        ctx.fillStyle = '#020206';
-        ctx.fillRect(0, 0, width, height);
-
-        // A few sparse subtle stars slowly emerge
-        const starRevealCount = Math.floor(stars.length * Math.min(1, elapsed / 1.2) * 0.15);
-        for (let i = 0; i < starRevealCount; i++) {
-          const s = stars[i];
-          const alpha = (Math.sin(elapsed * 4 + i) * 0.3 + 0.6) * (elapsed / 1.2);
-          ctx.beginPath();
-          ctx.arc(cx + (s.x % (width * 0.4)), cy + (s.y % (height * 0.4)), s.size * 0.8, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(2)})`;
-          ctx.fill();
-        }
-      }
-
-      // SCENE 2: The First Light / Singularity (1.2s - 2.4s)
-      else if (scene === 2) {
-        const pulse = Math.sin((elapsed - 1.2) * 14) * 0.5 + 0.5;
-        const radius = 6 + pulse * 18;
-
-        // Space gravitational warping glow
-        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 8);
-        glow.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-        glow.addColorStop(0.25, 'rgba(250, 204, 21, 0.7)');
-        glow.addColorStop(0.5, 'rgba(99, 102, 241, 0.35)');
-        glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius * 8, 0, Math.PI * 2);
-        ctx.fillStyle = glow;
-        ctx.fill();
-
-        // Infalling light filament trails
-        for (let i = 0; i < 28; i++) {
-          const angle = i * ((Math.PI * 2) / 28) + elapsed * 3;
-          const dist = 120 * (1 - ((elapsed - 1.2) % 0.4) / 0.4);
-          const px = cx + Math.cos(angle) * dist;
-          const py = cy + Math.sin(angle) * dist;
-          ctx.beginPath();
-          ctx.arc(px, py, 1.8, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(254, 240, 138, 0.8)';
-          ctx.fill();
-        }
-
-        // Intense core dot
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 25;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
-      // SCENE 3 TO 5: Big Bang, Galaxies Form & Hyperspace Flight (2.4s - 8.0s)
-      else if (scene >= 3 && scene <= 5) {
-        if (scene === 3 && !hasTriggeredBigBangShock) {
-          hasTriggeredBigBangShock = true;
-          triggerShockwave('#f59e0b', Math.max(width, height) * 0.9, 6);
-          triggerShockwave('#60a5fa', Math.max(width, height) * 1.2, 3);
-        }
-
-        // 1. Render Expansive Nebulae Clouds
-        nebulae.forEach((neb) => {
-          neb.radius += neb.growth;
-          const grad = ctx.createRadialGradient(neb.x, neb.y, 0, neb.x, neb.y, neb.radius);
-          grad.addColorStop(0, neb.color);
-          grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.beginPath();
-          ctx.arc(neb.x, neb.y, neb.radius, 0, Math.PI * 2);
-          ctx.fillStyle = grad;
-          ctx.fill();
-        });
-
-        // 2. 3D Stars Traveling Toward Camera
-        const speedMultiplier = scene === 5 ? 38 : scene === 4 ? 20 : 12;
-        stars.forEach((s) => {
-          s.prevZ = s.z;
-          s.z -= s.speed * (speedMultiplier / 10);
-
-          if (s.z <= 1) {
-            s.z = 2000;
-            s.prevZ = 2000;
-            s.x = (Math.random() - 0.5) * width * 3.5;
-            s.y = (Math.random() - 0.5) * height * 3.5;
-          }
-
-          const k = 450 / s.z;
-          const px = s.x * k + cx;
-          const py = s.y * k + cy;
-
-          const prevK = 450 / s.prevZ;
-          const prevPx = s.x * prevK + cx;
-          const prevPy = s.y * prevK + cy;
-
-          if (px >= 0 && px <= width && py >= 0 && py <= height) {
-            const rad = Math.max(0.6, (1 - s.z / 2000) * s.size * 2.2);
-
-            // Warp Star Streaks in Scene 5
-            if (scene === 5) {
-              ctx.beginPath();
-              ctx.moveTo(prevPx, prevPy);
-              ctx.lineTo(px, py);
-              ctx.strokeStyle = s.color;
-              ctx.lineWidth = rad * 1.5;
-              ctx.stroke();
-            } else {
-              ctx.beginPath();
-              ctx.arc(px, py, rad, 0, Math.PI * 2);
-              ctx.fillStyle = s.color;
-              ctx.fill();
-            }
-          }
-        });
-
-        // 3. Render Distant Spiral Galaxies (Scene 4)
-        if (scene === 4 || scene === 5) {
-          const renderSpiralGalaxy = (gx: number, gy: number, gRadius: number, gAngle: number, gColor: string) => {
-            ctx.save();
-            ctx.translate(gx, gy);
-            ctx.rotate(gAngle);
-
-            for (let arm = 0; arm < 2; arm++) {
-              ctx.beginPath();
-              for (let a = 0; a < Math.PI * 3; a += 0.15) {
-                const r = (a / (Math.PI * 3)) * gRadius;
-                const theta = a + arm * Math.PI;
-                const x = Math.cos(theta) * r;
-                const y = Math.sin(theta) * r * 0.45; // Elliptical 3D tilt
-                if (a === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-              }
-              ctx.strokeStyle = gColor;
-              ctx.lineWidth = 2.5;
-              ctx.shadowColor = gColor;
-              ctx.shadowBlur = 12;
-              ctx.stroke();
-              ctx.shadowBlur = 0;
-            }
-
-            // Core galactic bulge
-            const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, gRadius * 0.35);
-            coreGrad.addColorStop(0, '#ffffff');
-            coreGrad.addColorStop(0.4, '#fef08a');
-            coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.beginPath();
-            ctx.arc(0, 0, gRadius * 0.35, 0, Math.PI * 2);
-            ctx.fillStyle = coreGrad;
-            ctx.fill();
-            ctx.restore();
-          };
-
-          renderSpiralGalaxy(width * 0.28, height * 0.38, 90, elapsed * 0.4, 'rgba(168, 85, 247, 0.7)');
-          renderSpiralGalaxy(width * 0.74, height * 0.62, 75, -elapsed * 0.35, 'rgba(56, 189, 248, 0.75)');
-        }
-
-        // 4. Close Planetary Encounters (Scene 5 Flyby)
-        if (scene === 5) {
-          // Giant Ringed Gas Planet passing on left
-          const planetX = width * 0.2 - (elapsed - 6.0) * 45;
-          const planetY = height * 0.55 + (elapsed - 6.0) * 20;
-          const planetRadius = 65;
-
-          // Planet Body
-          const pGrad = ctx.createRadialGradient(planetX - 15, planetY - 15, 10, planetX, planetY, planetRadius);
-          pGrad.addColorStop(0, '#fde68a');
-          pGrad.addColorStop(0.5, '#d97706');
-          pGrad.addColorStop(1, '#451a03');
-          ctx.beginPath();
-          ctx.arc(planetX, planetY, planetRadius, 0, Math.PI * 2);
-          ctx.fillStyle = pGrad;
-          ctx.fill();
-
-          // Planet Rings with 3D tilt
-          ctx.save();
-          ctx.translate(planetX, planetY);
-          ctx.rotate(-0.35);
-          ctx.beginPath();
-          ctx.ellipse(0, 0, planetRadius * 2.2, planetRadius * 0.45, 0, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
-          ctx.lineWidth = 14;
-          ctx.stroke();
-          ctx.restore();
-
-          // Comets streaking across
-          comets.forEach((c) => {
-            c.x += c.vx;
-            c.y += c.vy;
-            const grad = ctx.createLinearGradient(c.x, c.y, c.x - c.vx * 12, c.y - c.vy * 12);
-            grad.addColorStop(0, '#ffffff');
-            grad.addColorStop(0.5, c.color);
-            grad.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.beginPath();
-            ctx.moveTo(c.x, c.y);
-            ctx.lineTo(c.x - c.vx * 12, c.y - c.vy * 12);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = 3;
-            ctx.stroke();
-          });
-        }
-      }
-
-      // SCENE 6 & 7: The Supermassive Black Hole & Gravitational Infall (8.0s - 11.0s)
-      else if (scene === 6 || scene === 7) {
-        if (scene === 7 && elapsed > 10.7) {
-          // Absolute Darkness in the final 300ms of Scene 7
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, width, height);
-        } else {
-          const bhRadius = scene === 7 ? 65 + (elapsed - 9.8) * 60 : 55;
-
-          // 1. Gravitational Lensing Distortion Ring
-          const lensGrad = ctx.createRadialGradient(cx, cy, bhRadius, cx, cy, bhRadius * 2.8);
-          lensGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-          lensGrad.addColorStop(0.2, 'rgba(245, 158, 11, 0.8)');
-          lensGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.4)');
-          lensGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-          ctx.beginPath();
-          ctx.arc(cx, cy, bhRadius * 2.8, 0, Math.PI * 2);
-          ctx.fillStyle = lensGrad;
-          ctx.fill();
-
-          // 2. Swirling Relativistic Accretion Disk Particles with Doppler Beaming
-          accretionDisk.forEach((p) => {
-            p.angle += p.speed * (scene === 7 ? 2.5 : 1.0);
-            if (scene === 7) {
-              p.radius = Math.max(bhRadius + 5, p.radius - 0.7);
-            }
-
-            const tilt = 0.38; // 3D disk inclination
-            const px = cx + Math.cos(p.angle) * p.radius;
-            const py = cy + Math.sin(p.angle) * (p.radius * tilt);
-
-            // Relativistic beaming: Left side moving toward viewer is brighter
-            const isApproaching = Math.sin(p.angle) > 0;
-            const alpha = isApproaching ? 0.95 : 0.45;
-
-            ctx.beginPath();
-            ctx.arc(px, py, p.size * (isApproaching ? 1.4 : 0.9), 0, Math.PI * 2);
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = alpha;
-            ctx.shadowColor = p.color;
-            ctx.shadowBlur = 8;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            ctx.globalAlpha = 1.0;
-          });
-
-          // 3. Supermassive Black Hole Event Horizon (Pure Absolute Black Sphere)
-          ctx.beginPath();
-          ctx.arc(cx, cy, bhRadius, 0, Math.PI * 2);
-          ctx.fillStyle = '#000000';
-          ctx.fill();
-
-          // 4. Einstein Photon Ring (Ultra-sharp thin golden/white boundary)
-          ctx.beginPath();
-          ctx.arc(cx, cy, bhRadius + 1.5, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.lineWidth = 2.2;
-          ctx.stroke();
-        }
-      }
-
-      // SCENE 8: The Cosmic Supernova / Rebirth Explosion (11.0s - 12.6s)
-      else if (scene === 8) {
-        if (!hasTriggeredExplosionShock) {
-          hasTriggeredExplosionShock = true;
-          triggerShockwave('#ffffff', Math.max(width, height) * 1.4, 8);
-          triggerShockwave('#f59e0b', Math.max(width, height) * 1.1, 5);
-          triggerShockwave('#ec4899', Math.max(width, height) * 0.8, 4);
-        }
-
-        // Rapidly expanding starfield from central explosion point
-        stars.forEach((s) => {
-          const dx = s.x;
-          const dy = s.y;
-          const angle = Math.atan2(dy, dx);
-          const blastDist = (elapsed - 11.0) * 1400;
-
-          const px = cx + Math.cos(angle) * blastDist + dx * 0.1;
-          const py = cy + Math.sin(angle) * blastDist + dy * 0.1;
-
-          if (px >= 0 && px <= width && py >= 0 && py <= height) {
-            ctx.beginPath();
-            ctx.arc(px, py, s.size * 2.8, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = s.color;
-            ctx.shadowBlur = 15;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-          }
-        });
-
-        // Blinding Central Supernova Core
-        const blastRadius = (elapsed - 11.0) * 320;
-        const blastGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, blastRadius);
-        blastGrad.addColorStop(0, '#ffffff');
-        blastGrad.addColorStop(0.3, '#fef08a');
-        blastGrad.addColorStop(0.6, '#f97316');
-        blastGrad.addColorStop(1, 'rgba(0,0,0,0)');
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, blastRadius, 0, Math.PI * 2);
-        ctx.fillStyle = blastGrad;
-        ctx.fill();
-      }
-
-      // SCENE 9 & 10: Infinite Universe Panorama & Lonkind Royal Badge (12.6s - 15.8s)
-      else if (scene === 9 || scene === 10) {
-        // Deep Stellar Field & Cosmic Atmosphere
-        stars.forEach((s, idx) => {
-          const px = (s.x % (width * 0.95)) + cx * 0.05;
-          const py = (s.y % (height * 0.95)) + cy * 0.05;
-          const twinkle = Math.sin(elapsed * 3 + idx) * 0.35 + 0.65;
-
-          ctx.beginPath();
-          ctx.arc(px, py, s.size * 0.95, 0, Math.PI * 2);
-          ctx.fillStyle = s.color;
-          ctx.globalAlpha = twinkle;
-          ctx.fill();
-          ctx.globalAlpha = 1.0;
-        });
-
-        // 3 Majestic Floating Spiral Galaxies in Background
-        const panoramaGalaxies = [
-          { x: width * 0.22, y: height * 0.28, r: 85, angle: elapsed * 0.15, col: 'rgba(129, 140, 248, 0.6)' },
-          { x: width * 0.78, y: height * 0.32, r: 100, angle: -elapsed * 0.18, col: 'rgba(244, 114, 182, 0.55)' },
-          { x: width * 0.5, y: height * 0.76, r: 120, angle: elapsed * 0.12, col: 'rgba(251, 191, 36, 0.5)' },
-        ];
-
-        panoramaGalaxies.forEach((pg) => {
-          ctx.save();
-          ctx.translate(pg.x, pg.y);
-          ctx.rotate(pg.angle);
-          for (let arm = 0; arm < 2; arm++) {
-            ctx.beginPath();
-            for (let a = 0; a < Math.PI * 2.8; a += 0.2) {
-              const r = (a / (Math.PI * 2.8)) * pg.r;
-              const theta = a + arm * Math.PI;
-              const x = Math.cos(theta) * r;
-              const y = Math.sin(theta) * r * 0.5;
-              if (a === 0) ctx.moveTo(x, y);
-              else ctx.lineTo(x, y);
-            }
-            ctx.strokeStyle = pg.col;
-            ctx.lineWidth = 2.2;
-            ctx.stroke();
-          }
-          ctx.restore();
-        });
-      }
-
-      // SCENE 11: Final Cosmic Collapse to a Single Star (15.8s - 17.4s)
-      else if (scene === 11) {
-        const collapseProgress = Math.min(1, (elapsed - 15.8) / 1.3);
-        const inv = 1 - collapseProgress;
-
-        // All stars gravitationally pull toward center
-        stars.forEach((s) => {
-          const px = cx + (s.x * 0.4) * inv;
-          const py = cy + (s.y * 0.4) * inv;
-          ctx.beginPath();
-          ctx.arc(px, py, s.size * inv, 0, Math.PI * 2);
-          ctx.fillStyle = s.color;
-          ctx.globalAlpha = inv;
-          ctx.fill();
-          ctx.globalAlpha = 1.0;
-        });
-
-        // The Last Single Radiant Star
-        const finalStarAlpha = Math.max(0, 1 - (elapsed - 16.5) / 0.8);
-        if (finalStarAlpha > 0) {
-          ctx.beginPath();
-          ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 255, 255, ${finalStarAlpha.toFixed(2)})`;
-          ctx.shadowColor = '#ffffff';
-          ctx.shadowBlur = 18;
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-      }
-
-      // 4. Render Expanding Shockwaves
-      for (let i = shockwaves.length - 1; i >= 0; i--) {
-        const sw = shockwaves[i];
-        sw.radius += 24;
-        sw.opacity -= 0.022;
-
-        if (sw.opacity <= 0 || sw.radius >= sw.maxRadius) {
-          shockwaves.splice(i, 1);
-        } else {
-          ctx.beginPath();
-          ctx.arc(cx, cy, sw.radius, 0, Math.PI * 2);
-          ctx.strokeStyle = sw.color;
-          ctx.globalAlpha = Math.max(0, sw.opacity);
-          ctx.lineWidth = sw.width;
-          ctx.stroke();
-          ctx.globalAlpha = 1.0;
-        }
-      }
-
-      animationFrameId = requestAnimationFrame(render);
+    const engine = {
+      engineState: 'IDLE',
+      receive(payload: UniverseGiftPayload) {
+        if (payload.giftId !== 'lonkind.universe') return;
+        cancelAnimationFrame(rafRef.current);
+        eventRef.current = payload;
+        engine.engineState = 'PLAYING';
+        qualityRef.current = payload.qualityTier;
+        setQuality(payload.qualityTier);
+        prepare(payload.seed);
+        setStatusValue('EVENT RECEIVED');
+        setOffsetValue((clockOffsetRef.current >= 0 ? '+' : '') + clockOffsetRef.current + ' ms');
+        setNotice('Playing synchronized UNIVERSE event');
+        resize();
+        frameCount = 0;
+        fpsStamp = performance.now();
+        rafRef.current = requestAnimationFrame(frame);
+      },
     };
 
-    animationFrameId = requestAnimationFrame(render);
+    const unsubscribe = stream.subscribe((payload) => engine.receive(payload));
+
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).LonkindGiftEngine = {
+        stream,
+        engine,
+        emit: (payload: UniverseGiftPayload) => stream.publish(payload),
+      };
+    }
+
+    // Launch initial synchronized event immediately on mount
+    ensureAudio();
+    const startPayload: UniverseGiftPayload = {
+      giftId: 'lonkind.universe',
+      sender: senderName || 'Livestream viewer',
+      senderAvatar,
+      combo,
+      timestamp: initialTimestamp || Date.now() + clockOffsetRef.current,
+      seed: initialSeed || ((Date.now() ^ Math.imul(1, 2654435761)) >>> 0),
+      qualityTier: qualityRef.current,
+    };
+    stream.publish(startPayload);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(rafRef.current);
+        if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
+          audioCtxRef.current.suspend().catch(() => {});
+        }
+      } else {
+        if (eventRef.current) {
+          if (soundEnabledRef.current && audioCtxRef.current) {
+            audioCtxRef.current.resume().catch(() => {});
+          }
+          rafRef.current = requestAnimationFrame(frame);
+        } else {
+          idle();
+        }
+      }
+    };
+
+    window.addEventListener('resize', resize);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
+      unsubscribe();
+      cancelAnimationFrame(rafRef.current);
+      stopVoices();
+      window.removeEventListener('resize', resize);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [scene]);
+  }, [audioPhase, combo, ensureAudio, initialSeed, initialTimestamp, onComplete, senderAvatar, senderName, stopVoices]);
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    soundEnabledRef.current = next;
+    ensureAudio();
+    if (masterGainRef.current && audioCtxRef.current) {
+      masterGainRef.current.gain.setTargetAtTime(next ? 0.42 : 0, audioCtxRef.current.currentTime, 0.03);
+    }
+    if (!next) {
+      stopVoices();
+    } else if (eventRef.current) {
+      audioPhase(phaseRef.current);
+    }
+    setNotice(next ? 'Sound enabled.' : 'Sound muted.');
+  };
+
+  const handleSelectQuality = (q: QualityTier) => {
+    qualityRef.current = q;
+    setQuality(q);
+    setNotice(`${q[0].toUpperCase() + q.slice(1)} quality selected.`);
+  };
+
+  const handleReplayEvent = () => {
+    ensureAudio();
+    const eng = (window as unknown as { LonkindGiftEngine?: { emit: (p: UniverseGiftPayload) => void } })
+      .LonkindGiftEngine;
+    if (eng) {
+      phaseRef.current = '';
+      eng.emit({
+        giftId: 'lonkind.universe',
+        sender: senderName || 'Livestream viewer',
+        senderAvatar,
+        combo,
+        timestamp: Date.now() + clockOffsetRef.current,
+        seed: (Date.now() ^ Math.imul(Math.floor(Math.random() * 1000) + 2, 2654435761)) >>> 0,
+        qualityTier: qualityRef.current,
+      });
+    }
+  };
+
+  const currentMeta = PHASE_CAPTIONS[phaseValue] || PHASE_CAPTIONS.IDLE;
 
   return (
     <div
-      className={`fixed inset-0 z-50 pointer-events-none flex flex-col items-center justify-center overflow-hidden transition-all duration-300 ${
-        screenShake ? 'animate-shake' : ''
-      }`}
+      ref={stageRef}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-between overflow-hidden bg-[#01030a] select-none"
+      style={{
+        fontFamily: "'Raleway', sans-serif",
+        boxShadow: 'inset 0 0 65px rgba(2, 3, 11, 0.85)',
+      }}
     >
-      {/* Cinematic Deep Space Vignette */}
-      <div className="absolute inset-0 bg-radial-vignette opacity-90 pointer-events-none z-10" />
-
-      {/* Screen Flash Overlay on Big Bang & Cosmic Explosion */}
-      {screenFlash && (
-        <div className="absolute inset-0 bg-white/80 pointer-events-none z-40 animate-in fade-in duration-75" />
-      )}
-
-      {/* Multi-Scene Real HD .MP4 Cosmic Video Cinema Engine (Nebula -> Wormhole -> Black Hole -> Supernova) */}
-      <div className="absolute inset-0 z-15 pointer-events-none overflow-hidden">
-        {/* Scene 3, 4, 9, 10: Real HD 3D Nebula Galaxy Traversal Video */}
+      {/* Real HD .MP4 Cosmic Video Layers Synchronized with the 12 Procedural Phases */}
+      <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden">
+        {/* Nebula & Galaxies Layer */}
         <video
           src={videoUrl || '/gifts/universe-nebula.mp4'}
           autoPlay
           loop
           muted
           playsInline
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
-            scene === 3 || scene === 4 || scene === 9 || scene === 10 ? 'opacity-90' : 'opacity-0'
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
+            phaseValue === 'BIRTH' ||
+            phaseValue === 'GALAXIES' ||
+            phaseValue === 'INFINITY' ||
+            phaseValue === 'SIGNATURE'
+              ? 'opacity-45'
+              : 'opacity-0'
           }`}
           style={{ mixBlendMode: 'screen' }}
         />
 
-        {/* Scene 5: Real HD 3D Wormhole Warp Flight Video */}
+        {/* Interstellar Voyage Wormhole Layer */}
         <video
           src="/gifts/universe-wormhole.mp4"
           autoPlay
           loop
           muted
           playsInline
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-            scene === 5 ? 'opacity-95 scale-110' : 'opacity-0'
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+            phaseValue === 'VOYAGE' ? 'opacity-50 scale-105' : 'opacity-0'
           }`}
           style={{ mixBlendMode: 'screen' }}
         />
 
-        {/* Scene 6 & 7: Real HD 3D Rotating Black Hole Video */}
+        {/* Black Hole & Gravitational Pull Layer */}
         <video
           src="/gifts/universe-blackhole.mp4"
           autoPlay
@@ -885,16 +1029,16 @@ export default function UniverseGift({
           muted
           playsInline
           className={`absolute inset-0 w-full h-full object-cover transition-all duration-700 ${
-            scene === 6
-              ? 'opacity-100 scale-105'
-              : scene === 7
-              ? 'opacity-100 scale-150'
+            phaseValue === 'BLACK HOLE'
+              ? 'opacity-55 scale-100'
+              : phaseValue === 'GRAVITY'
+              ? 'opacity-65 scale-125'
               : 'opacity-0 scale-90'
           }`}
           style={{ mixBlendMode: 'screen' }}
         />
 
-        {/* Scene 8: Real HD 3D Supernova Cosmic Explosion Video */}
+        {/* Cosmic Explosion Supernova Layer */}
         <video
           src="/gifts/universe-supernova.mp4"
           autoPlay
@@ -902,66 +1046,202 @@ export default function UniverseGift({
           muted
           playsInline
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-            scene === 8 ? 'opacity-100 scale-125' : 'opacity-0'
+            phaseValue === 'EXPLOSION' ? 'opacity-75 scale-110' : 'opacity-0'
           }`}
           style={{ mixBlendMode: 'screen' }}
         />
       </div>
 
-      {/* High-Performance 60 FPS HTML5 Cosmic Canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 z-20 pointer-events-none" />
+      {/* Procedural 12-Phase UNIVERSE Canvas (#cosmos) */}
+      <canvas
+        ref={canvasRef}
+        id="cosmos"
+        aria-label="Procedural UNIVERSE gift animation"
+        className="absolute inset-0 w-full h-full block z-[2] pointer-events-none"
+        style={{ mixBlendMode: 'screen' }}
+      />
 
-      {/* Scene 9 & 10: Cosmic Typography & Lonkind Royal Badge */}
-      <div className="relative z-30 flex flex-col items-center justify-center px-4 max-w-lg mx-auto text-center">
-        {showTypography && (
-          <div className="flex flex-col items-center animate-in zoom-in-75 fade-in duration-700">
-            {/* Celestial Sparkles */}
-            <div className="flex items-center gap-2 text-cyan-300 mb-1.5 animate-pulse">
-              <Sparkles className="h-4 w-4" />
-              <span className="text-[11px] font-mono tracking-[0.3em] uppercase text-cyan-200">
-                COSMIC SINGULARITY
-              </span>
-              <Sparkles className="h-4 w-4" />
-            </div>
+      {/* Top Stage Bar (Matches User's UNIVERSE — Lonkind Gift Engine Stage Top) */}
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-5 pt-5 flex items-center justify-between pointer-events-auto">
+        <div className="flex items-center gap-2.5">
+          <span
+            className="text-[10px] tracking-[0.2em] uppercase px-2.5 py-1.5 border border-white/25 bg-[#07101b]/80 text-[#e2ddcf] backdrop-blur-md"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            ● LIVE EVENT · {phaseValue}
+          </span>
 
-            {/* Glowing Futuristic UNIVERSE Title */}
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[0.25em] uppercase text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-indigo-300 via-purple-300 to-pink-300 drop-shadow-[0_0_35px_rgba(168,85,247,0.9)] animate-pulse">
-              UNIVERSE
-            </h1>
-
-            {/* Starlight Subtitle */}
-            <p className="mt-1 text-xs sm:text-sm font-semibold tracking-widest text-indigo-200 uppercase opacity-90">
-              The Birth &amp; Expansion of All Creation
-            </p>
-          </div>
-        )}
-
-        {/* Scene 10: Lonkind Signature Brand & Gifter Recognition */}
-        {showLonkindSignature && (
-          <div className="mt-4 flex items-center gap-2.5 bg-slate-950/85 backdrop-blur-md border border-cyan-400/40 px-5 py-2 rounded-full shadow-[0_0_30px_rgba(6,182,212,0.4)] animate-in slide-in-from-bottom-4 duration-500">
-            <Avatar className="h-7 w-7 border-2 border-cyan-400">
+          {/* Sender Royal Pill */}
+          <div className="flex items-center gap-2 bg-[#07101b]/85 border border-[#e8d5a6]/40 px-3 py-1 rounded-full backdrop-blur-md">
+            <Avatar className="h-5 w-5 border border-[#e8d5a6]">
               <AvatarImage src={senderAvatar} alt={senderName} />
-              <AvatarFallback className="bg-indigo-600 text-white text-[10px] font-bold">
-                {senderName.charAt(0)}
+              <AvatarFallback className="bg-slate-800 text-[#e8d5a6] text-[9px] font-bold">
+                {senderName ? senderName.charAt(0) : 'U'}
               </AvatarFallback>
             </Avatar>
-
-            <div className="flex flex-col text-left">
-              <span className="text-xs font-black text-cyan-200">
-                @{senderName}
-              </span>
-              <span className="text-[9px] font-mono tracking-wider text-purple-300 uppercase font-semibold">
-                LONKIND SUPREME COSMIC GIFT
-              </span>
-            </div>
-
+            <span className="text-xs font-semibold text-[#f2eee4]">@{senderName}</span>
             {combo > 1 && (
-              <span className="ml-1 bg-gradient-to-r from-cyan-400 to-purple-600 text-white font-black text-[11px] px-2.5 py-0.5 rounded-full shadow-lg">
+              <span className="text-[10px] font-bold bg-[#e8d5a6] text-[#101521] px-1.5 py-0.2 rounded-full">
                 x{combo}
               </span>
             )}
           </div>
-        )}
+        </div>
+
+        {/* Right Controls: Sound Toggle, Telemetry HUD Toggle & Skip */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleToggleSound}
+            aria-pressed={soundEnabled}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-white/25 bg-[#07101b]/80 hover:bg-white/15 text-[#edf2ff] text-xs transition-colors backdrop-blur-md"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-[#e8d5a6]" /> : <VolumeX className="h-3.5 w-3.5 text-slate-400" />}
+            <span className="hidden sm:inline text-[10px] tracking-wider uppercase">
+              {soundEnabled ? 'Sound on' : 'Sound off'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowTelemetry((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border text-xs transition-colors backdrop-blur-md ${
+              showTelemetry
+                ? 'border-[#e8d5a6] bg-[#e8d5a6] text-[#101521] font-semibold'
+                : 'border-white/25 bg-[#07101b]/80 text-[#e8d5a6] hover:bg-white/15'
+            }`}
+            style={{ fontFamily: "'Space Mono', monospace" }}
+            title="Toggle Engine Telemetry"
+          >
+            <Activity className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline text-[10px] tracking-wider uppercase">Telemetry</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              stopVoices();
+              onComplete();
+            }}
+            className="p-1.5 rounded-sm border border-white/20 bg-[#07101b]/80 hover:bg-rose-500/20 text-slate-300 hover:text-white transition-colors backdrop-blur-md"
+            title="Close Universe Gift"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Collapsible Engine Telemetry & Quality Tier Panel (From User's Spec) */}
+      {showTelemetry && (
+        <aside className="relative z-10 w-full max-w-sm ml-auto mr-5 mt-3 p-4 border border-white/15 bg-[#0c1322]/90 backdrop-blur-xl rounded-sm pointer-events-auto shadow-2xl animate-in fade-in slide-in-from-right-5 duration-200">
+          <div className="flex justify-between gap-3 items-center mb-3">
+            <h3
+              className="text-[10px] tracking-[0.26em] uppercase text-[#d9c79f] m-0"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              ENGINE TELEMETRY
+            </h3>
+            <span
+              className="text-[10px] text-[#8998ae]"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              LONKIND / LIVE
+            </span>
+          </div>
+
+          <dl
+            className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-[11px] leading-5"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            <dt className="text-[#8896aa]">EVENT STATUS</dt>
+            <dd className="text-right text-[#e4ebf7] m-0">{statusValue}</dd>
+
+            <dt className="text-[#8896aa]">SYNC OFFSET</dt>
+            <dd className="text-right text-[#e4ebf7] m-0">{offsetValue}</dd>
+
+            <dt className="text-[#8896aa]">CURRENT PHASE</dt>
+            <dd className="text-right text-[#e8d5a6] font-bold m-0">{phaseValue}</dd>
+
+            <dt className="text-[#8896aa]">FRAME RATE</dt>
+            <dd className="text-right text-[#e4ebf7] m-0">{fpsValue} FPS</dd>
+
+            <dt className="text-[#8896aa]">QUALITY TIER</dt>
+            <dd className="text-right text-[#e4ebf7] m-0">{quality.toUpperCase()}</dd>
+          </dl>
+
+          <div className="border-t border-white/10 mt-3 pt-3">
+            <p
+              className="text-[10px] tracking-[0.24em] uppercase mb-2 text-[#aeb8cb]"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              RENDER QUALITY / TIER
+            </p>
+            <div role="group" aria-label="Rendering quality" className="grid grid-cols-3 gap-2">
+              {(['high', 'medium', 'low'] as QualityTier[]).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  aria-pressed={quality === tier}
+                  onClick={() => handleSelectQuality(tier)}
+                  className={`min-h-8 text-xs rounded-sm transition-colors ${
+                    quality === tier
+                      ? 'bg-[#e8d5a6] text-[#101521] font-semibold'
+                      : 'bg-white/5 text-[#aeb8cb] hover:bg-white/15'
+                  }`}
+                >
+                  {tier[0].toUpperCase() + tier.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-white/10">
+            <span className="text-[11px] text-[#d9c79f] truncate">{notice}</span>
+            <button
+              type="button"
+              onClick={handleReplayEvent}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-sm bg-[#e8d5a6] text-[#101521] text-[11px] font-semibold hover:bg-[#fff1cb] shrink-0"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Replay</span>
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* Stage Footer Caption & Lonkind Signature */}
+      <div
+        className="relative z-10 w-full pt-16 pb-6 px-6 pointer-events-none"
+        style={{ background: 'linear-gradient(transparent, rgba(2, 5, 12, 0.88))' }}
+      >
+        <div className="max-w-xl mx-auto flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <p
+              className="text-[10px] tracking-[0.26em] uppercase text-[#dbcda9] mb-1.5 flex items-center gap-1.5"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              <Sparkles className="h-3 w-3 text-[#e8d5a6]" />
+              <span>{currentMeta.caption}</span>
+            </p>
+            <p className="text-sm text-[#c3cbd8] leading-relaxed m-0">{currentMeta.description}</p>
+          </div>
+
+          <div className="text-left sm:text-right shrink-0">
+            <span
+              className="text-[10px] tracking-[0.26em] uppercase text-[#e8d5a6] block"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              LONKIND / REAL-TIME GIFTS
+            </span>
+            <span
+              className="text-[9px] tracking-[0.2em] uppercase text-[#75829a]"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              PROCEDURAL LIGHT · SYNCHRONIZED MOMENTS
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

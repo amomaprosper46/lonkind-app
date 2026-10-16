@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UNIVERSE — Lonkind Gift Engine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700&amp;family=Space+Mono:wght@400;700&amp;display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#030710; --gold:#e9d4a1; --muted:#8995aa; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Raleway,sans-serif; color:#edf2ff; background: rgb(3, 7, 16); }
+    button { cursor:pointer; }
+    button:focus-visible { outline:2px solid #f5d894; outline-offset:4px; }
+    .shell { min-height:100vh; background:radial-gradient(ellipse at 50% 40%,#111c32 0%,#080d19 49%,#03060c 100%); }
+    .stage { position:relative; width:min(100%, 450px); aspect-ratio:9/16; margin:auto; overflow:hidden; background:#01030a; isolation:isolate; box-shadow:0 35px 100px #000a,0 0 0 1px #ffffff16; }
+    #cosmos { display:block; width:100%; height:100%; position:relative; z-index:1; mix-blend-mode:screen; }
+    .stage-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:none; z-index:0; mix-blend-mode:screen; transition:opacity .7s ease, transform .7s ease; opacity:0; }
+    .stage:after { content:""; position:absolute; inset:0; pointer-events:none; border:1px solid #ffffff18; box-shadow:inset 0 0 65px #02030b80; z-index:3; }
+    .stage-top { position:absolute; z-index:4; top:0; left:0; right:0; padding:22px 22px 0; display:flex; align-items:center; justify-content:space-between; pointer-events:none; }
+    .live-badge { font:10px 'Space Mono',monospace; letter-spacing:.2em; color:#e2ddcf; border:1px solid #ffffff45; background:#07101b99; padding:7px 9px; }
+    .stage-footer { position:absolute; z-index:4; bottom:0; left:0; right:0; padding:72px 24px 22px; background:linear-gradient(transparent,#02050cdd); pointer-events:none; }
+    .stage-footer p { margin:0; }
+    .eyebrow { font:10px 'Space Mono',monospace; letter-spacing:.26em; text-transform:uppercase; }
+    .mono { font-family:'Space Mono',monospace; }
+    .main-btn { background:#e8d5a6; color:#101521; min-height:50px; transition:transform .2s,background .2s,opacity .2s; }
+    .main-btn:hover:not(:disabled) { transform:translateY(-2px); background:#fff1cb; }
+    .main-btn:disabled { opacity:.5; cursor:not-allowed; }
+    .quiet-btn { border:1px solid #ffffff30; background:#ffffff0b; transition:background .2s; }
+    .quiet-btn:hover:not(:disabled) { background:#ffffff20; }
+    .quiet-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .quality[aria-pressed="true"] { color:#101521; background:#e8d5a6; }
+    .quality[aria-pressed="false"] { color:#aeb8cb; background:#ffffff0c; }
+    .readout { display:grid; grid-template-columns:1fr auto; gap:8px 16px; }
+    .readout dt { color:#8896aa; }
+    .readout dd { margin:0; text-align:right; color:#e4ebf7; }
+    @media(max-width:640px) { .stage { width:min(100%, 450px); } .workspace { padding:0 0 32px; } .below { padding:25px 20px; } }
+    @media(min-width:641px) { .workspace { padding:32px 24px 54px; } }
+    @media(prefers-reduced-motion:reduce) { .main-btn,.quiet-btn { transition:none; } }
+  </style>
+  <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
+</head>
+<body class="w-full" style="background: rgb(3, 7, 16);">
+  <div class="shell w-full">
+    <header class="max-w-6xl mx-auto px-5 pt-7 pb-5 sm:pt-10 flex items-end justify-between gap-4">
+      <div>
+        <p class="eyebrow mb-2" style="color: rgb(217, 199, 159); font-size: 10px;">LONKIND / REAL-TIME GIFTS</p>
+        <h1 class="font-semibold tracking-[.18em]" style="color: rgb(242, 238, 228); font-size: 32px;">UNIVERSE</h1>
+      </div>
+      <p class="eyebrow text-right hidden sm:block" style="color: rgb(136, 150, 170); font-size: 10px;">A CINEMATIC GIFT EXPERIENCE</p>
+    </header>
+    <main class="workspace max-w-6xl mx-auto grid lg:grid-cols-[minmax(300px,450px)_minmax(280px,370px)] justify-center items-center gap-8 lg:gap-14">
+      <section aria-label="Portrait livestream preview" class="w-full">
+        <div class="stage" id="stage">
+          <video id="vid-nebula" src="/gifts/universe-nebula.mp4" autoplay loop muted playsinline class="stage-video"></video>
+          <video id="vid-wormhole" src="/gifts/universe-wormhole.mp4" autoplay loop muted playsinline class="stage-video"></video>
+          <video id="vid-blackhole" src="/gifts/universe-blackhole.mp4" autoplay loop muted playsinline class="stage-video"></video>
+          <video id="vid-supernova" src="/gifts/universe-supernova.mp4" autoplay loop muted playsinline class="stage-video"></video>
+          <canvas id="cosmos" aria-label="Procedural UNIVERSE gift animation"></canvas>
+          <div class="stage-top">
+            <span class="live-badge" style="background: rgb(7, 16, 27); color: rgb(226, 221, 207); font-size: 10px;">● LIVE PREVIEW</span>
+            <span class="eyebrow text-[#e8d5a6]" style="color: rgb(232, 213, 166); font-size: 10px;">LONKIND</span>
+          </div>
+          <div class="stage-footer">
+            <p id="stage-caption" class="eyebrow text-[#dbcda9] mb-2" style="color: rgb(219, 205, 169); font-size: 10px;">THE MOMENT BEFORE EVERYTHING</p>
+            <p id="stage-description" class="text-sm text-[#c3cbd8] leading-relaxed" style="color: rgb(195, 203, 216); font-size: 14px;">A universe waits in a single point of light.</p>
+          </div>
+        </div>
+      </section>
+      <aside class="below w-full max-w-[450px] mx-auto lg:max-w-none">
+        <div class="border-t border-[#ffffff29] pt-6">
+          <p class="eyebrow text-[#d9c79f] mb-3" style="color: rgb(217, 199, 159); font-size: 10px;">SIGNATURE EVENT / 001</p>
+          <h2 class="font-semibold leading-tight mb-3" style="color: rgb(242, 238, 228); font-size: 24px;">Send a universe.</h2>
+          <p class="text-[#a4aec0] leading-relaxed mb-7" style="color: rgb(164, 174, 192); font-size: 16px; line-height: 1.6;">A complete cosmic journey, created live from a single gift event. Tap to witness it unfold.</p>
+          <button id="send" type="button" class="main-btn w-full rounded-sm font-semibold tracking-wide" style="background: rgb(232, 213, 166); color: rgb(16, 21, 33); font-size: 16px;">Send UNIVERSE gift</button>
+          <div class="grid grid-cols-2 gap-3 mt-3">
+            <button id="test" type="button" class="quiet-btn rounded-sm min-h-11" style="background: rgba(255, 255, 255, 0.043); color: rgb(237, 242, 255); font-size: 16px;">Run test event</button>
+            <button id="sound" type="button" aria-pressed="false" class="quiet-btn rounded-sm min-h-11" style="background: rgba(255, 255, 255, 0.043); color: rgb(237, 242, 255); font-size: 16px;">Sound off</button>
+          </div>
+          <p id="notice" role="status" aria-live="polite" class="min-h-6 text-xs text-[#d9c79f] mt-3"></p>
+        </div>
+        <section class="mt-5 border border-[#ffffff1c] p-5" style="background: rgb(12, 19, 34);">
+          <div class="flex justify-between gap-3 items-center mb-5">
+            <h3 class="eyebrow text-[#d9c79f]" style="color: rgb(217, 199, 159); font-size: 10px;">ENGINE TELEMETRY</h3>
+            <span class="mono text-[10px] text-[#8998ae]" style="color: rgb(137, 152, 174); font-size: 10px;">DEMO / LIVE</span>
+          </div>
+          <dl class="readout mono text-[11px] leading-5">
+            <dt style="color: rgb(136, 150, 170); font-size: 16px;">EVENT STATUS</dt>
+            <dd id="status-value">READY</dd>
+            <dt style="color: rgb(136, 150, 170); font-size: 16px;">SYNC OFFSET</dt>
+            <dd id="offset-value">+0 ms</dd>
+            <dt style="color: rgb(136, 150, 170); font-size: 16px;">CURRENT PHASE</dt>
+            <dd id="phase-value">IDLE</dd>
+            <dt style="color: rgb(136, 150, 170); font-size: 16px;">FRAME RATE</dt>
+            <dd id="fps-value">—</dd>
+            <dt style="color: rgb(136, 150, 170); font-size: 16px;">QUALITY TIER</dt>
+            <dd id="tier-value">MEDIUM</dd>
+          </dl>
+          <div class="border-t border-[#ffffff1a] mt-5 pt-4">
+            <p class="eyebrow mb-3 text-[#aeb8cb]" style="color: rgb(174, 184, 203); font-size: 10px;">RENDER QUALITY / NEXT EVENT</p>
+            <div role="group" aria-label="Rendering quality" class="grid grid-cols-3 gap-2">
+              <button data-quality="high" type="button" class="quality min-h-10 text-xs rounded-sm" style="color: rgb(174, 184, 203); font-size: 16px;">High</button>
+              <button data-quality="medium" type="button" class="quality min-h-10 text-xs rounded-sm" style="color: rgb(174, 184, 203); font-size: 16px;">Medium</button>
+              <button data-quality="low" type="button" class="quality min-h-10 text-xs rounded-sm" style="color: rgb(174, 184, 203); font-size: 16px;">Low</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </main>
+    <footer class="max-w-6xl mx-auto px-5 pb-8">
+      <p class="eyebrow text-[#75829a] text-center lg:text-left" style="color: rgb(117, 130, 154); font-size: 10px;">PROCEDURAL LIGHT · SYNCHRONIZED MOMENTS · ONE UNIVERSE</p>
+    </footer>
+  </div>
+  <script>
+    (() => {
+      const canvas = document.getElementById('cosmos'), ctx = canvas.getContext('2d', {alpha:false});
+      const stage = document.getElementById('stage');
+      const vids = {
+        nebula: document.getElementById('vid-nebula'),
+        wormhole: document.getElementById('vid-wormhole'),
+        blackhole: document.getElementById('vid-blackhole'),
+        supernova: document.getElementById('vid-supernova')
+      };
+      const els = Object.fromEntries(['send','test','sound','notice','status-value','offset-value','phase-value','fps-value','tier-value'].map(id => [id,document.getElementById(id)]));
+      const phases = [
+        ['DARKNESS',0,1.8],['SINGULARITY',1.8,4.6],['BIRTH',4.6,8],
+        ['GALAXIES',8,11],['VOYAGE',11,16.3],['BLACK HOLE',16.3,20.4],
+        ['GRAVITY',20.4,23.3],['SILENCE',23.3,23.75],['EXPLOSION',23.75,26.7],
+        ['INFINITY',26.7,31],['SIGNATURE',31,33.4],['COLLAPSE',33.4,37.5]
+      ];
+      const duration=37.5, densities={low:260,medium:650,high:1200};
+      let quality=(navigator.hardwareConcurrency||4)<=4 || innerWidth<380 ? 'low':'medium';
+      let dpr=1,w=0,h=0,raf=0,event=null,stars=[],dust=[],galaxies=[],rng=null,phase='',lastFrame=0,frameCount=0,fpsStamp=0,clockOffset=0;
+      let soundEnabled=false,audio=null,master=null,voices=[];
+      const TAU=Math.PI*2;
+      const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+      const smooth=(v)=>{v=clamp(v);return v*v*(3-2*v)};
+      const rand=()=>rng();
+      function seeded(seed){let x=seed>>>0;return ()=>{x+=0x6D2B79F5;let t=x;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296}}
+      function syncVideoLayers(name){
+        if(!vids.nebula)return;
+        vids.nebula.style.opacity = (name==='BIRTH'||name==='GALAXIES'||name==='INFINITY'||name==='SIGNATURE') ? '0.45' : '0';
+        vids.wormhole.style.opacity = (name==='VOYAGE') ? '0.5' : '0';
+        vids.blackhole.style.opacity = (name==='BLACK HOLE'||name==='GRAVITY') ? '0.6' : '0';
+        vids.supernova.style.opacity = (name==='EXPLOSION') ? '0.75' : '0';
+      }
+      function resize(){
+        const rect=stage.getBoundingClientRect();
+        w=rect.width;h=rect.height;dpr=Math.min(devicePixelRatio||1,quality==='high'?1.7:quality==='medium'?1.4:1.15);
+        canvas.width=Math.max(1,Math.round(w*dpr));canvas.height=Math.max(1,Math.round(h*dpr));
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        if(!event) idle();
+      }
+      function fill(color){ctx.fillStyle=color;ctx.fillRect(0,0,w,h)}
+      function glow(x,y,r,color,alpha=1){
+        if(r<.3)return;
+        const g=ctx.createRadialGradient(x,y,0,x,y,r);
+        g.addColorStop(0,color.replace('ALPHA',String(alpha)));
+        g.addColorStop(.3,color.replace('ALPHA',String(alpha*.32)));
+        g.addColorStop(1,color.replace('ALPHA','0'));
+        ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2);
+      }
+      function dot(x,y,r,color,a=1){ctx.globalAlpha=a;ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,Math.max(.15,r),0,TAU);ctx.fill();ctx.globalAlpha=1}
+      function line(x1,y1,x2,y2,color,width=1,alpha=1){
+        ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.globalAlpha=1
+      }
+      function idle(){
+        syncVideoLayers('IDLE');
+        fill('#02050b');
+        const x=w/2,y=h*.43;
+        glow(x,y,Math.min(w*.38,160),'rgba(87,113,171,ALPHA)',.08);
+        dot(x,y,1.4,'#c7d8ed',.75);
+        const seededIdle=seeded(42);
+        for(let i=0;i<45;i++)dot(seededIdle()*w,seededIdle()*h*.88,.25+seededIdle()*.55,'#c9dcff',.12+seededIdle()*.28);
+      }
+      function prepare(seed){
+        rng=seeded(seed);stars=[];dust=[];galaxies=[];
+        const n=densities[quality];
+        for(let i=0;i<n;i++)stars.push({x:rand()*2-1,y:rand()*2-1,z:.08+rand()*.92,r:.35+rand()*1.3, hue:rand(),tw:rand()*TAU});
+        for(let i=0;i<Math.floor(n*.55);i++)dust.push({a:rand()*TAU,r:Math.sqrt(rand()),z:rand(),s:rand(),h:rand()});
+        for(let i=0;i<(quality==='high'?85:quality==='medium'?52:28);i++)galaxies.push({x:(rand()-.5)*2.9,y:(rand()-.5)*3.6,z:.25+rand()*1.5,r:1+rand()*2.8,rot:rand()*TAU,tint:rand()});
+      }
+      function disk(cx,cy,rx,ry,power=1,angle=-.22){
+        ctx.save();ctx.translate(cx,cy);ctx.rotate(angle);
+        ctx.globalCompositeOperation='lighter';
+        for(let k=0;k<5;k++){
+          ctx.beginPath();ctx.ellipse(0,0,rx*(.8+k*.12),ry*(.75+k*.2),0,0,TAU);
+          ctx.strokeStyle=k%2?'rgba(236,184,123,'+(.18*power)+')':'rgba(141,179,255,'+(.17*power)+')';
+          ctx.lineWidth=(6-k)*2.3;ctx.shadowBlur=14;ctx.shadowColor='#b5baff';ctx.stroke();
+        }
+        ctx.shadowBlur=0;ctx.restore();ctx.globalCompositeOperation='source-over';
+      }
+      function galaxy(x,y,size,rot,tint,opacity=1){
+        if(x<-size*2||x>w+size*2||y<-size*2||y>h+size*2)return;
+        ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.scale(1,.52);
+        glow(0,0,size*1.5,tint>.55?'rgba(91,147,246,ALPHA)':'rgba(192,123,220,ALPHA)',opacity*.2);
+        ctx.globalCompositeOperation='lighter';
+        for(let arm=0;arm<2;arm++)for(let j=0;j<16;j++){
+          const q=j/16,a=q*5.8+arm*Math.PI,rad=size*(.12+q*.85);
+          dot(Math.cos(a)*rad,Math.sin(a)*rad,.3+(.8-q)*1.2,
+            j%4===0?'#fbe0ae':tint>.55?'#9bc5ff':'#c0a7e5',opacity*(1-q*.58));
+        }
+        dot(0,0,Math.max(1,size*.07),'#ffedcb',opacity);
+        ctx.restore();ctx.globalCompositeOperation='source-over';
+      }
+      function starfield(t,strength=1,warp=0){
+        ctx.globalCompositeOperation='lighter';
+        const cx=w*.5,cy=h*.47,scale=Math.min(w,h)*.9;
+        for(const p of stars){
+          let depth=(p.z+(t*warp*.085))%1;
+          if(depth<.025)depth=.025;
+          const spread=(1.25-depth)*1.5;
+          const x=cx+p.x*scale*spread,y=cy+p.y*scale*spread;
+          if(x<0||x>w||y<0||y>h)continue;
+          let alpha=strength*(.3+.7*(1-depth))*(.82+.18*Math.sin(t*2+p.tw));
+          const color=p.hue<.16?'#ffe5bc':p.hue<.63?'#b5d0ff':'#ddd0ff';
+          dot(x,y,p.r*(1.3-depth*.65),color,alpha);
+          if(warp && depth<.5)line(x,y,x+(x-cx)*warp*.028,y+(y-cy)*warp*.028,color,.5,alpha*.4);
+        }
+        ctx.globalCompositeOperation='source-over';
+      }
+      function clouds(t,intensity=1){
+        const cx=w*.5,cy=h*.47;
+        ctx.globalCompositeOperation='lighter';
+        glow(cx-w*.27*Math.sin(t*.25),cy-h*.22,w*.75,'rgba(43,73,179,ALPHA)',.11*intensity);
+        glow(cx+w*.29,cy+h*.06,w*.6,'rgba(113,52,169,ALPHA)',.09*intensity);
+        glow(cx-w*.12,cy+h*.27,w*.52,'rgba(186,114,79,ALPHA)',.055*intensity);
+        for(const p of dust){
+          const a=p.a+t*(.018+p.z*.03),r=p.r*w*.75*(.65+p.z);
+          dot(cx+Math.cos(a)*r,cy+Math.sin(a)*r*.95,.25+p.s*.7,
+            p.h>.77?'#ffe0a1':p.h>.35?'#9cb8ff':'#c1a1e8',(.09+p.s*.22)*intensity);
+        }
+        ctx.globalCompositeOperation='source-over';
+      }
+      function galaxiesView(t,progress=0,spread=1){
+        for(const g of galaxies){
+          const depth=((g.z-progress*.42+2)%2)+.15;
+          const zoom=1/depth;
+          galaxy(w/2+g.x*w*.32*zoom*spread,h*.48+g.y*h*.22*zoom*spread,
+            g.r*5.2*zoom,g.rot+t*.016,g.tint,clamp((2-depth)*.75));
+        }
+      }
+      function ringPlanet(t){
+        const approach=smooth((t-11.5)/3.7),leave=smooth((t-14.2)/2);
+        const p=approach*(1-leave);
+        if(p<.01)return;
+        const x=w*(.76-.55*approach),y=h*(.67-.18*approach),r=w*(.055+.24*approach);
+        ctx.save();ctx.globalAlpha=p;
+        glow(x,y,r*2,'rgba(105,156,231,ALPHA)',.25);
+        disk(x,y,r*1.7,r*.37,.7,-.35);
+        const sphere=ctx.createRadialGradient(x-r*.38,y-r*.45,r*.04,x,y,r);
+        sphere.addColorStop(0,'#e2c79b');sphere.addColorStop(.35,'#667a9e');sphere.addColorStop(.75,'#26364f');sphere.addColorStop(1,'#070d1b');
+        ctx.fillStyle=sphere;ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fill();
+        ctx.strokeStyle='#f6dbaf';ctx.lineWidth=Math.max(1,r*.025);ctx.beginPath();ctx.ellipse(x,y,r*1.72,r*.36,-.35,.1,Math.PI-.1);ctx.stroke();
+        ctx.restore();
+      }
+      function glowingStar(t){
+        const v=smooth((t-13)/2)*(1-smooth((t-16)/.7));
+        if(!v)return;
+        const x=w*.79-(t-13)*w*.17,y=h*.28+(t-13)*h*.05,r=w*(.025+.035*v);
+        glow(x,y,r*5,'rgba(255,192,104,ALPHA)',v*.55);
+        glow(x,y,r*2,'rgba(255,248,210,ALPHA)',v*.85);
+        dot(x,y,r*.5,'#fff9e4',v);
+        line(x-r*3,y,x+r*3,y,'#ffdfac',1,v*.35);
+      }
+      function blackHole(t,pull=false){
+        const cx=w*.52,cy=h*.46;
+        const entry=smooth((t-16.2)/1.6),growth=pull?1+smooth((t-20.4)/3)*.7:1;
+        const r=w*.135*entry*growth;
+        if(r<2)return;
+        glow(cx,cy,r*3.3,'rgba(103,97,213,ALPHA)',.23);
+        ctx.save();ctx.translate(cx,cy);ctx.rotate(-.31);
+        for(let k=0;k<3;k++){
+          ctx.beginPath();ctx.ellipse(0,0,r*(1.1+k*.22),r*(1.1+k*.22),0,-2.3,2.4);
+          ctx.strokeStyle=['#a2b9ff','#e9c494','#8597db'][k];ctx.globalAlpha=.48-k*.1;
+          ctx.lineWidth=2.2-k*.3;ctx.shadowBlur=12;ctx.shadowColor='#a9c1ff';ctx.stroke();
+        }
+        ctx.restore();ctx.globalAlpha=1;ctx.shadowBlur=0;
+        disk(cx,cy,r*2.15,r*.5,.95,-.3);
+        const halo=ctx.createRadialGradient(cx,cy,r*.88,cx,cy,r*1.21);
+        halo.addColorStop(0,'#010208');halo.addColorStop(.75,'#0b0c19');halo.addColorStop(1,'#e9ba82');
+        ctx.fillStyle=halo;ctx.beginPath();ctx.arc(cx,cy,r*1.21,0,TAU);ctx.fill();
+        dot(cx,cy,r*.99,'#000105');
+        ctx.globalCompositeOperation='lighter';
+        const loops=quality==='high'?200:quality==='medium'?125:70;
+        for(let i=0;i<loops;i++){
+          const p=dust[i%dust.length],angle=p.a+t*(.35+p.z*.25)+(pull?Math.pow(clamp((t-20.4)/3),2)*3:0);
+          const rad=r*(1.6+p.r*3)*(pull?1-.38*smooth((t-20.4)/3):1);
+          const x=cx+Math.cos(angle)*rad,y=cy+Math.sin(angle)*rad*.58;
+          dot(x,y,.4+p.s*.8,p.h>.5?'#eac29c':'#9ebaff',.2+p.s*.4);
+        }
+        ctx.globalCompositeOperation='source-over';
+      }
+      function shockwave(t,start,scale=1){
+        const p=clamp((t-start)/2.2);if(!p||p>=1)return;
+        const radius=w*(.03+p*1.22)*scale;
+        ctx.beginPath();ctx.ellipse(w/2,h*.46,radius,radius*.85,0,0,TAU);
+        ctx.strokeStyle='rgba(208,225,255,'+((1-p)*.75)+')';ctx.lineWidth=(1-p)*5+.5;ctx.stroke();
+        glow(w/2,h*.46,radius*.35,'rgba(236,207,161,ALPHA)',(1-p)*.16);
+      }
+      function title(text,t,from,to){
+        const fade=smooth((t-from)/1.15)*(1-smooth((t-to+.7)/.8));
+        if(fade<=0)return;
+        const size=text==='UNIVERSE'?Math.min(w*.112,49):Math.min(w*.086,37);
+        ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.font='500 '+size+'px Raleway, sans-serif';ctx.letterSpacing='0.15em';
+        ctx.shadowColor='#c4d6ff';ctx.shadowBlur=26*fade;
+        ctx.globalAlpha=fade*.37;ctx.fillStyle='#8199ca';ctx.fillText(text,w/2,h*.47);
+        ctx.shadowBlur=11;ctx.globalAlpha=fade;ctx.fillStyle='#f5eddc';ctx.fillText(text,w/2,h*.47);
+        ctx.restore();
+      }
+      function draw(t){
+        fill('#010309');
+        const cx=w/2,cy=h*.46;
+        const active=phases.find(p=>t>=p[1]&&t<p[2]);
+        const name=active?active[0]:'IDLE';
+        if(name!==phase){phase=name;els['phase-value'].textContent=name;audioPhase(name);syncVideoLayers(name);}
+        if(t<1.8){
+          starfield(t,smooth((t-.15)/1.5)*.12);
+        }else if(t<4.6){
+          const p=smooth((t-1.8)/2.8);
+          starfield(t,.18+p*.25);
+          ctx.globalCompositeOperation='lighter';
+          for(let i=0;i<Math.min(dust.length,350);i++){
+            const d=dust[i],r=w*(.8-d.z*.25)*(1-p*.94);
+            dot(cx+Math.cos(d.a+t*.3)*r,cy+Math.sin(d.a+t*.3)*r,.35+d.s,
+              d.h>.5?'#d9bda2':'#a6baff',p*.6);
+          }
+          glow(cx,cy,w*(.06+p*.19),'rgba(162,185,255,ALPHA)',.35+p*.35);
+          dot(cx,cy,1.5+p*5+Math.sin(t*10)*1.2,'#fff9ed');
+          ctx.globalCompositeOperation='source-over';
+        }else if(t<8){
+          let p=smooth((t-4.6)/2.2);
+          clouds(t,p);starfield(t,.4+p*.5,.7);
+          glow(cx,cy,w*(.15+p*.28),'rgba(244,222,183,ALPHA)',(1-p)*.95);
+          shockwave(t,4.6);
+        }else if(t<11){
+          clouds(t,.9);starfield(t,.8,.45);galaxiesView(t,(t-8)*.35);
+        }else if(t<16.3){
+          clouds(t,.7);starfield(t,1,2.8);galaxiesView(t,t-8);
+          ringPlanet(t);glowingStar(t);
+        }else if(t<23.3){
+          const pull=t>=20.4;
+          clouds(t,.55);starfield(t,pull?.65:.8,pull?1.5:.6);
+          blackHole(t,pull);
+          if(pull){
+            const p=smooth((t-20.4)/2.9);
+            glow(cx,cy,w*.9,'rgba(41,46,101,ALPHA)',p*.25);
+            fill('rgba(0,0,0,'+(p*.38)+')');
+          }
+        }else if(t<23.75){
+          fill('#000000');
+        }else if(t<26.7){
+          const p=smooth((t-23.75)/2.7),shake=(1-p)*Math.min(w*.018,7);
+          ctx.save();ctx.translate(Math.sin(t*83)*shake,Math.cos(t*67)*shake);
+          clouds(t,1.5-p*.2);starfield(t,1,4);galaxiesView(t,(t-23.75)*3,1+p*1.6);
+          glow(cx,cy,w*(.38+p*.35),'rgba(255,238,203,ALPHA)',(1-p)*.85);
+          shockwave(t,23.75,1.25);ctx.restore();
+        }else if(t<33.4){
+          clouds(t,.5);starfield(t,.9,.35);galaxiesView(t,0,.85);
+          if(t<31)title('UNIVERSE',t,26.9,31);
+          else title('LONKIND',t,31,33.4);
+        }else{
+          const p=smooth((t-33.4)/4.1);
+          ctx.save();ctx.globalAlpha=1-p;
+          const shrink=1-p*.97;ctx.translate(cx,cy);ctx.scale(shrink,shrink);ctx.translate(-cx,-cy);
+          clouds(t,.3);starfield(t,.7);galaxiesView(t,0,.8);
+          ctx.restore();
+          glow(cx,cy,w*.16*(1-p),'rgba(196,214,255,ALPHA)',(1-p)*.6);
+          if(p<.93)dot(cx,cy,(1-p)*2+1,'#ffffff',1-p);
+        }
+      }
+      function finish(){
+        event=null;phase='';els['status-value'].textContent='READY';
+        els['phase-value'].textContent='IDLE';els['fps-value'].textContent='—';
+        els.send.disabled=false;els.test.disabled=false;
+        els.notice.textContent='Sequence complete. Ready to replay.';
+        stopVoices();idle();
+      }
+      function frame(now){
+        if(!event)return;
+        const elapsed=(Date.now()+clockOffset-event.timestamp)/1000;
+        if(elapsed>=duration){finish();return}
+        draw(Math.max(0,elapsed));
+        frameCount++;
+        if(now-fpsStamp>600){
+          els['fps-value'].textContent=String(Math.round(frameCount*1000/(now-fpsStamp||600)));
+          frameCount=0;fpsStamp=now;
+        }
+        lastFrame=now;raf=requestAnimationFrame(frame);
+      }
+      function ensureAudio(){
+        if(!audio){
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return;
+          audio=new AC();master=audio.createGain();master.gain.value=soundEnabled?.42:0;
+          master.connect(audio.destination);
+        }
+        if(audio.state==='suspended')audio.resume();
+      }
+      function stopVoices(){
+        for(const v of voices){try{v.stop()}catch(e){}}
+        voices=[];
+      }
+      function tone(freq,length,type='sine',gain=.12,slide=1,delay=0){
+        if(!audio||!soundEnabled)return;
+        const at=audio.currentTime+delay;
+        const o=audio.createOscillator(),g=audio.createGain();
+        o.type=type;o.frequency.setValueAtTime(freq,at);o.frequency.exponentialRampToValueAtTime(Math.max(20,freq*slide),at+length);
+        g.gain.setValueAtTime(.0001,at);g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),at+.025);
+        g.gain.exponentialRampToValueAtTime(.0001,at+length);
+        o.connect(g);g.connect(master);o.start(at);o.stop(at+length+.04);
+        voices.push(o);o.onended=()=>{voices=voices.filter(x=>x!==o);o.disconnect();g.disconnect()};
+      }
+      function noise(length,gain=.1,filterFreq=700,delay=0){
+        if(!audio||!soundEnabled)return;
+        const sr=audio.sampleRate,buffer=audio.createBuffer(1,Math.floor(sr*length),sr),data=buffer.getChannelData(0);
+        let x=event?event.seed:91;
+        for(let i=0;i<data.length;i++){x=(Math.imul(x,1664525)+1013904223)|0;data[i]=((x>>>0)/2147483648-1)*(.5+.5*(1-i/data.length))}
+        const src=audio.createBufferSource(),filter=audio.createBiquadFilter(),g=audio.createGain(),at=audio.currentTime+delay;
+        src.buffer=buffer;filter.type='lowpass';filter.frequency.value=filterFreq;
+        g.gain.setValueAtTime(.0001,at);g.gain.linearRampToValueAtTime(gain,at+Math.min(.35,length*.25));
+        g.gain.exponentialRampToValueAtTime(.0001,at+length);
+        src.connect(filter);filter.connect(g);g.connect(master);src.start(at);src.stop(at+length+.01);
+        voices.push(src);src.onended=()=>{voices=voices.filter(v=>v!==src);src.disconnect();filter.disconnect();g.disconnect()};
+      }
+      function audioPhase(name){
+        if(name==='SILENCE'){stopVoices();return}
+        if(!soundEnabled)return;
+        switch(name){
+          case 'DARKNESS': tone(43,2.2,'sine',.12,.78);noise(1.7,.045,105);break;
+          case 'SINGULARITY':tone(56,2.6,'sine',.15,1.7);tone(180,1.9,'sine',.035,2.3);break;
+          case 'BIRTH':noise(2.9,.21,1250);tone(55,2.5,'sawtooth',.11,.54);tone(440,1.9,'sine',.055,2.1);break;
+          case 'GALAXIES':tone(330,2.8,'sine',.035,1.5);tone(660,2.3,'sine',.02,1.3);break;
+          case 'VOYAGE':noise(4.8,.09,500);tone(82,4,'sine',.08,1.3);break;
+          case 'BLACK HOLE':tone(67,4,'sawtooth',.09,.61);noise(3.5,.065,180);break;
+          case 'GRAVITY':tone(58,2.85,'sawtooth',.16,.5);tone(110,2.75,'sine',.08,.65);break;
+          case 'EXPLOSION':tone(79,2.2,'sine',.31,.35);noise(2.4,.3,1800);tone(830,1.4,'sine',.045,1.7);break;
+          case 'INFINITY':noise(3.6,.03,1400);tone(392,3.5,'sine',.045,.85);tone(784,2.7,'sine',.018,1.12);break;
+          case 'SIGNATURE':tone(523,2.1,'sine',.035,.76);break;
+          case 'COLLAPSE':tone(92,3.6,'sine',.17,.28);tone(41,2.6,'sine',.1,.58,1);break;
+        }
+      }
+      const stream={
+        listeners:new Set(),
+        subscribe(fn){this.listeners.add(fn);return()=>this.listeners.delete(fn)},
+        publish(payload){for(const fn of this.listeners)fn(payload)}
+      };
+      const engine={
+        state:'IDLE',
+        receive(payload){
+          if(payload.giftId!=='lonkind.universe'||event)return;
+          event=payload;this.state='PLAYING';quality=payload.qualityTier;
+          prepare(payload.seed);
+          els['status-value'].textContent='EVENT RECEIVED';
+          els['tier-value'].textContent=quality.toUpperCase();
+          els['offset-value'].textContent=(clockOffset>=0?'+':'')+clockOffset+' ms';
+          els.send.disabled=true;els.test.disabled=true;
+          els.notice.textContent='Playing synchronized UNIVERSE event';
+          resize();frameCount=0;fpsStamp=performance.now();raf=requestAnimationFrame(frame);
+        }
+      };
+      stream.subscribe(payload=>engine.receive(payload));
+      let counter=0;
+      function trigger(test){
+        if(event)return;
+        ensureAudio();
+        clockOffset=test?72:38;
+        const payload={
+          giftId:'lonkind.universe',
+          sender:test?'Demo viewer':'Livestream viewer',
+          timestamp:Date.now()+clockOffset+150,
+          seed:(Date.now() ^ Math.imul(++counter,2654435761))>>>0,
+          qualityTier:quality
+        };
+        els['status-value'].textContent='EVENT INBOUND';
+        els.notice.textContent=test?'Test event queued.':'Gift event queued.';
+        setTimeout(()=>stream.publish(payload),150);
+      }
+      els.send.addEventListener('click',()=>trigger(false));
+      els.test.addEventListener('click',()=>trigger(true));
+      els.sound.addEventListener('click',()=>{
+        soundEnabled=!soundEnabled;ensureAudio();
+        if(master)master.gain.setTargetAtTime(soundEnabled?.42:0,audio.currentTime,.03);
+        if(!soundEnabled)stopVoices();
+        else if(event)audioPhase(phase);
+        els.sound.setAttribute('aria-pressed',String(soundEnabled));
+        els.sound.textContent=soundEnabled?'Sound on':'Sound off';
+        els.notice.textContent=soundEnabled?'Sound enabled.':'Sound muted.';
+      });
+      function setQuality(q){
+        if(event){els.notice.textContent='Quality changes apply after this event.';return}
+        quality=q;document.querySelectorAll('[data-quality]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quality===q)));
+        els['tier-value'].textContent=q.toUpperCase();els.notice.textContent=q[0].toUpperCase()+q.slice(1)+' quality selected.';
+        resize();
+      }
+      document.querySelectorAll('[data-quality]').forEach(b=>b.addEventListener('click',()=>setQuality(b.dataset.quality)));
+      window.addEventListener('resize',resize);
+      document.addEventListener('visibilitychange',()=>{
+        if(document.hidden){cancelAnimationFrame(raf);if(audio&&audio.state==='running')audio.suspend()}
+        else {if(event){if(soundEnabled&&audio)audio.resume();raf=requestAnimationFrame(frame)}else idle()}
+      });
+      setQuality(quality);
+      window.LonkindGiftEngine={stream,engine,emit:payload=>stream.publish(payload)};
+    })();
+  </script>
+</body>
+</html>

@@ -2525,6 +2525,42 @@ export default function LiveStreamView({
               </Button>
             </div>
 
+            {/* 🌌 SIGNATURE EVENT / 001: UNIVERSE Engine Quick-Launch Banner */}
+            <div className="mb-3 p-3 rounded-2xl border border-[#e8d5a6]/30 bg-gradient-to-r from-[#07101b] via-[#111c32] to-[#080d19] flex items-center justify-between gap-3 shrink-0 shadow-lg">
+              <div className="min-w-0">
+                <span className="text-[9px] font-mono tracking-[0.24em] uppercase text-[#d9c79f] block">
+                  SIGNATURE EVENT / 001 · 12 PHASES
+                </span>
+                <p className="text-xs font-bold text-[#f2eee4] truncate">
+                  UNIVERSE — Procedural Light &amp; Synchronized Cosmos
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsGiftModalOpen(false);
+                    setActiveUniverseGift({
+                      senderName: validUserName,
+                      senderAvatar: userAvatar,
+                      combo: 1,
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-sm bg-[#e8d5a6] hover:bg-[#fff1cb] text-[#101521] font-bold text-[11px] tracking-wide transition-all"
+                >
+                  Test Event
+                </button>
+                <a
+                  href="/gifts/universe-engine.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1.5 rounded-sm border border-white/25 bg-white/5 hover:bg-white/15 text-[#edf2ff] text-[11px] font-mono transition-all"
+                >
+                  Studio ↗
+                </a>
+              </div>
+            </div>
+
             {/* Gift Cards Grid */}
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 overflow-y-auto pr-1 no-scrollbar p-1 mb-3">
               {GIFT_CATALOG.map((gift) => (
