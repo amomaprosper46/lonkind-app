@@ -24,8 +24,70 @@ interface LiveMessage {
   type?: 'text' | 'gift';
   giftIcon?: string;
   giftName?: string;
+  vipLevel?: number;
+  vipBadge?: string;
   timestamp: any;
 }
+
+export function getVipTier(coins: number) {
+  if (coins >= 100000) {
+    return {
+      level: 10,
+      title: 'ROYAL EMPEROR',
+      badge: '👑 VIP 10',
+      vehicle: 'Golden Dragon',
+      videoUrl: '/gifts/dragon.mp4',
+      color: 'from-amber-400 via-red-500 to-yellow-500',
+    };
+  }
+  if (coins >= 20000) {
+    return {
+      level: 8,
+      title: 'ROYAL DUKE',
+      badge: '🏎️ VIP 8',
+      vehicle: 'Luxury Supercar',
+      videoUrl: '/gifts/car.mp4',
+      color: 'from-purple-500 via-indigo-500 to-pink-500',
+    };
+  }
+  if (coins >= 5000) {
+    return {
+      level: 5,
+      title: 'STAR COMMANDER',
+      badge: '🚀 VIP 5',
+      vehicle: 'Orbital Rocket',
+      videoUrl: '/gifts/rocket.mp4',
+      color: 'from-cyan-400 to-blue-600',
+    };
+  }
+  if (coins >= 1000) {
+    return {
+      level: 3,
+      title: 'DIAMOND NOBLE',
+      badge: '💎 VIP 3',
+      vehicle: 'Diamond Chariot',
+      videoUrl: '/gifts/diamond.mp4',
+      color: 'from-indigo-400 to-purple-600',
+    };
+  }
+  return {
+    level: 0,
+    title: '',
+    badge: '',
+    vehicle: '',
+    videoUrl: '',
+    color: '',
+  };
+}
+
+export const PK_PENALTIES = [
+  '💪 Do 10 Pushups Live on Camera!',
+  '🎤 Sing a 30-Second Song Acapella!',
+  '💃 Freestyle Dance for 30 Seconds!',
+  '👑 Give a Royal Shoutout to Top 3 Gifters!',
+  '🤪 Hold a Funny Face for 20 Seconds!',
+  '💧 Chug a Full Glass of Water in 10 Seconds!',
+];
 
 interface FloatingGift {
   id: string;
@@ -302,18 +364,119 @@ export default function LiveStreamView({
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const hasJoinedRoomRef = useRef(false);
 
-  // Lonkind 1v1 PK Battle State
+  // Lonkind 1v1 PK Battle State + 2X Final Minute Booster + Penalty Spin Wheel
   const [pkBattleScore, setPkBattleScore] = useState<{ host1Score: number; host2Score: number; active: boolean }>({
     host1Score: 1250,
     host2Score: 980,
     active: true,
   });
+  const [pkTimeLeft, setPkTimeLeft] = useState<number>(180); // 3:00 PK Battle round
+  const [isPkModalOpen, setIsPkModalOpen] = useState<boolean>(false);
+  const [pkWheelSpinning, setPkWheelSpinning] = useState<boolean>(false);
+  const [selectedPenalty, setSelectedPenalty] = useState<string | null>(null);
+  const isPkBoosterActive = pkBattleScore.active && pkTimeLeft > 0 && pkTimeLeft <= 60;
+
+  // VIP Gifter Level & Luxury Entrance HD Video State
+  const userVipTier = getVipTier(userCoins);
+  const [vipEntranceBanner, setVipEntranceBanner] = useState<{
+    name: string;
+    avatarUrl?: string;
+    badge: string;
+    title: string;
+    vehicle: string;
+    videoUrl: string;
+    color: string;
+  } | null>(null);
+
+  // Live Stream Treasure Chest ("Lucky Coin Drop") State
+  const [treasureChest, setTreasureChest] = useState<{
+    id: string;
+    senderName: string;
+    unlockAtMs: number;
+    expiresAtMs: number;
+    rewardPool: number;
+  } | null>(null);
+  const [treasureCountdown, setTreasureCountdown] = useState<number>(0);
+  const [claimedChestId, setClaimedChestId] = useState<string | null>(null);
 
   // Lonkind Video AR Filter & Sound Effects State
   const [activeFilter, setActiveFilter] = useState<'normal' | 'sparkles' | 'warm' | 'neon' | 'vintage' | 'golden'>('normal');
   const [streamHostInfo, setStreamHostInfo] = useState<{ name: string; avatar?: string; uid: string } | null>(null);
 
-  // Listen to live stream document for real-time host info, stream goal, and pinned comment
+  // PK Battle 1-Second Countdown Timer & Treasure Chest Countdown Timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPkTimeLeft((prev) => {
+        if (!pkBattleScore.active) return prev;
+        if (prev <= 1) {
+          return 180; // Auto-start next 3-minute PK round after completion
+        }
+        return prev - 1;
+      });
+
+      if (treasureChest) {
+        const now = Date.now();
+        if (now >= treasureChest.expiresAtMs) {
+          setTreasureChest(null);
+        } else {
+          const secsToUnlock = Math.max(0, Math.ceil((treasureChest.unlockAtMs - now) / 1000));
+          setTreasureCountdown(secsToUnlock);
+        }
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pkBattleScore.active, treasureChest]);
+
+  const handleSpinPenaltyWheel = () => {
+    if (pkWheelSpinning) return;
+    setPkWheelSpinning(true);
+    setSelectedPenalty(null);
+    playLonkindSoundEffect('cheer');
+    setTimeout(() => {
+      const winnerPenalty = PK_PENALTIES[Math.floor(Math.random() * PK_PENALTIES.length)];
+      setSelectedPenalty(winnerPenalty);
+      setPkWheelSpinning(false);
+      playLonkindSoundEffect('fanfare');
+      try {
+        confetti({
+          particleCount: 100,
+          spread: 90,
+          origin: { y: 0.5 },
+        });
+      } catch (_) {}
+    }, 2200);
+  };
+
+  const handleClaimTreasureChest = async () => {
+    if (!treasureChest || claimedChestId === treasureChest.id || treasureCountdown > 0) return;
+    setClaimedChestId(treasureChest.id);
+    const luckyReward = Math.floor(Math.random() * 76) + 25; // 25 L to 100 L bonus coins
+
+    try {
+      await updateDoc(doc(db, 'users', validUserId), {
+        coins: increment(luckyReward),
+      });
+    } catch (_) {
+      setUserCoins((c) => c + luckyReward);
+    }
+
+    playLonkindSoundEffect('fanfare');
+    try {
+      confetti({
+        particleCount: 110,
+        spread: 100,
+        origin: { y: 0.6 },
+        colors: ['#fbbf24', '#f59e0b', '#fef08a', '#10b981'],
+      });
+    } catch (_) {}
+
+    toast({
+      title: `🎁 Lucky Chest Claimed! +${luckyReward} L!`,
+      description: `You grabbed ${luckyReward} free Lonkind Coins from @${treasureChest.senderName}'s Treasure Chest!`,
+    });
+  };
+
+  // Listen to live stream document for real-time host info, stream goal, pinned comment, and treasure chest
   useEffect(() => {
     if (!roomId) return;
     const roomRef = doc(db, 'live_streams', roomId);
@@ -348,6 +511,9 @@ export default function LiveStreamView({
         if (data.pinnedComment !== undefined) {
           setPinnedComment(data.pinnedComment);
         }
+        if (data.treasureChest && data.treasureChest.expiresAtMs > Date.now()) {
+          setTreasureChest(data.treasureChest);
+        }
       }
     });
     return () => unsub();
@@ -361,14 +527,36 @@ export default function LiveStreamView({
     const viewerRef = doc(db, 'live_streams', roomId, 'viewers', validUserId);
     const roomRef = doc(db, 'live_streams', roomId);
     const actualHostUid = (hostUid || validUserId).replace(/^live_/, '');
+    const currentVip = getVipTier(userCoins);
 
-    // Register active viewer entry in Firestore
+    // Register active viewer entry in Firestore (including VIP level & vehicle)
     setDoc(viewerRef, {
       uid: validUserId,
       name: validUserName,
       avatarUrl: userAvatar || '',
+      vipLevel: currentVip.level,
+      vipBadge: currentVip.badge,
+      vipTitle: currentVip.title,
+      vipVehicle: currentVip.vehicle,
+      vipVideoUrl: currentVip.videoUrl,
+      vipColor: currentVip.color,
       joinedAt: serverTimestamp(),
     }, { merge: true }).catch(console.error);
+
+    // Trigger Luxury VIP Entrance Banner for VIP users upon joining
+    if (currentVip.level >= 3) {
+      setVipEntranceBanner({
+        name: validUserName,
+        avatarUrl: userAvatar,
+        badge: currentVip.badge,
+        title: currentVip.title,
+        vehicle: currentVip.vehicle,
+        videoUrl: currentVip.videoUrl,
+        color: currentVip.color,
+      });
+      playLonkindSoundEffect('fanfare');
+      setTimeout(() => setVipEntranceBanner(null), 5000);
+    }
 
     // Update stream status to active if host
     if (isHost) {
@@ -430,7 +618,7 @@ export default function LiveStreamView({
     };
   }, [roomId, validUserId, validUserName, userAvatar, isHost, hostUid, hasStartedLive, streamTitle, streamCategory, streamMode, goalEnabled, goalTitle, goalTarget]);
 
-  // 2. REAL-TIME VIEWERS COUNT & ENTRANCE BANNER LISTENER
+  // 2. REAL-TIME VIEWERS COUNT & VIP / STANDARD ENTRANCE BANNER LISTENER
   useEffect(() => {
     if (!roomId) return;
     const viewersCol = collection(db, 'live_streams', roomId, 'viewers');
@@ -442,8 +630,22 @@ export default function LiveStreamView({
         if (change.type === 'added' && change.doc.id !== validUserId) {
           const data = change.doc.data();
           if (data.name) {
-            setEntranceBanner({ name: data.name, avatarUrl: data.avatarUrl });
-            setTimeout(() => setEntranceBanner(null), 3500);
+            if (data.vipLevel && data.vipLevel >= 3 && data.vipVideoUrl) {
+              setVipEntranceBanner({
+                name: data.name,
+                avatarUrl: data.avatarUrl,
+                badge: data.vipBadge || '👑 VIP',
+                title: data.vipTitle || 'ROYAL VIP',
+                vehicle: data.vipVehicle || 'Luxury Supercar',
+                videoUrl: data.vipVideoUrl,
+                color: data.vipColor || 'from-amber-400 via-red-500 to-yellow-500',
+              });
+              playLonkindSoundEffect('fanfare');
+              setTimeout(() => setVipEntranceBanner(null), 5000);
+            } else {
+              setEntranceBanner({ name: data.name, avatarUrl: data.avatarUrl });
+              setTimeout(() => setEntranceBanner(null), 3500);
+            }
           }
         }
       });
@@ -977,6 +1179,8 @@ export default function LiveStreamView({
         senderAvatar: userAvatar || '',
         text: messageContent,
         type: 'text',
+        vipLevel: userVipTier.level,
+        vipBadge: userVipTier.badge,
         timestamp: serverTimestamp(),
       });
     } catch (err) {
@@ -1029,6 +1233,8 @@ export default function LiveStreamView({
         type: 'gift',
         giftIcon: gift.icon,
         giftName: gift.name,
+        vipLevel: userVipTier.level,
+        vipBadge: userVipTier.badge,
         timestamp: serverTimestamp(),
       });
 
@@ -1053,15 +1259,35 @@ export default function LiveStreamView({
         }).catch(console.error);
       }
 
-      // Increment PK Battle score points
+      // Spawn a Live Stream Treasure Chest ("Lucky Coin Drop") whenever a Super Gift is sent!
+      if (gift.isSuper) {
+        const now = Date.now();
+        const chestData = {
+          id: `chest_${now}`,
+          senderName: validUserName,
+          unlockAtMs: now + 12000, // 12-second countdown
+          expiresAtMs: now + 45000, // Stays claimable for 33 seconds after unlocking
+          rewardPool: Math.min(2500, Math.round(gift.price * 0.05)),
+        };
+        setTreasureChest(chestData);
+        setTreasureCountdown(12);
+        updateDoc(doc(db, 'live_streams', roomId), {
+          treasureChest: chestData,
+        }).catch(() => {});
+      }
+
+      // Increment PK Battle score points (2X Multiplier during final 60s Booster!)
+      const pkPointsEarned = isPkBoosterActive ? gift.price * 2 : gift.price;
       setPkBattleScore(prev => ({
         ...prev,
-        host1Score: prev.host1Score + gift.price,
+        host1Score: prev.host1Score + pkPointsEarned,
       }));
 
       toast({
         title: `Sent ${gift.name} ${gift.icon}! 🎁`,
-        description: `Sent ${gift.price} Lonkind Coins (L)!`,
+        description: isPkBoosterActive
+          ? `🔥 2X PK BOOSTER! Added +${pkPointsEarned.toLocaleString()} PK pts (${gift.price.toLocaleString()} L)!`
+          : `Sent ${gift.price.toLocaleString()} Lonkind Coins (L)!`,
       });
 
       setIsGiftModalOpen(false);
@@ -1643,29 +1869,42 @@ export default function LiveStreamView({
         </div>
       )}
 
-      {/* ⚔️ Lonkind 1v1 PK Battle Top Progress Bar Widget */}
+      {/* ⚔️ Lonkind 1v1 PK Battle Top Progress Bar Widget + Timer + 2X Booster + Penalty Wheel */}
       {pkBattleScore.active && (
         <div className="absolute top-16 left-4 right-4 z-30 flex flex-col items-center pointer-events-auto max-w-md mx-auto">
-          <div className="w-full bg-slate-950/85 backdrop-blur-md border border-white/20 rounded-2xl p-2.5 shadow-2xl">
-            <div className="flex items-center justify-between text-xs font-black mb-1.5 px-1">
-              <div className="flex items-center gap-1.5 text-blue-400">
-                <Avatar className="h-5 w-5 border border-blue-400">
+          <div className={`w-full bg-slate-950/90 backdrop-blur-md border ${isPkBoosterActive ? 'border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)]' : 'border-white/20'} rounded-2xl p-2.5 shadow-2xl transition-all`}>
+            <div className="flex items-center justify-between text-xs font-black mb-1.5 px-1 gap-1">
+              <div className="flex items-center gap-1.5 text-blue-400 min-w-0">
+                <Avatar className="h-5 w-5 border border-blue-400 shrink-0">
                   <AvatarImage src={userAvatar} alt={validUserName} />
                   <AvatarFallback className="bg-blue-600 text-white text-[9px]">{validUserName.charAt(0)}</AvatarFallback>
                 </Avatar>
-                <span className="truncate max-w-[90px]">{validUserName}</span>
-                <Badge className="bg-blue-600/80 text-white font-black text-[10px] px-1.5 py-0">{pkBattleScore.host1Score.toLocaleString()} pts</Badge>
+                <span className="truncate max-w-[70px] sm:max-w-[90px]">{validUserName}</span>
+                <Badge className="bg-blue-600/80 text-white font-black text-[10px] px-1.5 py-0 shrink-0">{pkBattleScore.host1Score.toLocaleString()}</Badge>
               </div>
 
-              <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 via-purple-600 to-rose-600 px-2 py-0.5 rounded-full text-white font-black text-[10px] tracking-widest shadow-md">
-                <span>⚔️ PK BATTLE</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsPkModalOpen(true)}
+                title="Open PK Battle MVP & Loser Penalty Spin Wheel"
+                className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-white font-black text-[10px] tracking-wider shadow-md shrink-0 transition-transform hover:scale-105 ${
+                  isPkBoosterActive
+                    ? 'bg-gradient-to-r from-amber-500 via-orange-600 to-red-600 animate-pulse'
+                    : 'bg-gradient-to-r from-blue-600 via-purple-600 to-rose-600'
+                }`}
+              >
+                <span>{isPkBoosterActive ? '🔥 2X PK' : '⚔️ PK'}</span>
+                <span className="font-mono bg-black/40 px-1.5 rounded text-amber-300">
+                  {Math.floor(pkTimeLeft / 60)}:{String(pkTimeLeft % 60).padStart(2, '0')}
+                </span>
+                <span>🎡</span>
+              </button>
 
-              <div className="flex items-center gap-1.5 text-rose-400">
-                <Badge className="bg-rose-600/80 text-white font-black text-[10px] px-1.5 py-0">{pkBattleScore.host2Score.toLocaleString()} pts</Badge>
-                <span className="truncate max-w-[90px]">Opponent Host</span>
-                <Avatar className="h-5 w-5 border border-rose-400">
-                  <AvatarFallback className="bg-rose-600 text-white text-[9px]">OH</AvatarFallback>
+              <div className="flex items-center gap-1.5 text-rose-400 min-w-0">
+                <Badge className="bg-rose-600/80 text-white font-black text-[10px] px-1.5 py-0 shrink-0">{pkBattleScore.host2Score.toLocaleString()}</Badge>
+                <span className="truncate max-w-[70px] sm:max-w-[90px]">Challenger</span>
+                <Avatar className="h-5 w-5 border border-rose-400 shrink-0">
+                  <AvatarFallback className="bg-rose-600 text-white text-[9px]">CH</AvatarFallback>
                 </Avatar>
               </div>
             </div>
@@ -1683,13 +1922,32 @@ export default function LiveStreamView({
                 className="h-full bg-gradient-to-r from-pink-500 to-rose-600 transition-all duration-500"
               />
             </div>
+
+            {/* PK Sub-Bar Quick Actions */}
+            <div className="flex items-center justify-between text-[10px] text-slate-300 mt-1 px-1">
+              <button
+                type="button"
+                onClick={() => setPkTimeLeft((t) => (t > 60 ? 59 : 180))}
+                className="text-amber-400 hover:underline font-bold flex items-center gap-1"
+              >
+                <Flame className="h-3 w-3 text-amber-400" />
+                <span>{isPkBoosterActive ? '🔥 2X Points Active!' : 'Activate 2X Final Minute'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPkModalOpen(true)}
+                className="text-indigo-300 hover:text-white font-bold hover:underline"
+              >
+                MVP &amp; Penalty Wheel 🎡
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* 🎯 Creator Stream Goal Progress Meter */}
       {streamGoal?.enabled && (
-        <div className={`absolute ${pkBattleScore.active ? 'top-32' : 'top-16'} left-4 right-4 z-20 flex justify-center pointer-events-auto`}>
+        <div className={`absolute ${pkBattleScore.active ? 'top-36' : 'top-16'} left-4 right-4 z-20 flex justify-center pointer-events-auto`}>
           <div className="bg-slate-950/85 backdrop-blur-md border border-white/20 rounded-2xl px-3.5 py-2.5 shadow-2xl max-w-sm w-full">
             <div className="flex items-center justify-between text-xs font-bold mb-1.5">
               <div className="flex items-center gap-1.5 text-white truncate max-w-[190px]">
@@ -1737,8 +1995,8 @@ export default function LiveStreamView({
         </div>
       )}
 
-      {/* 🎺 Sound Effects & 🎨 AR Video Filter Floating Quick Selector Toolbar */}
-      <div className="absolute top-36 left-4 z-30 flex flex-col gap-2 pointer-events-auto">
+      {/* 🎺 Sound Effects, 🎨 AR Video Filter & 🎁 Lucky Chest Floating Quick Selector Toolbar */}
+      <div className="absolute top-40 left-4 z-30 flex flex-col gap-2 pointer-events-auto">
         <div className="bg-slate-950/80 backdrop-blur-md border border-white/15 p-2 rounded-2xl flex flex-col gap-1.5 shadow-2xl">
           <span className="text-[10px] font-black text-slate-300 px-1 uppercase tracking-wider">Sounds 🎺</span>
           <div className="flex items-center gap-1">
@@ -1776,8 +2034,74 @@ export default function LiveStreamView({
         </div>
       </div>
 
-      {/* Slide-In Viewer Entrance Banner */}
-      {entranceBanner && (
+      {/* 🎁 Floating Live Stream Treasure Chest ("Lucky Coin Drop") Widget */}
+      {treasureChest && (
+        <div className="absolute top-40 right-4 z-40 pointer-events-auto animate-in zoom-in-95 duration-300">
+          <button
+            type="button"
+            disabled={treasureCountdown > 0 || claimedChestId === treasureChest.id}
+            onClick={handleClaimTreasureChest}
+            className={`flex flex-col items-center p-3 rounded-2xl border-2 shadow-2xl transition-all ${
+              claimedChestId === treasureChest.id
+                ? 'bg-slate-900/90 border-emerald-500/50 opacity-80'
+                : treasureCountdown === 0
+                ? 'bg-gradient-to-b from-amber-500 via-yellow-500 to-amber-600 border-white text-black animate-bounce shadow-[0_0_35px_rgba(245,158,11,0.95)] cursor-pointer'
+                : 'bg-slate-950/90 border-amber-400/70 text-white shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+            }`}
+          >
+            <span className="text-3xl mb-1">{claimedChestId === treasureChest.id ? '✅' : '🎁'}</span>
+            <span className="text-[10px] font-black uppercase tracking-wider">
+              {claimedChestId === treasureChest.id
+                ? 'Claimed!'
+                : treasureCountdown > 0
+                ? `Opens ${treasureCountdown}s`
+                : 'TAP TO CLAIM!'}
+            </span>
+            <span className={`text-[9px] font-bold truncate max-w-[90px] ${treasureCountdown === 0 && claimedChestId !== treasureChest.id ? 'text-black/80' : 'text-amber-300'}`}>
+              By @{treasureChest.senderName}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* 👑 Luxury VIP Entrance Real HD .MP4 Video Banner (When a VIP 3–10 Joins the Stream) */}
+      {vipEntranceBanner && (
+        <div className="absolute top-24 left-4 right-4 z-40 pointer-events-none flex justify-center animate-in slide-in-from-left duration-500">
+          <div className={`bg-gradient-to-r ${vipEntranceBanner.color} p-0.5 rounded-3xl shadow-[0_0_45px_rgba(245,158,11,0.85)] max-w-md w-full`}>
+            <div className="bg-slate-950/95 backdrop-blur-md rounded-[22px] p-2.5 flex items-center gap-3">
+              <div className="relative w-16 h-14 rounded-2xl overflow-hidden border-2 border-amber-400 shrink-0 bg-black">
+                <video
+                  src={vipEntranceBanner.videoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex flex-col min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                    {vipEntranceBanner.badge}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider truncate">
+                    {vipEntranceBanner.title}
+                  </span>
+                </div>
+                <span className="text-xs sm:text-sm font-black text-white truncate mt-0.5">
+                  @{vipEntranceBanner.name} has arrived!
+                </span>
+                <span className="text-[10px] text-slate-300 font-semibold truncate">
+                  Riding in on a <strong>{vipEntranceBanner.vehicle}</strong> ✨
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-In Standard Viewer Entrance Banner */}
+      {entranceBanner && !vipEntranceBanner && (
         <div className="absolute top-20 left-4 z-40 bg-emerald-600/95 text-white font-extrabold text-xs backdrop-blur-md shadow-2xl rounded-full px-4 py-2 flex items-center gap-2 border border-emerald-400/40 animate-in slide-in-from-left duration-300">
           <span className="text-base">✨</span>
           <span><strong>@{entranceBanner.name}</strong> joined the live!</span>
@@ -2093,31 +2417,48 @@ export default function LiveStreamView({
               Welcome to the live stream! Say hello 👋
             </div>
           ) : (
-            messages.map((msg) => (
-              <div key={msg.id} className="flex items-start gap-2 text-xs">
-                <Avatar className="h-6 w-6 border border-white/10 shrink-0 mt-0.5">
-                  <AvatarImage src={msg.senderAvatar} alt={msg.senderName} />
-                  <AvatarFallback className="bg-indigo-600 text-white text-[10px]">
-                    {msg.senderName ? msg.senderName.charAt(0) : 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-semibold text-indigo-300 truncate text-[11px]">
-                    {msg.senderName}
-                  </span>
-                  {msg.type === 'gift' ? (
-                    <span className="inline-flex items-center gap-1 text-indigo-200 font-bold bg-indigo-500/20 px-2 py-0.5 rounded-lg border border-indigo-500/30 text-[11px] mt-0.5">
-                      <Sparkles className="h-3 w-3 text-indigo-400" />
-                      {msg.text}
-                    </span>
-                  ) : (
-                    <span className="text-slate-100 break-words leading-relaxed">
-                      {msg.text}
-                    </span>
-                  )}
+            messages.map((msg) => {
+              const isVipMsg = (msg.vipLevel || 0) >= 3;
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex items-start gap-2 text-xs ${
+                    isVipMsg
+                      ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-purple-500/20 border border-amber-400/50 rounded-xl p-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                      : ''
+                  }`}
+                >
+                  <Avatar className={`h-6 w-6 shrink-0 mt-0.5 ${isVipMsg ? 'border-2 border-amber-400' : 'border border-white/10'}`}>
+                    <AvatarImage src={msg.senderAvatar} alt={msg.senderName} />
+                    <AvatarFallback className="bg-indigo-600 text-white text-[10px]">
+                      {msg.senderName ? msg.senderName.charAt(0) : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {msg.vipBadge && (
+                        <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase shadow">
+                          {msg.vipBadge}
+                        </span>
+                      )}
+                      <span className={`font-bold truncate text-[11px] ${isVipMsg ? 'text-amber-300' : 'text-indigo-300'}`}>
+                        {msg.senderName}
+                      </span>
+                    </div>
+                    {msg.type === 'gift' ? (
+                      <span className="inline-flex items-center gap-1 text-amber-200 font-bold bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/40 text-[11px] mt-0.5">
+                        <Sparkles className="h-3 w-3 text-amber-400" />
+                        {msg.text}
+                      </span>
+                    ) : (
+                      <span className={`${isVipMsg ? 'text-amber-50 font-semibold' : 'text-slate-100'} break-words leading-relaxed`}>
+                        {msg.text}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -2663,6 +3004,106 @@ export default function LiveStreamView({
                 className="w-1/2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs rounded-xl h-11 shadow-lg shadow-rose-600/30 active:scale-95 transition-all"
               >
                 End Now 🔴
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚔️ PK Battle MVP Gifter Spotlight & Loser Penalty Spin Wheel Modal */}
+      {isPkModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-950 border border-amber-500/40 rounded-3xl p-5 shadow-[0_0_50px_rgba(245,158,11,0.35)] animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⚔️</span>
+                <div>
+                  <h3 className="font-black text-white text-base">PK Battle Arena &amp; Penalty Wheel</h3>
+                  <p className="text-[11px] text-amber-300 font-semibold">
+                    {pkBattleScore.host1Score >= pkBattleScore.host2Score
+                      ? `🏆 ${validUserName} is Leading (${pkBattleScore.host1Score.toLocaleString()} vs ${pkBattleScore.host2Score.toLocaleString()})`
+                      : `🔥 Challenger is Leading (${pkBattleScore.host2Score.toLocaleString()} vs ${pkBattleScore.host1Score.toLocaleString()})`}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsPkModalOpen(false)}
+                className="h-8 w-8 text-slate-400 hover:text-white rounded-full"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* #1 MVP Gifter Spotlight Card */}
+            <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-purple-600/20 border border-amber-400/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Avatar className="h-12 w-12 border-2 border-amber-400 shadow-lg">
+                    <AvatarImage src={contributors[0]?.avatarUrl} alt={contributors[0]?.name || 'MVP'} />
+                    <AvatarFallback className="bg-amber-600 text-black font-black text-sm">
+                      {contributors[0]?.name ? contributors[0].name.charAt(0) : '👑'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="absolute -top-2 -right-1 text-base">👑</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 block">
+                    PK BATTLE #1 MVP PROTECTOR
+                  </span>
+                  <span className="text-sm font-black text-white">
+                    {contributors[0] ? `@${contributors[0].name}` : 'No MVP Yet — Send a Gift!'}
+                  </span>
+                  {contributors[0] && (
+                    <span className="block text-[11px] font-mono font-bold text-amber-400">
+                      {contributors[0].totalCoins.toLocaleString()} L Contributed
+                    </span>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsPkModalOpen(false);
+                  setIsGiftModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black text-xs rounded-xl h-9 px-3 shadow-md"
+              >
+                Boost PK 🔥
+              </Button>
+            </div>
+
+            {/* Loser Penalty Spin Wheel Section */}
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-white/10 text-center space-y-3">
+              <div className="flex items-center justify-center gap-1.5 text-xs font-black text-rose-400 uppercase tracking-wider">
+                <span>🎡 Loser Penalty Spin Wheel</span>
+              </div>
+
+              <div
+                className={`mx-auto w-24 h-24 rounded-full border-4 border-amber-400 bg-gradient-to-tr from-rose-600 via-purple-600 to-amber-500 flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(244,63,94,0.5)] ${
+                  pkWheelSpinning ? 'animate-spin' : ''
+                }`}
+              >
+                🎯
+              </div>
+
+              {selectedPenalty ? (
+                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-400/50 text-white font-black text-xs sm:text-sm animate-in zoom-in-95 duration-200">
+                  {selectedPenalty}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Spin the wheel to pick the losing host&apos;s live stream dare!
+                </p>
+              )}
+
+              <Button
+                onClick={handleSpinPenaltyWheel}
+                disabled={pkWheelSpinning}
+                className="w-full bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:opacity-95 text-white font-black text-xs rounded-xl h-10 shadow-lg"
+              >
+                {pkWheelSpinning ? 'Spinning Wheel... 🎡' : 'Spin Penalty Wheel Now 🎡'}
               </Button>
             </div>
           </div>
