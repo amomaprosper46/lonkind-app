@@ -533,16 +533,22 @@ export default function KingLionGift({
               : 'scale-90 opacity-0 translate-x-24 transition-all duration-1000 ease-in-out'
           }`}
         >
-          <div className="relative w-80 h-[440px] sm:w-[420px] sm:h-[540px] flex items-center justify-center">
+          <div className="relative w-[92vw] h-[75vh] max-w-2xl flex items-center justify-center">
             {/* Ambient Golden Core Radiance */}
             <div
-              className={`absolute inset-4 rounded-full bg-gradient-to-b from-amber-400/45 via-yellow-500/30 to-amber-700/45 blur-3xl transition-opacity duration-500 pointer-events-none ${
-                scene >= 3 ? 'opacity-100 animate-pulse' : 'opacity-60'
+              className={`absolute inset-10 rounded-full bg-gradient-to-b from-amber-400/35 via-yellow-500/20 to-amber-700/35 blur-3xl transition-opacity duration-500 pointer-events-none ${
+                scene >= 3 ? 'opacity-100 animate-pulse' : 'opacity-50'
               }`}
             />
 
-            {/* Primary Real HD .MP4 Video Stream — Majestic Adult Male Lion */}
-            <div className="relative w-full h-full rounded-[36px] overflow-hidden shadow-[0_0_80px_rgba(245,158,11,0.85)] border-2 border-amber-400/60">
+            {/* Primary Borderless Full-Stage AR Projection — Majestic Adult Male Lion */}
+            <div
+              className="relative w-full h-full overflow-hidden"
+              style={{
+                WebkitMaskImage: 'radial-gradient(ellipse 62% 58% at 50% 50%, black 42%, transparent 82%)',
+                maskImage: 'radial-gradient(ellipse 62% 58% at 50% 50%, black 42%, transparent 82%)',
+              }}
+            >
               <video
                 src={videoUrl || '/gifts/lion.mp4'}
                 autoPlay
@@ -551,12 +557,13 @@ export default function KingLionGift({
                 playsInline
                 className="w-full h-full object-cover pointer-events-none scale-105"
                 style={{
+                  mixBlendMode: 'screen',
                   filter:
                     scene === 3
-                      ? 'contrast(1.3) saturate(1.35) brightness(1.15)'
+                      ? 'contrast(1.35) saturate(1.4) brightness(1.15)'
                       : scene === 4 || scene === 5
-                      ? 'contrast(1.35) saturate(1.4) brightness(1.2)'
-                      : 'contrast(1.18) saturate(1.22)',
+                      ? 'contrast(1.4) saturate(1.45) brightness(1.2)'
+                      : 'contrast(1.25) saturate(1.25)',
                 }}
               />
 
@@ -589,9 +596,6 @@ export default function KingLionGift({
                   }}
                 />
               )}
-
-              {/* Golden Vignette Rim */}
-              <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_50px_rgba(0,0,0,0.85)] rounded-[36px]" />
             </div>
           </div>
         </div>
