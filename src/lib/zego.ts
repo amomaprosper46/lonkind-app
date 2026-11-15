@@ -2,7 +2,7 @@
 // Compatible with both browser and SSR contexts.
 
 export const ZEGO_APP_ID = parseInt(process.env.NEXT_PUBLIC_ZEGO_APP_ID || '1409193896', 10);
-export const ZEGO_APP_SIGN = process.env.NEXT_PUBLIC_ZEGO_APP_SIGN || 'cf24340c1654237b23b55d9e7294609fbe1b575d98c98f3fe5184b37d30becc6';
+export const ZEGO_APP_SIGN = process.env.ZEGO_APP_SIGN || '';
 
 /**
  * Validates if a string matches the 32-character Zego ServerSecret specification.
@@ -13,23 +13,13 @@ export function isValidZegoSecret(secret?: string | null): boolean {
   return clean.length === 32 && /^[a-zA-Z0-9]+$/.test(clean);
 }
 
-export const DEFAULT_ZEGO_SERVER_SECRET = process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET || 'db5e619c183f6f2779bc235afe191793';
+export const DEFAULT_ZEGO_SERVER_SECRET = process.env.ZEGO_SERVER_SECRET || '';
 
 /**
- * Retrieves the 32-character ZEGOCLOUD ServerSecret.
- * Checks localStorage first (allowing instant UI configuration without rebuild),
- * followed by environment variables, falling back to the verified default.
+ * Retrieves the 32-character ZEGOCLOUD ServerSecret on the server.
  */
 export function getZegoServerSecret(): string {
-  if (typeof window !== 'undefined') {
-    try {
-      const local = localStorage.getItem('lonkind_zego_server_secret');
-      if (local && isValidZegoSecret(local)) {
-        return local.trim();
-      }
-    } catch (_) {}
-  }
-  const envSecret = process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET;
+  const envSecret = process.env.ZEGO_SERVER_SECRET;
   if (envSecret && isValidZegoSecret(envSecret)) {
     return envSecret.trim();
   }

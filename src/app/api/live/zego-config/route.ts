@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { ZEGO_APP_ID, isValidZegoSecret, DEFAULT_ZEGO_SERVER_SECRET } from '@/lib/zego';
+import { ZEGO_APP_ID, isValidZegoSecret } from '@/lib/zego';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
 
 export async function GET() {
-  const envSecret = process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET || DEFAULT_ZEGO_SERVER_SECRET;
+  const envSecret = process.env.ZEGO_SERVER_SECRET;
   const isConfigured = isValidZegoSecret(envSecret);
 
   return NextResponse.json({
@@ -15,6 +14,20 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    const adminDoc = await adminDb.collection('admins').doc(decoded.uid).get();
+    const isAdmin = adminDoc.exists || decoded.email === 'admin@lonkind.com';
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
+
     const { serverSecret } = await req.json();
 
     if (!isValidZegoSecret(serverSecret)) {
@@ -24,28 +37,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const cleanSecret = serverSecret.trim();
-
-    // Persist to .env.local if possible
-    try {
-      const envPath = path.join(process.cwd(), '.env.local');
-      if (fs.existsSync(envPath)) {
-        let envContent = fs.readFileSync(envPath, 'utf8');
-        if (envContent.includes('NEXT_PUBLIC_ZEGO_SERVER_SECRET=')) {
-          envContent = envContent.replace(
-            /NEXT_PUBLIC_ZEGO_SERVER_SECRET=.*/g,
-            `NEXT_PUBLIC_ZEGO_SERVER_SECRET=${cleanSecret}`
-          );
-        } else {
-          envContent += `\nNEXT_PUBLIC_ZEGO_SERVER_SECRET=${cleanSecret}\n`;
-        }
-        fs.writeFileSync(envPath, envContent, 'utf8');
-      }
-    } catch (e) {
-      console.warn('Could not update .env.local:', e);
-    }
-
-    return NextResponse.json({ success: true, serverSecret: cleanSecret });
+    return NextResponse.json({ success: true, configured: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }

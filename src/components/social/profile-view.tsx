@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Share2, MoreHorizontal, UserPlus, UserMinus, Check, MessageSquare, Video, Phone, BadgeCheck, UserCheck, Clock, Link as LinkIcon, MessageSquareText, Star, Heart, Medal } from 'lucide-react';
+import { Share2, MoreHorizontal, UserPlus, UserMinus, Check, MessageSquare, Video, Phone, BadgeCheck, UserCheck, Clock, Link as LinkIcon, MessageSquareText, Star, Heart, Medal, Camera } from 'lucide-react';
 import type { Post, ReactionType } from './post-card';
 import PostCard from './post-card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -28,6 +28,7 @@ interface UserProfile {
     name: string;
     handle: string;
     avatarUrl: string;
+    coverUrl?: string;
     isProfessional?: boolean;
     bio?: string;
     friendsCount?: number;
@@ -157,7 +158,26 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, friendStatus, on
                 />
             )}
             <Card className="mb-6 overflow-hidden">
-                 <div className="h-48 bg-muted" />
+                <div className="relative h-48 bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 overflow-hidden">
+                    {user.coverUrl && (
+                        <img
+                            src={user.coverUrl}
+                            alt={`${user.name} cover`}
+                            className="h-full w-full object-cover"
+                        />
+                    )}
+                    {isCurrentUser && (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setIsEditOpen(true)}
+                            className="absolute bottom-3 right-3 rounded-xl gap-1.5 bg-slate-950/75 text-white hover:bg-slate-900 border border-white/15 shadow-lg text-xs font-semibold"
+                        >
+                            <Camera className="h-3.5 w-3.5" />
+                            Edit Cover & Profile
+                        </Button>
+                    )}
+                </div>
                 <CardContent className="flex flex-col md:flex-row items-center gap-6 p-6 pt-0">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -212,10 +232,16 @@ const ProfileView = ({ user, posts, currentUser, isCurrentUser, friendStatus, on
                             </button>
                         </div>
                     </div>
-                    <div className="flex gap-2 self-start md:self-auto">
+                    <div className="flex flex-wrap gap-2 self-start md:self-auto">
                         {!isCurrentUser && (
                             <>
                                 <Button variant="outline" onClick={onMessage}><MessageSquare className="mr-2 h-4 w-4"/> Message</Button>
+                                <Button variant="outline" size="icon" title="Audio Call" onClick={() => onStartCall('audio')} className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10">
+                                    <Phone className="h-4 w-4" />
+                                </Button>
+                                <Button variant="outline" size="icon" title="Video Call" onClick={() => onStartCall('video')} className="text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10">
+                                    <Video className="h-4 w-4" />
+                                </Button>
                             </>
                         )}
                         <RelationshipButton />

@@ -27,9 +27,13 @@ service cloud.firestore {
 
       allow update: if isSignedIn() && (
         isAdmin() ||
-        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coins', 'diamonds', 'earningsNaira', 'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven'])) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount'])) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken']))
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'coins', 'diamonds', 'balance', 'balanceUSD', 'balanceNaira', 'earningsNaira',
+          'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
+          'isVerified', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
+          'isProfessional', 'fraudFlagged', 'velocityFlagged', 'createdAt'
+        ])) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount']))
       );
 
       allow delete: if isOwner(userId) || isAdmin();
@@ -74,6 +78,14 @@ service cloud.firestore {
       match /mutedUsers/{mutedId} {
         allow read, write, delete: if isOwner(userId);
       }
+
+      match /recommendationProfile/{docId} {
+        allow read, write, delete: if isOwner(userId);
+      }
+
+      match /interactionSignals/{signalId} {
+        allow read, write, delete: if isOwner(userId);
+      }
     }
 
     /* ---------------- POSTS ---------------- */
@@ -87,8 +99,8 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         isAdmin() ||
         request.auth.uid == resource.data.author.uid ||
-        // only allow safe system updates (comments/reactions only)
-        request.resource.data.keys().hasAny(['comments', 'reactions'])
+        // only allow safe engagement counter/reaction updates by non-authors
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'likes', 'likesCount', 'commentsCount', 'sharesCount'])
       );
 
       allow delete: if isSignedIn() && (
@@ -156,23 +168,39 @@ service cloud.firestore {
     match /live_streams/{streamId} {
       // Anyone can see active live streams on home feed
       allow read: if true;
-      allow create, update: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.hostUid == request.auth.uid ||
+        streamId == 'live_' + request.auth.uid
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.hostUid == request.auth.uid ||
+        streamId == 'live_' + request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewerCount', 'likesCount', 'totalCoins', 'updatedAt'])
+      );
       allow delete: if isSignedIn() && (
         isAdmin() ||
-        resource.data.hostUid == request.auth.uid
+        resource.data.hostUid == request.auth.uid ||
+        streamId == 'live_' + request.auth.uid
       );
 
-      // Real-time viewer tracking
+      // Real-time viewer tracking (supports signed-in users and guest_* WebRTC viewers)
       match /viewers/{viewerId} {
         allow read: if true;
-        allow write, delete: if isSignedIn();
+        allow write, delete: if isSignedIn() || viewerId.matches('^guest_[a-zA-Z0-9_]+$');
       }
 
       // Live chat & gift stream announcements
       match /chat/{messageId} {
         allow read: if true;
         allow create: if isSignedIn();
-        allow update, delete: if isAdmin() || (isSignedIn() && resource.data.senderId == request.auth.uid);
+        allow update, delete: if isAdmin() || (
+          isSignedIn() && (
+            resource.data.senderId == request.auth.uid ||
+            streamId == 'live_' + request.auth.uid
+          )
+        );
       }
 
       // Split-screen co-host guest requests
@@ -184,7 +212,12 @@ service cloud.firestore {
       // Top gifters & contributor leaderboard
       match /contributors/{contributorId} {
         allow read: if true;
-        allow write: if isSignedIn();
+        allow write: if isAdmin() || (
+          isSignedIn() && (
+            request.auth.uid == contributorId ||
+            streamId == 'live_' + request.auth.uid
+          )
+        );
       }
     }
 
@@ -243,7 +276,7 @@ service cloud.firestore {
             request.resource.data.type == resource.data.type) ||
           // Any participant can add themselves to deletedFor (per‑user delete)
           (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids &&
-            request.resource.data.deletedFor == resource.data.deletedFor.union([request.auth.uid]) &&
+            request.resource.data.deletedFor.toSet() == resource.data.get('deletedFor', []).toSet().union([request.auth.uid].toSet()) &&
             request.resource.data.text == resource.data.text &&
             request.resource.data.type == resource.data.type)
         );
@@ -293,11 +326,34 @@ service cloud.firestore {
       allow create, update, delete: if false; // Admin SDK only — append-only
     }
 
+    /* ------ DOUBLE-ENTRY LEDGER (append-only, server-write only) ------ */
+
+    match /ledger_journals/{journalId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.actorUid == request.auth.uid);
+      allow create, update, delete: if false; // Admin SDK ACID Transaction only
+    }
+
+    match /ledger_entries/{entryId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.accountId == request.auth.uid);
+      allow create, update, delete: if false; // Admin SDK ACID Transaction only
+    }
+
+    match /ledger_idempotency/{keyId} {
+      allow read, write: if false; // Admin SDK ACID Transaction only
+    }
+
     /* -------------- TRENDING HASHTAGS (server-write only) ------ */
 
     match /trending_hashtags/{tagId} {
       allow read: if true; // Publicly readable for trending UI
       allow write: if false; // Cloud Functions only
+    }
+
+    /* -------------- PLATFORM SETTINGS (events & gift overrides) ------ */
+
+    match /platform_settings/{docId} {
+      allow read: if true; // Publicly readable for live stream events & gift overrides
+      allow write: if isAdmin();
     }
   }
 }

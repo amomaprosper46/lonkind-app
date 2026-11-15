@@ -139,16 +139,25 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       // Ensure initial Firestore user document exists
       const userDocRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userDocRef);
+      const isLonkindAdminAccount =
+        data.name.trim().toLowerCase() === 'lonkind' ||
+        data.email.trim().toLowerCase() === 'admin@lonkind.com';
+
       if (!userSnap.exists()) {
-        const baseHandle = (data.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
+        const baseHandle = isLonkindAdminAccount
+          ? 'lonkind'
+          : (data.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
         await setDoc(userDocRef, {
           uid: user.uid,
-          name: data.name,
+          name: isLonkindAdminAccount ? 'Lonkind' : data.name.trim(),
           handle: baseHandle,
           email: data.email,
-          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.uid)}`,
-          isProfessional: false,
-          bio: 'Hey there! I am using Lonkind.',
+          avatarUrl: isLonkindAdminAccount
+            ? 'https://impactful-ideas.web.app/logo.png'
+            : `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.uid)}`,
+          isProfessional: isLonkindAdminAccount,
+          isAdmin: isLonkindAdminAccount,
+          bio: isLonkindAdminAccount ? 'Official Lonkind Account.' : 'Hey there! I am using Lonkind.',
           followersCount: 0,
           followingCount: 0,
           balance: 0,
@@ -156,6 +165,10 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
           diamonds: 0,
           createdAt: new Date().toISOString(),
         });
+      }
+
+      if (isLonkindAdminAccount) {
+        await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date(), name: 'Lonkind' }, { merge: true }).catch(() => {});
       }
 
       await sendEmailVerification(user).catch(() => {});

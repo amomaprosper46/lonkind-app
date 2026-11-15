@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { collection, query, where, getDocs, doc, deleteDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, ShieldAlert, Trash2, UserX, CheckCircle, Sparkles, Newspaper, Play, DollarSign, Clock, AlertTriangle, CheckCheck, XCircle, Search, ActivitySquare, TrendingUp, Users, FileText as FileTextIcon } from 'lucide-react';
+import { Loader2, ShieldAlert, Trash2, UserX, CheckCircle, Sparkles, Newspaper, Play, DollarSign, Clock, AlertTriangle, CheckCheck, XCircle, Search, ActivitySquare, TrendingUp, Users, FileText as FileTextIcon, Gift, Video } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminModerationDashboard from './admin-moderation-dashboard';
 import AdminUserManagement from './admin-user-management';
 import AutoNewsBotView from './auto-news-bot-view';
+import AdminEventsAndGiftsStudio from './admin-events-and-gifts-studio';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { getCountFromServer } from 'firebase/firestore';
@@ -242,27 +243,43 @@ export default function AdminDashboardView() {
                 </div>
             </div>
 
-            <Tabs defaultValue="reports" className="w-full">
-                <TabsList className="grid w-full grid-cols-6 mb-6">
-                    <TabsTrigger value="reports" className="font-semibold">
-                        <ShieldAlert className="h-4 w-4 mr-2" /> Reports {reports.length > 0 && `(${reports.length})`}
+            <Tabs defaultValue="events" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 h-auto gap-1 p-1.5 mb-6">
+                    <TabsTrigger value="events" className="font-semibold text-xs sm:text-sm">
+                        <Gift className="h-4 w-4 mr-1.5 text-pink-500" /> Events & Perms
                     </TabsTrigger>
-                    <TabsTrigger value="users" className="font-semibold">
-                        <Users className="h-4 w-4 mr-2" /> Users
+                    <TabsTrigger value="gift-studio" className="font-semibold text-xs sm:text-sm">
+                        <Video className="h-4 w-4 mr-1.5 text-purple-500" /> Gift Studio
                     </TabsTrigger>
-                    <TabsTrigger value="payouts" className="font-semibold" onClick={() => { if (payouts.length === 0) fetchPayouts(); }}>
-                        <DollarSign className="h-4 w-4 mr-2" /> Payouts {payouts.length > 0 && `(${payouts.length})`}
+                    <TabsTrigger value="reports" className="font-semibold text-xs sm:text-sm">
+                        <ShieldAlert className="h-4 w-4 mr-1.5" /> Reports {reports.length > 0 && `(${reports.length})`}
                     </TabsTrigger>
-                    <TabsTrigger value="audits" className="font-semibold" onClick={() => { if (auditLogs.length === 0) fetchAuditLogs(); }}>
-                        <ActivitySquare className="h-4 w-4 mr-2" /> Audits
+                    <TabsTrigger value="users" className="font-semibold text-xs sm:text-sm">
+                        <Users className="h-4 w-4 mr-1.5" /> Users
                     </TabsTrigger>
-                    <TabsTrigger value="analytics" className="font-semibold" onClick={() => { if (platformMetrics.users === 0) fetchPlatformMetrics(); }}>
-                        <TrendingUp className="h-4 w-4 mr-2" /> Analytics
+                    <TabsTrigger value="payouts" className="font-semibold text-xs sm:text-sm" onClick={() => { if (payouts.length === 0) fetchPayouts(); }}>
+                        <DollarSign className="h-4 w-4 mr-1.5" /> Payouts {payouts.length > 0 && `(${payouts.length})`}
                     </TabsTrigger>
-                    <TabsTrigger value="tools" className="font-semibold">
-                        <Sparkles className="h-4 w-4 mr-2" /> AI
+                    <TabsTrigger value="audits" className="font-semibold text-xs sm:text-sm" onClick={() => { if (auditLogs.length === 0) fetchAuditLogs(); }}>
+                        <ActivitySquare className="h-4 w-4 mr-1.5" /> Audits
+                    </TabsTrigger>
+                    <TabsTrigger value="analytics" className="font-semibold text-xs sm:text-sm" onClick={() => { if (platformMetrics.users === 0) fetchPlatformMetrics(); }}>
+                        <TrendingUp className="h-4 w-4 mr-1.5" /> Analytics
+                    </TabsTrigger>
+                    <TabsTrigger value="tools" className="font-semibold text-xs sm:text-sm">
+                        <Sparkles className="h-4 w-4 mr-1.5" /> News AI
                     </TabsTrigger>
                 </TabsList>
+
+                {/* ── Events, Free Gifts & Permissions Tab ── */}
+                <TabsContent value="events">
+                    <AdminEventsAndGiftsStudio mode="events" />
+                </TabsContent>
+
+                {/* ── AI 3D Gift Video Studio Tab ── */}
+                <TabsContent value="gift-studio">
+                    <AdminEventsAndGiftsStudio mode="studio" />
+                </TabsContent>
 
                 {/* ── Reports Tab ── */}
                 <TabsContent value="reports">

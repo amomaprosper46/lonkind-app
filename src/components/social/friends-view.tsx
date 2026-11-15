@@ -12,6 +12,114 @@ import Link from 'next/link';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { useLiveUserProfile } from '@/hooks/use-live-user-profile';
+
+function PendingRequestCard({
+    req,
+    currentUserUid,
+    onAcceptRequest,
+}: {
+    req: any;
+    currentUserUid: string;
+    onAcceptRequest: (notif: any, e: React.MouseEvent) => void;
+}) {
+    const fromUid = req.from?.uid || req.uid;
+    const liveFrom = useLiveUserProfile(fromUid, req.from?.avatarUrl, req.from?.name, req.from?.handle);
+    const resolvedFrom = {
+        ...req.from,
+        uid: fromUid,
+        name: liveFrom.name,
+        handle: liveFrom.handle,
+        avatarUrl: liveFrom.avatarUrl,
+    };
+
+    return (
+        <div className="flex flex-col justify-between p-4 bg-background rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-center gap-4 mb-4">
+                <Avatar className="h-14 w-14 border-2 border-indigo-500/20">
+                    <AvatarImage src={resolvedFrom.avatarUrl} alt={resolvedFrom.name} />
+                    <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-lg">
+                        {resolvedFrom.name?.charAt(0) || 'U'}
+                    </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col overflow-hidden">
+                    <Link href={`/profile/${resolvedFrom.handle}`} className="text-base font-bold hover:text-indigo-600 transition-colors truncate">
+                        {resolvedFrom.name}
+                    </Link>
+                    <span className="text-sm text-muted-foreground truncate">@{resolvedFrom.handle}</span>
+                    <span className="text-xs text-indigo-500 font-medium mt-1">Wants to be friends</span>
+                </div>
+            </div>
+            <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+                <Button
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold shadow-sm"
+                    onClick={(e) => onAcceptRequest({ id: req.uid, type: 'friend_request', fromUser: resolvedFrom, timestamp: req.timestamp, read: false }, e)}
+                >
+                    <Check className="h-4 w-4 mr-2" /> Accept
+                </Button>
+                <Button
+                    variant="outline"
+                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                        deleteDoc(doc(db, 'users', currentUserUid, 'friendRequests', req.uid));
+                        toast({ title: 'Request declined' });
+                    }}
+                >
+                    Decline
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function FriendListItem({
+    friend,
+    onRemoveFriend,
+}: {
+    friend: any;
+    onRemoveFriend: (friendId: string, name: string) => void;
+}) {
+    const liveFriend = useLiveUserProfile(friend.uid, friend.avatarUrl, friend.name, friend.handle);
+    return (
+        <div className="flex items-center justify-between p-3.5 bg-background/50 hover:bg-background rounded-2xl border border-border/40 hover:border-indigo-500/30 shadow-sm hover:shadow-md transition-all group">
+            <Link href={`/profile/${liveFriend.handle}`} className="flex items-center gap-4 overflow-hidden flex-1">
+                <div className="relative">
+                    <Avatar className="h-12 w-12 border-2 border-transparent group-hover:border-indigo-500/20 transition-all shadow-sm">
+                        <AvatarImage src={liveFriend.avatarUrl} alt={liveFriend.name} />
+                        <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold">
+                            {liveFriend.name?.charAt(0) || 'F'}
+                        </AvatarFallback>
+                    </Avatar>
+                    {friend.uid?.length % 3 !== 0 && (
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-green-500 border-2 border-background shadow-sm" title="Online" />
+                    )}
+                </div>
+                <div className="flex flex-col overflow-hidden">
+                    <span className="text-base font-bold text-foreground group-hover:text-indigo-600 transition-colors truncate flex items-center gap-2">
+                        {liveFriend.name}
+                    </span>
+                    <span className="text-sm text-muted-foreground truncate">@{liveFriend.handle}</span>
+                </div>
+            </Link>
+            <div className="flex items-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                <Link href={`/?view=messages&user=${friend.uid}`}>
+                    <Button size="sm" className="h-9 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 font-semibold shadow-sm transition-all flex items-center gap-1.5" title="Send Message">
+                        <MessageSquare className="h-4 w-4" /> <span className="hidden sm:inline">Message</span>
+                    </Button>
+                </Link>
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 rounded-xl text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                    onClick={() => onRemoveFriend(friend.uid, liveFriend.name)}
+                    title="Remove Friend"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            </div>
+        </div>
+    );
+}
 
 interface FriendsViewProps {
     currentUser: any;
@@ -125,41 +233,12 @@ export default function FriendsView({
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {friendRequests.map((req, i) => (
-                                        <div key={i} className="flex flex-col justify-between p-4 bg-background rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all">
-                                            <div className="flex items-center gap-4 mb-4">
-                                                <Avatar className="h-14 w-14 border-2 border-indigo-500/20">
-                                                    <AvatarImage src={req.from?.avatarUrl} alt={req.from?.name} />
-                                                    <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-lg">
-                                                        {req.from?.name?.charAt(0) || 'U'}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex flex-col overflow-hidden">
-                                                    <Link href={`/profile/${req.from?.handle}`} className="text-base font-bold hover:text-indigo-600 transition-colors truncate">
-                                                        {req.from?.name}
-                                                    </Link>
-                                                    <span className="text-sm text-muted-foreground truncate">@{req.from?.handle}</span>
-                                                    <span className="text-xs text-indigo-500 font-medium mt-1">Wants to be friends</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2 pt-2 border-t border-border/40">
-                                                <Button 
-                                                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold shadow-sm" 
-                                                    onClick={(e) => onAcceptRequest({ id: req.uid, type: 'friend_request', fromUser: req.from, timestamp: req.timestamp, read: false }, e)}
-                                                >
-                                                    <Check className="h-4 w-4 mr-2" /> Accept
-                                                </Button>
-                                                <Button 
-                                                    variant="outline" 
-                                                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
-                                                    onClick={() => {
-                                                        deleteDoc(doc(db, 'users', currentUser.uid, 'friendRequests', req.uid));
-                                                        toast({ title: 'Request declined' });
-                                                    }}
-                                                >
-                                                    Decline
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <PendingRequestCard
+                                            key={req.uid || i}
+                                            req={req}
+                                            currentUserUid={currentUser.uid}
+                                            onAcceptRequest={onAcceptRequest}
+                                        />
                                     ))}
                                 </div>
                             )}
@@ -276,44 +355,11 @@ export default function FriendsView({
                                             </div>
                                         ) : (
                                             myFriends.filter(f => f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || f.handle?.toLowerCase().includes(searchQuery.toLowerCase())).map((friend, i) => (
-                                                <div key={i} className="flex items-center justify-between p-3.5 bg-background/50 hover:bg-background rounded-2xl border border-border/40 hover:border-indigo-500/30 shadow-sm hover:shadow-md transition-all group">
-                                                    <Link href={`/profile/${friend.handle}`} className="flex items-center gap-4 overflow-hidden flex-1">
-                                                        <div className="relative">
-                                                            <Avatar className="h-12 w-12 border-2 border-transparent group-hover:border-indigo-500/20 transition-all shadow-sm">
-                                                                <AvatarImage src={friend.avatarUrl} alt={friend.name} />
-                                                                <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold">
-                                                                    {friend.name?.charAt(0) || 'F'}
-                                                                </AvatarFallback>
-                                                            </Avatar>
-                                                            {/* Simulated Online Status Indicator - using math to deterministically show a few online */}
-                                                            {friend.uid.length % 3 !== 0 && (
-                                                                <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-green-500 border-2 border-background shadow-sm" title="Online" />
-                                                            )}
-                                                        </div>
-                                                        <div className="flex flex-col overflow-hidden">
-                                                            <span className="text-base font-bold text-foreground group-hover:text-indigo-600 transition-colors truncate flex items-center gap-2">
-                                                                {friend.name}
-                                                            </span>
-                                                            <span className="text-sm text-muted-foreground truncate">@{friend.handle}</span>
-                                                        </div>
-                                                    </Link>
-                                                    <div className="flex items-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                                                        <Link href={`/?view=messages&user=${friend.uid}`}>
-                                                            <Button size="sm" className="h-9 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 font-semibold shadow-sm transition-all flex items-center gap-1.5" title="Send Message">
-                                                                <MessageSquare className="h-4 w-4" /> <span className="hidden sm:inline">Message</span>
-                                                            </Button>
-                                                        </Link>
-                                                        <Button 
-                                                            size="icon" 
-                                                            variant="ghost" 
-                                                            className="h-9 w-9 rounded-xl text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                                                            onClick={() => handleRemoveFriend(friend.uid, friend.name)}
-                                                            title="Remove Friend"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
+                                                <FriendListItem
+                                                    key={friend.uid || i}
+                                                    friend={friend}
+                                                    onRemoveFriend={handleRemoveFriend}
+                                                />
                                             ))
                                         )}
                                     </div>

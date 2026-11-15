@@ -18,20 +18,20 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const MINIMUM_PAYOUT_DIAMONDS = 1;
+const MINIMUM_PAYOUT_DIAMONDS = 1000;
 
 interface WalletViewProps {
     currentUser: CurrentUser;
 }
 
 const SUPPORTED_COUNTRIES = [
-    { country: 'NG', name: 'Nigeria', currency: 'NGN', flag: '🇳🇬', coinRate: 10, diamondRate: 10, symbol: '₦' },
-    { country: 'US', name: 'United States', currency: 'USD', flag: '🇺🇸', coinRate: 0.01, diamondRate: 0.01, symbol: '$' },
-    { country: 'GH', name: 'Ghana', currency: 'GHS', flag: '🇬🇭', coinRate: 0.15, diamondRate: 0.15, symbol: 'GHS ' },
-    { country: 'KE', name: 'Kenya', currency: 'KES', flag: '🇰🇪', coinRate: 1.5, diamondRate: 1.5, symbol: 'KES ' },
-    { country: 'GB', name: 'United Kingdom', currency: 'GBP', flag: '🇬🇧', coinRate: 0.008, diamondRate: 0.008, symbol: '£' },
-    { country: 'EU', name: 'Europe', currency: 'EUR', flag: '🇪🇺', coinRate: 0.009, diamondRate: 0.009, symbol: '€' },
-    { country: 'ZA', name: 'South Africa', currency: 'ZAR', flag: '🇿🇦', coinRate: 0.18, diamondRate: 0.18, symbol: 'R ' },
+    { country: 'NG', name: 'Nigeria', currency: 'NGN', flag: '🇳🇬', coinRate: 10, diamondRate: 15, symbol: '₦' },
+    { country: 'US', name: 'United States', currency: 'USD', flag: '🇺🇸', coinRate: 0.01, diamondRate: 0.015, symbol: '$' },
+    { country: 'GH', name: 'Ghana', currency: 'GHS', flag: '🇬🇭', coinRate: 0.15, diamondRate: 0.22, symbol: 'GHS ' },
+    { country: 'KE', name: 'Kenya', currency: 'KES', flag: '🇰🇪', coinRate: 1.5, diamondRate: 2.25, symbol: 'KES ' },
+    { country: 'GB', name: 'United Kingdom', currency: 'GBP', flag: '🇬🇧', coinRate: 0.008, diamondRate: 0.012, symbol: '£' },
+    { country: 'EU', name: 'Europe', currency: 'EUR', flag: '🇪🇺', coinRate: 0.009, diamondRate: 0.014, symbol: '€' },
+    { country: 'ZA', name: 'South Africa', currency: 'ZAR', flag: '🇿🇦', coinRate: 0.18, diamondRate: 0.27, symbol: 'R ' },
 ];
 
 const coinPackages = [
@@ -517,18 +517,16 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                     <CardContent>
                                          <div className="text-2xl font-bold">{(currentUser.diamonds || 0).toLocaleString()}</div>
                                          <p className="text-xs text-muted-foreground mt-1">
-                                            Est. Payout: {currentGeo.symbol}{Number(((currentUser.diamonds || 0) * currentGeo.diamondRate).toFixed(2)).toLocaleString()} ({currentGeo.currency})
+                                            Gross Value: {currentGeo.symbol}{Number(((currentUser.diamonds || 0) * currentGeo.diamondRate).toFixed(2)).toLocaleString()} ({currentGeo.currency})
                                         </p>
                                     </CardContent>
                                 </Card>
                                  <Card>
                                     <CardHeader>
                                          <CardTitle className="text-lg">Request Global Payout</CardTitle>
-                                         <CardDescription>Minimum payout is {MINIMUM_PAYOUT_DIAMONDS} diamonds ({currentGeo.symbol}{Number((MINIMUM_PAYOUT_DIAMONDS * currentGeo.diamondRate).toFixed(2))}).</CardDescription>
-                                         <div className="mt-3 p-3 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20 text-xs text-indigo-700 dark:text-indigo-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
-                                             <span><strong>Ecosystem Split:</strong> 75% Creator Share | <strong>25% App Cut (Platform Fee)</strong></span>
-                                             <span className="font-semibold">{currentGeo.symbol}{currentGeo.diamondRate} per Diamond</span>
-                                         </div>
+                                         <CardDescription>
+                                             Withdraw your earned diamonds directly to your bank account or mobile wallet.
+                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <Form {...form}>
@@ -581,9 +579,31 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                         <FormMessage />
                                                     </FormItem>
                                                 )} />
+                                                {Number(form.watch('diamondAmount')) > 0 && (() => {
+                                                    const diamondsEntered = Number(form.watch('diamondAmount')) || 0;
+                                                    const grossVal = Number((diamondsEntered * currentGeo.diamondRate).toFixed(2));
+                                                    const feeVal = Number((grossVal * 0.25).toFixed(2));
+                                                    const netVal = Number((grossVal * 0.75).toFixed(2));
+                                                    return (
+                                                        <div className="p-3 rounded-xl bg-muted/50 border text-xs space-y-1.5">
+                                                            <div className="flex justify-between text-muted-foreground">
+                                                                <span>Withdrawal Value ({diamondsEntered.toLocaleString()} Diamonds)</span>
+                                                                <span>{currentGeo.symbol}{grossVal.toLocaleString()}</span>
+                                                            </div>
+                                                            <div className="flex justify-between text-muted-foreground">
+                                                                <span>Platform & Gateway Fee (25%)</span>
+                                                                <span>-{currentGeo.symbol}{feeVal.toLocaleString()}</span>
+                                                            </div>
+                                                            <div className="flex justify-between font-bold text-foreground pt-1 border-t">
+                                                                <span>You Receive (Net Payout)</span>
+                                                                <span className="text-emerald-600 dark:text-emerald-400">{currentGeo.symbol}{netVal.toLocaleString()} ({currentGeo.currency})</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                                 <Button type="submit" className="w-full font-bold" disabled={form.formState.isSubmitting}>
                                                     {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                                                    Request Payout of {currentGeo.symbol}{Number((form.watch('diamondAmount') * currentGeo.diamondRate).toFixed(2)).toLocaleString()} ({currentGeo.currency})
+                                                    Request Payout of {currentGeo.symbol}{Number(((Number(form.watch('diamondAmount')) || 0) * currentGeo.diamondRate * 0.75).toFixed(2)).toLocaleString()} ({currentGeo.currency})
                                                 </Button>
                                             </form>
                                         </Form>

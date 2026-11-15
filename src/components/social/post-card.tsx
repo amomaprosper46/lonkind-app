@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp, Sparkles, EyeOff, TrendingUp, Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Timestamp } from 'firebase/firestore';
@@ -22,6 +22,8 @@ import TipDialog from './tip-dialog';
 import UnifiedReportDialog from './unified-report-dialog';
 import type { CurrentUser } from './social-dashboard';
 import { auth } from '@/lib/firebase';
+import { useLiveUserProfile } from '@/hooks/use-live-user-profile';
+import { recommendationTracker } from '@/lib/recommendation-tracker';
 
 
 interface PostAuthor {
@@ -85,6 +87,9 @@ interface PostCardProps {
     onMuteUser?: (user: PostAuthor) => void;
     isAuthorLive?: boolean;
     onWatchLive?: (hostUid: string) => void;
+    recommendationReason?: string;
+    recommendationBadgeType?: 'interest' | 'creator' | 'rising' | 'trending' | 'discovery' | 'similar';
+    onNotInterested?: (post: Post) => void;
 }
 
 const reactionIcons: { [key in ReactionType]: React.ElementType } = {
@@ -109,8 +114,21 @@ const ReactionButton = ({ reaction, onReact, isActive }: { reaction: ReactionTyp
     )
 };
 
-export default function PostCard({ post, currentUser, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved, onReportPost, onMuteUser, isAuthorLive, onWatchLive }: PostCardProps) {
-    const author = post?.author || { name: 'Lonkind Member', handle: 'member', avatarUrl: '', uid: '' };
+export default function PostCard({ post, currentUser, onReact, onCommentClick, onSavePost, onDeletePost, userReaction, isSaved, onReportPost, onMuteUser, isAuthorLive, onWatchLive, recommendationReason, recommendationBadgeType, onNotInterested }: PostCardProps) {
+    const rawAuthor = post?.author || { name: 'Lonkind Member', handle: 'member', avatarUrl: '', uid: '' };
+    const liveAuthor = useLiveUserProfile(
+        rawAuthor.uid,
+        rawAuthor.avatarUrl,
+        rawAuthor.name,
+        rawAuthor.handle
+    );
+    const author: PostAuthor = {
+        ...rawAuthor,
+        name: liveAuthor.name,
+        handle: liveAuthor.handle,
+        avatarUrl: liveAuthor.avatarUrl,
+        isProfessional: liveAuthor.isProfessional ?? rawAuthor.isProfessional,
+    };
     const { content, imageUrl, videoUrl, reactions, comments, timestamp } = post || {};
     const totalReactions = Object.values(reactions || {}).reduce((a, b) => a + (b || 0), 0);
     const CurrentReactionIcon = userReaction ? reactionIcons[userReaction] : ThumbsUp;
@@ -131,8 +149,103 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [showVideoScript, setShowVideoScript] = useState(false);
 
+    const cardRef = useRef<HTMLDivElement>(null);
+    const videoElementRef = useRef<HTMLVideoElement>(null);
+    const visibleStartMsRef = useRef<number | null>(null);
+    const videoPlayStartMsRef = useRef<number | null>(null);
+
     const isAuthor = author.uid === currentUser.uid;
     const canViewVip = !post.isVipOnly || isAuthor || post.unlockedBy?.includes(currentUser?.uid) || isUnlocked;
+
+    // Viewport-based impression, dwell time, and offscreen video pause tracking
+    useEffect(() => {
+        const el = cardRef.current;
+        if (!el || !currentUser?.uid || !post?.id) return;
+
+        let impressionTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                if (!entry) return;
+
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                    if (!visibleStartMsRef.current) {
+                        visibleStartMsRef.current = Date.now();
+                    }
+                    if (!impressionTimer) {
+                        impressionTimer = setTimeout(() => {
+                            recommendationTracker.track(currentUser.uid, {
+                                type: 'impression',
+                                post,
+                                postId: post.id,
+                                authorUid: author.uid,
+                            });
+                        }, 1500);
+                    }
+                } else {
+                    if (impressionTimer) {
+                        clearTimeout(impressionTimer);
+                        impressionTimer = null;
+                    }
+                    if (visibleStartMsRef.current) {
+                        const dwellSeconds = (Date.now() - visibleStartMsRef.current) / 1000;
+                        visibleStartMsRef.current = null;
+                        if (dwellSeconds >= 3.5) {
+                            recommendationTracker.track(currentUser.uid, {
+                                type: 'dwell',
+                                post,
+                                postId: post.id,
+                                authorUid: author.uid,
+                                dwellSeconds,
+                            });
+                        }
+                    }
+                    // Pause inline video when scrolled out of view to save bandwidth & battery
+                    const vid = videoElementRef.current;
+                    if (vid && !vid.paused) {
+                        vid.pause();
+                    }
+                }
+            },
+            { threshold: [0, 0.5] }
+        );
+
+        observer.observe(el);
+        return () => {
+            if (impressionTimer) clearTimeout(impressionTimer);
+            observer.disconnect();
+        };
+    }, [currentUser?.uid, post, author.uid]);
+
+    const handleVideoPlay = () => {
+        videoPlayStartMsRef.current = Date.now();
+    };
+
+    const handleVideoPauseOrEnd = () => {
+        if (!videoPlayStartMsRef.current || !currentUser?.uid) return;
+        const watchSeconds = (Date.now() - videoPlayStartMsRef.current) / 1000;
+        videoPlayStartMsRef.current = null;
+        const duration = videoElementRef.current?.duration || 15;
+
+        if (watchSeconds >= 3) {
+            recommendationTracker.track(currentUser.uid, {
+                type: 'video_watch',
+                post,
+                postId: post.id,
+                authorUid: author.uid,
+                watchSeconds,
+                videoDurationSeconds: Number.isFinite(duration) ? duration : 15,
+            });
+        } else if (watchSeconds > 0.3 && watchSeconds < 2.0) {
+            recommendationTracker.track(currentUser.uid, {
+                type: 'video_skip',
+                post,
+                postId: post.id,
+                authorUid: author.uid,
+            });
+        }
+    };
 
     const handleUnlockVip = async () => {
         if (!currentUser) {
@@ -166,7 +279,29 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
     };
 
 
-    const formattedTimestamp = timestamp && typeof (timestamp as any).toDate === 'function' ? formatDistanceToNow((timestamp as any).toDate(), { addSuffix: true }) : 'Just now';
+    const formattedTimestamp = React.useMemo(() => {
+        if (!timestamp) return 'Just now';
+        try {
+            if (typeof (timestamp as any).toDate === 'function') {
+                return formatDistanceToNow((timestamp as any).toDate(), { addSuffix: true });
+            }
+            if (typeof timestamp === 'number') {
+                return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+            }
+            if (typeof timestamp === 'string') {
+                const parsed = new Date(timestamp);
+                if (!Number.isNaN(parsed.getTime())) {
+                    return formatDistanceToNow(parsed, { addSuffix: true });
+                }
+            }
+            if (typeof (timestamp as any).seconds === 'number') {
+                return formatDistanceToNow(new Date((timestamp as any).seconds * 1000), { addSuffix: true });
+            }
+        } catch {
+            // fallback
+        }
+        return 'Just now';
+    }, [timestamp]);
 
     const handleShare = () => {
         const profileUrl = `${window.location.origin}/profile/${author.handle}`;
@@ -241,7 +376,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
     }
 
     return (
-        <Card className={cn("overflow-hidden")}>
+        <Card ref={cardRef} className={cn("overflow-hidden transition-colors")}>
             {currentUser && <TipDialog isOpen={isTipOpen} onOpenChange={setIsTipOpen} currentUser={currentUser} recipient={post.author} postId={post.id} isCauseDonation={post.isCause} />}
             {currentUser && (
                 <UnifiedReportDialog
@@ -256,6 +391,30 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                     targetAuthorHandle={post.author.handle}
                     targetContentSnippet={post.content}
                 />
+            )}
+            {recommendationReason && (
+                <div className="px-4 py-1.5 bg-indigo-500/5 border-b border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1.5 font-medium text-indigo-400/90 truncate">
+                        {recommendationBadgeType === 'rising' ? (
+                            <TrendingUp className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                        ) : recommendationBadgeType === 'trending' ? (
+                            <Flame className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        ) : (
+                            <Sparkles className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                        )}
+                        <span className="truncate">{recommendationReason}</span>
+                    </span>
+                    {onNotInterested && !isAuthor && (
+                        <button
+                            type="button"
+                            onClick={() => onNotInterested(post)}
+                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
+                            title="Hide this post and show fewer like it"
+                        >
+                            Not interested
+                        </button>
+                    )}
+                </div>
             )}
             {post.isHidden && (
                 <div className="bg-destructive/15 border-b border-destructive/30 text-destructive px-4 py-2 text-xs font-bold flex items-center gap-2">
@@ -324,6 +483,12 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                            {onNotInterested && !isAuthor && (
+                                <DropdownMenuItem onClick={() => onNotInterested(post)} className="cursor-pointer">
+                                    <EyeOff className="mr-2 h-4 w-4" />
+                                    Not Interested
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => {
                                 if (onReportPost) onReportPost(post);
                                 else setIsReportOpen(true);
@@ -445,7 +610,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                     </div>
                                 ) : imageUrl ? (
                                     <>
-                                        <img src={imageUrl} alt="Post content" className="w-full h-auto" data-ai-hint="social media post image" />
+                                        <img src={imageUrl} alt="Post content" loading="lazy" decoding="async" className="w-full h-auto max-h-[680px] object-contain bg-black/5" data-ai-hint="social media post image" />
                                         {showImageTranslation && translatedImageText && (
                                             <div 
                                                 className="absolute inset-0 bg-black/70 p-4 text-white text-center flex items-center justify-center cursor-pointer" 
@@ -456,7 +621,18 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                         )}
                                     </>
                                 ) : videoUrl && (
-                                    <video src={videoUrl} controls className="w-full h-auto" data-ai-hint="social media post video" />
+                                    <video
+                                        ref={videoElementRef}
+                                        src={videoUrl}
+                                        controls
+                                        playsInline
+                                        preload="metadata"
+                                        onPlay={handleVideoPlay}
+                                        onPause={handleVideoPauseOrEnd}
+                                        onEnded={handleVideoPauseOrEnd}
+                                        className="w-full h-auto max-h-[680px] bg-black"
+                                        data-ai-hint="social media post video"
+                                    />
                                 )}
                             </div>
                         )}

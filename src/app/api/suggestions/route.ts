@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit, startAfter, orderBy } from 'firebase/firestore';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import * as admin from 'firebase-admin';
 
 /**
  * GET /api/suggestions
@@ -12,37 +10,46 @@ import { authOptions } from '@/lib/auth';
  *   - cursor: document ID to start after (for pagination)
  */
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const uid = session.user.id as string;
+
+  let uid: string;
+  try {
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const url = new URL(request.url);
-  const limitParam = Math.min(parseInt(url.searchParams.get('limit') ?? '20'), 50);
+  const limitParam = Math.min(parseInt(url.searchParams.get('limit') ?? '20', 10) || 20, 50);
   const cursor = url.searchParams.get('cursor');
 
-  const usersRef = collection(db, 'users');
-  let q = query(
-    usersRef,
-    where('__name__', '!=', uid),
-    orderBy('__name__'),
-    limit(limitParam)
-  );
+  let q: admin.firestore.Query = adminDb
+    .collection('users')
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(limitParam + 1);
+
   if (cursor) {
-    const cursorSnap = await getDocs(query(usersRef, where('__name__', '==', cursor)));
-    if (!cursorSnap.empty) {
-      q = query(
-        usersRef,
-        where('__name__', '!=', uid),
-        orderBy('__name__'),
-        startAfter(cursorSnap.docs[0]),
-        limit(limitParam)
-      );
+    const cursorSnap = await adminDb.collection('users').doc(cursor).get();
+    if (cursorSnap.exists) {
+      q = adminDb
+        .collection('users')
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .startAfter(cursorSnap)
+        .limit(limitParam + 1);
     }
   }
-  const snapshot = await getDocs(q);
-  const suggestions = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+
+  const snapshot = await q.get();
+  const suggestions = snapshot.docs
+    .filter((docSnap) => docSnap.id !== uid)
+    .slice(0, limitParam)
+    .map((docSnap) => ({ uid: docSnap.id, ...docSnap.data() }));
+
   const nextCursor = suggestions.length ? suggestions[suggestions.length - 1].uid : null;
   return NextResponse.json({ suggestions, nextCursor });
 }

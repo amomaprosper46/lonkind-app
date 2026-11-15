@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { translateText } from '@/ai/flows/translate-text';
 import { toast } from '@/hooks/use-toast';
 import TipDialog from './tip-dialog';
+import { useLiveUserProfile } from '@/hooks/use-live-user-profile';
 
 interface Comment {
     id: string;
@@ -42,6 +43,98 @@ interface CommentSheetProps {
     onOpenChange: (isOpen: boolean) => void;
     onCommentSubmit: (postId: string, commentText: string) => Promise<boolean>;
     currentUser: CurrentUser;
+}
+
+function CommentItemRow({
+    comment,
+    currentUser,
+    translatingCommentId,
+    translatedComments,
+    showOriginalComment,
+    onTranslate,
+    getCommentText,
+    onTip,
+}: {
+    comment: Comment;
+    currentUser: CurrentUser;
+    translatingCommentId: string | null;
+    translatedComments: Map<string, string>;
+    showOriginalComment: Set<string>;
+    onTranslate: (comment: Comment) => void;
+    getCommentText: (comment: Comment) => string;
+    onTip: (author: Comment['author']) => void;
+}) {
+    const liveAuthor = useLiveUserProfile(
+        comment.author?.uid,
+        comment.author?.avatarUrl,
+        comment.author?.name,
+        comment.author?.handle
+    );
+
+    const resolvedAuthor: Comment['author'] = {
+        ...comment.author,
+        name: liveAuthor.name,
+        handle: liveAuthor.handle,
+        avatarUrl: liveAuthor.avatarUrl,
+        isProfessional: liveAuthor.isProfessional ?? comment.author?.isProfessional,
+    };
+
+    return (
+        <div className="flex gap-3">
+            <Link href={`/profile/${resolvedAuthor.handle}`}>
+                <Avatar className="h-9 w-9">
+                    <AvatarImage src={resolvedAuthor.avatarUrl} alt={resolvedAuthor.name} data-ai-hint="user avatar" />
+                    <AvatarFallback>{resolvedAuthor.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+            </Link>
+            <div className="flex-1">
+                <div className="bg-muted rounded-lg px-4 py-2">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-1">
+                            <Link href={`/profile/${resolvedAuthor.handle}`} className="font-semibold text-sm hover:underline">
+                                {resolvedAuthor.name}
+                            </Link>
+                            {(resolvedAuthor.isProfessional || resolvedAuthor.handle === 'admin_lonkind') && (
+                                <BadgeCheck className="h-4 w-4 text-primary" />
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {comment.timestamp ? formatDistanceToNow(comment.timestamp.toDate(), { addSuffix: true }) : ''}
+                        </p>
+                    </div>
+                    <p className="text-sm mt-1 whitespace-pre-wrap">{getCommentText(comment)}</p>
+
+                    <div className="mt-1">
+                        {translatingCommentId === comment.id ? (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Translating...
+                            </div>
+                        ) : (
+                            <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => onTranslate(comment)}>
+                                <Languages className="mr-1 h-3 w-3" />
+                                {translatedComments.has(comment.id)
+                                    ? showOriginalComment.has(comment.id)
+                                        ? 'Show translation'
+                                        : 'Show original'
+                                    : 'Translate'}
+                            </Button>
+                        )}
+                        {resolvedAuthor.uid !== currentUser.uid && (
+                            <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 h-auto text-xs ml-4 text-muted-foreground hover:text-primary"
+                                onClick={() => onTip(resolvedAuthor)}
+                            >
+                                <Coins className="mr-1 h-3 w-3" />
+                                Tip
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default function CommentSheet({ post, onOpenChange, onCommentSubmit, currentUser }: CommentSheetProps) {
@@ -155,47 +248,17 @@ export default function CommentSheet({ post, onOpenChange, onCommentSubmit, curr
                                     </div>
                                 ) : comments.length > 0 ? (
                                     comments.map(comment => (
-                                        <div key={comment.id} className="flex gap-3">
-                                            <Link href={`/profile/${comment.author.handle}`}>
-                                                <Avatar className="h-9 w-9">
-                                                    <AvatarImage src={comment.author.avatarUrl} alt={comment.author.name} data-ai-hint="user avatar" />
-                                                    <AvatarFallback>{comment.author.name.charAt(0)}</AvatarFallback>
-                                                </Avatar>
-                                            </Link>
-                                            <div className="flex-1">
-                                                <div className="bg-muted rounded-lg px-4 py-2">
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="flex items-center gap-1">
-                                                            <Link href={`/profile/${comment.author.handle}`} className="font-semibold text-sm hover:underline">{comment.author.name}</Link>
-                                                            {(comment.author.isProfessional || comment.author.handle === 'admin_lonkind') && <BadgeCheck className="h-4 w-4 text-primary" />}
-                                                        </div>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {comment.timestamp ? formatDistanceToNow(comment.timestamp.toDate(), { addSuffix: true }) : ''}
-                                                        </p>
-                                                    </div>
-                                                    <p className="text-sm mt-1 whitespace-pre-wrap">{getCommentText(comment)}</p>
-                                                    
-                                                     <div className="mt-1">
-                                                        {translatingCommentId === comment.id ? (
-                                                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                                <Loader2 className="h-3 w-3 animate-spin" /> Translating...
-                                                            </div>
-                                                        ) : (
-                                                            <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => handleTranslateComment(comment)}>
-                                                                <Languages className="mr-1 h-3 w-3" />
-                                                                {translatedComments.has(comment.id) ? (showOriginalComment.has(comment.id) ? 'Show translation' : 'Show original') : 'Translate'}
-                                                            </Button>
-                                                        )}
-                                                        {comment.author.uid !== currentUser.uid && (
-                                                            <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-4 text-muted-foreground hover:text-primary" onClick={() => setTipRecipient(comment.author)}>
-                                                                <Coins className="mr-1 h-3 w-3" />
-                                                                Tip
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <CommentItemRow
+                                            key={comment.id}
+                                            comment={comment}
+                                            currentUser={currentUser}
+                                            translatingCommentId={translatingCommentId}
+                                            translatedComments={translatedComments}
+                                            showOriginalComment={showOriginalComment}
+                                            onTranslate={handleTranslateComment}
+                                            getCommentText={getCommentText}
+                                            onTip={(author) => setTipRecipient(author)}
+                                        />
                                     ))
                                 ) : (
                                     <div className="text-center text-muted-foreground py-16">

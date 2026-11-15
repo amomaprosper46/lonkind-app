@@ -17,6 +17,7 @@ interface UserProfile {
     name: string;
     handle: string;
     avatarUrl: string;
+    coverUrl?: string;
     bio?: string;
     businessUrl?: string;
 }
@@ -26,6 +27,7 @@ export interface ProfileData {
     handle?: string;
     bio?: string;
     avatarFile?: File;
+    coverFile?: File;
     businessUrl?: string;
     followerPrivacy?: 'public' | 'private';
 }
@@ -53,7 +55,10 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
     const [isSaving, setIsSaving] = useState(false);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [coverFile, setCoverFile] = useState<File | null>(null);
+    const [coverPreview, setCoverPreview] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const coverInputRef = useRef<HTMLInputElement>(null);
 
     const { register, handleSubmit, control, reset, formState: { errors } } = useForm<z.infer<typeof profileSchema>>({
         resolver: zodResolver(profileSchema),
@@ -76,6 +81,8 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
             });
             setAvatarFile(null);
             setAvatarPreview(null);
+            setCoverFile(null);
+            setCoverPreview(null);
         }
     }, [isOpen, currentUser, reset]);
     
@@ -84,6 +91,14 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
         if (file) {
             setAvatarFile(file);
             setAvatarPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setCoverFile(file);
+            setCoverPreview(URL.createObjectURL(file));
         }
     };
     
@@ -95,7 +110,8 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
             bio: data.bio,
             businessUrl: data.businessUrl,
             followerPrivacy: data.followerPrivacy,
-            avatarFile: avatarFile || undefined
+            avatarFile: avatarFile || undefined,
+            coverFile: coverFile || undefined,
         });
         setIsSaving(false);
     };
@@ -110,7 +126,33 @@ export default function EditProfileDialog({ isOpen, onOpenChange, currentUser, o
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 py-4">
-                     <div className="flex justify-center">
+                     <div className="relative h-28 w-full rounded-xl overflow-hidden bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 border border-border/60">
+                        {(coverPreview || currentUser.coverUrl) && (
+                            <img
+                                src={coverPreview || currentUser.coverUrl}
+                                alt="Cover banner"
+                                className="h-full w-full object-cover"
+                            />
+                        )}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            ref={coverInputRef}
+                            onChange={handleCoverChange}
+                            className="hidden"
+                        />
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="absolute bottom-2 right-2 rounded-lg text-xs h-7 px-2.5 gap-1 bg-slate-950/75 text-white hover:bg-slate-900"
+                            onClick={() => coverInputRef.current?.click()}
+                        >
+                            <Camera className="h-3.5 w-3.5" />
+                            Change Cover
+                        </Button>
+                     </div>
+                     <div className="flex justify-center -mt-12">
                         <div className="relative">
                             <Avatar className="h-24 w-24">
                                 <AvatarImage src={avatarPreview || currentUser.avatarUrl} alt={currentUser.name} />

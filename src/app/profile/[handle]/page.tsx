@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useParams, notFound, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, query, where, orderBy, updateDoc, increment, serverTimestamp, addDoc, onSnapshot, runTransaction, writeBatch, deleteDoc, setDoc, collectionGroup } from 'firebase/firestore';
 import { db, auth, storage, isFirebaseConfigValid } from '@/lib/firebase';
+import { updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '@/lib/image-compression';
 import Link from 'next/link';
@@ -26,6 +27,7 @@ interface UserProfile {
     name: string;
     handle: string;
     avatarUrl: string;
+    coverUrl?: string;
     isProfessional?: boolean;
     friendsCount?: number;
     bio?: string;
@@ -429,9 +431,92 @@ function UserProfilePageInner() {
                 updateData.avatarUrl = await getDownloadURL(snapshot.ref);
             }
 
+            if (data.coverFile) {
+                const coverToUpload = await compressImage(data.coverFile);
+                const coverRef = ref(storage, `covers/${currentUser.uid}/${Date.now()}_${coverToUpload.name}`);
+                const coverSnap = await uploadBytes(coverRef, coverToUpload);
+                updateData.coverUrl = await getDownloadURL(coverSnap.ref);
+            }
+
             await updateDoc(userDocRef, updateData);
 
-            toast({ title: "Success", description: "Profile updated!" });
+            if (auth?.currentUser && (updateData.name || updateData.avatarUrl)) {
+                await updateProfile(auth.currentUser, {
+                    displayName: updateData.name || currentUser.name,
+                    photoURL: updateData.avatarUrl || currentUser.avatarUrl,
+                }).catch(() => {});
+            }
+
+            // Immediately update local state so profile header and historical posts update without reload
+            const nextAvatar = updateData.avatarUrl || currentUser.avatarUrl;
+            const nextName = updateData.name || currentUser.name;
+            const nextHandle = updateData.handle || currentUser.handle;
+
+            setCurrentUser((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          name: nextName,
+                          handle: nextHandle,
+                          avatarUrl: nextAvatar,
+                          bio: updateData.bio ?? prev.bio,
+                          businessUrl: updateData.businessUrl ?? prev.businessUrl,
+                      }
+                    : prev
+            );
+
+            setProfileUser((prev) =>
+                prev && prev.uid === currentUser.uid
+                    ? {
+                          ...prev,
+                          name: nextName,
+                          handle: nextHandle,
+                          avatarUrl: nextAvatar,
+                          coverUrl: updateData.coverUrl ?? prev.coverUrl,
+                          bio: updateData.bio ?? prev.bio,
+                          businessUrl: updateData.businessUrl ?? prev.businessUrl,
+                      }
+                    : prev
+            );
+
+            setPosts((prevPosts) =>
+                prevPosts.map((p) =>
+                    p.author?.uid === currentUser.uid
+                        ? {
+                              ...p,
+                              author: {
+                                  ...p.author,
+                                  name: nextName,
+                                  handle: nextHandle,
+                                  avatarUrl: nextAvatar,
+                              },
+                          }
+                        : p
+                )
+            );
+
+            // Retroactively update all historical posts, group posts, comments, DMs, friends lists & notifications
+            if (auth?.currentUser) {
+                auth.currentUser
+                    .getIdToken()
+                    .then((token) => {
+                        fetch('/api/profile/sync-avatar', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                                avatarUrl: nextAvatar,
+                                name: nextName,
+                                handle: nextHandle,
+                            }),
+                        }).catch((err) => console.warn('Background avatar sync warning:', err));
+                    })
+                    .catch(() => {});
+            }
+
+            toast({ title: "Success", description: "Profile updated everywhere!" });
 
             if (data.handle && handle && data.handle.toLowerCase() !== handle.toLowerCase()) {
                 router.push(`/profile/${data.handle.toLowerCase()}`);
@@ -447,10 +532,28 @@ function UserProfilePageInner() {
     
     const handleStartCall = (type: 'audio' | 'video') => {
         setCallState({ active: true, type });
+        if (currentUser && profileUser && currentUser.uid !== profileUser.uid) {
+            const roomId = [currentUser.uid, profileUser.uid].sort().join('_');
+            const incomingCallDocId = roomId.replace(/[^a-zA-Z0-9_]/g, '_');
+            setDoc(doc(db, 'users', profileUser.uid, 'incomingCalls', incomingCallDocId), {
+                roomId,
+                callType: type,
+                callerUid: currentUser.uid,
+                callerName: currentUser.name || 'Lonkind Member',
+                callerAvatar: currentUser.avatarUrl || '',
+                status: 'ringing',
+                createdAt: serverTimestamp(),
+            }).catch(() => {});
+        }
     };
 
     const handleEndCall = () => {
         setCallState({ active: false, type: 'video' });
+        if (currentUser && profileUser) {
+            const roomId = [currentUser.uid, profileUser.uid].sort().join('_');
+            const incomingCallDocId = roomId.replace(/[^a-zA-Z0-9_]/g, '_');
+            deleteDoc(doc(db, 'users', profileUser.uid, 'incomingCalls', incomingCallDocId)).catch(() => {});
+        }
     };
 
     const handleStartMessage = async () => {
@@ -572,8 +675,11 @@ function UserProfilePageInner() {
                     currentUser={currentUser}
                 />
             )}
-            {callState.active && (
+            {callState.active && loggedInUser && (
                 <CallView 
+                    roomId={[loggedInUser.uid, profileUser.uid].sort().join('_call_')}
+                    userId={loggedInUser.uid}
+                    userName={currentUser?.name || loggedInUser.displayName || 'User'}
                     callTargetUser={{
                         uid: profileUser.uid,
                         name: profileUser.name,

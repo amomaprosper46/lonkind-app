@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit, doc, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import * as admin from 'firebase-admin';
+
+async function getVerifiedUid(request: Request): Promise<string | null> {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  try {
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * GET /api/friend-requests – list pending incoming requests.
@@ -10,35 +20,55 @@ import { authOptions } from '@/lib/auth';
  *   Body JSON: { targetUid: string }
  */
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const uid = await getVerifiedUid(request);
+  if (!uid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const uid = session.user.id as string;
-  const requestsRef = collection(db, 'users', uid, 'friendRequests');
-  const q = query(requestsRef, where('status', '==', 'pending'), limit(50));
-  const snapshot = await getDocs(q);
-  const friendRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  const snapshot = await adminDb
+    .collection('users')
+    .doc(uid)
+    .collection('friendRequests')
+    .where('status', '==', 'pending')
+    .limit(50)
+    .get();
+
+  const friendRequests = snapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
   return NextResponse.json({ friendRequests });
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const uid = await getVerifiedUid(request);
+  if (!uid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const uid = session.user.id as string;
+
   const { targetUid } = await request.json();
-  if (!targetUid) {
-    return NextResponse.json({ error: 'targetUid required' }, { status: 400 });
+  if (!targetUid || typeof targetUid !== 'string' || targetUid === uid) {
+    return NextResponse.json({ error: 'Valid targetUid required' }, { status: 400 });
   }
-  const batch = writeBatch(db);
-  const requestRef = doc(db, 'users', targetUid, 'friendRequests', uid);
-  batch.set(requestRef, {
-    from: { uid, name: session.user.name, handle: session.user.handle, avatarUrl: session.user.avatarUrl },
-    timestamp: serverTimestamp(),
-    status: 'pending',
-  });
-  await batch.commit();
+
+  const senderSnap = await adminDb.collection('users').doc(uid).get();
+  const senderData = senderSnap.data() || {};
+
+  await adminDb
+    .collection('users')
+    .doc(targetUid)
+    .collection('friendRequests')
+    .doc(uid)
+    .set({
+      from: {
+        uid,
+        name: senderData.name || 'Lonkind User',
+        handle: senderData.handle || 'user',
+        avatarUrl: senderData.avatarUrl || '',
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'pending',
+    });
+
   return NextResponse.json({ success: true });
 }

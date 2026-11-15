@@ -17,12 +17,23 @@ interface NotificationResult {
  * Sends a highly targeted transactional or social push notification payload.
  * Automatically strips stale or revoked device tokens from the Firestore user document upon delivery failure.
  */
+const pushNotificationRateLimit = new Map<string, number>();
+
 export async function sendPushNotification(
   recipientUid: string, 
   title: string, 
   body: string, 
   data?: Record<string, string>
 ): Promise<NotificationResult> {
+  if (!recipientUid || !title || !body) {
+    return { success: false, error: 'Missing required notification fields.' };
+  }
+
+  const lastSent = pushNotificationRateLimit.get(recipientUid) || 0;
+  if (Date.now() - lastSent < 3_000) {
+    return { success: false, error: 'Rate limit exceeded for recipient.' };
+  }
+  pushNotificationRateLimit.set(recipientUid, Date.now());
   
   const userRef = db.collection('users').doc(recipientUid);
 

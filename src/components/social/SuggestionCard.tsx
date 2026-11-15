@@ -5,7 +5,13 @@ import { Button } from '@/components/ui/button';
 import { UserPlus, Check } from 'lucide-react';
 import Link from 'next/link';
 
-export function SuggestionCard({ suggestion, onAddFriend, requestSent }) {
+export interface SuggestionCardProps {
+  suggestion: any;
+  onAddFriend: (suggestion: any) => void;
+  requestSent: boolean;
+}
+
+export function SuggestionCard({ suggestion, onAddFriend, requestSent }: SuggestionCardProps) {
   return (
     <Card className="flex flex-col items-center p-4 bg-background rounded-xl border border-border/60">
       <Link href={`/profile/${suggestion.handle}`} className="flex flex-col items-center">

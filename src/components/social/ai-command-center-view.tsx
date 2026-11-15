@@ -1,90 +1,122 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bot, Lightbulb, Mic, Wand2, BarChart3, Lock, Image as ImageIcon, Film } from 'lucide-react';
+import { Bot, Lightbulb, Wand2, BarChart3, Sparkles } from 'lucide-react';
 import AssistantView from './assistant-view';
 import IdeasView from './ideas-view';
 import StoryGeneratorView from './story-generator-view';
 import AppStatisticsView from './app-statistics-view';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-// A helper to wrap disabled tabs with a tooltip
-const ProFeatureTab = ({ value, children, isProfessional }: { value: string, children: React.ReactNode, isProfessional: boolean }) => {
-    if (isProfessional) {
-        return <TabsTrigger value={value}>{children}</TabsTrigger>;
-    }
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <div className="relative">
-                    <TabsTrigger value={value} disabled className="text-muted-foreground/50">
-                        <Lock className="absolute h-3 w-3 top-1 right-1" />
-                        {children}
-                    </TabsTrigger>
-                </div>
-            </TooltipTrigger>
-            <TooltipContent>
-                <p>This is a Professional account feature.</p>
-            </TooltipContent>
-        </Tooltip>
-    );
-};
+export type AiSpaceTab = 'assistant' | 'story' | 'ideas' | 'stats';
 
+export default function AICommandCenterView({
+  currentUser,
+  initialTab = 'assistant',
+}: {
+  isProfessional?: boolean;
+  currentUser?: any;
+  initialTab?: AiSpaceTab;
+}) {
+  const [activeTab, setActiveTab] = useState<AiSpaceTab>(initialTab);
 
-export default function AICommandCenterView({ isProfessional, currentUser }: { isProfessional?: boolean, currentUser?: any }) {
-    return (
-        <main className="col-span-9 space-y-8">
-            <header>
-                <h1 className="text-4xl font-bold">AI Command Center</h1>
-                <p className="text-muted-foreground mt-2">
-                    All of your AI-powered tools in one place. Professional features are locked for standard accounts.
-                </p>
-            </header>
-            <TooltipProvider>
-                <Tabs defaultValue="assistant" className="w-full">
-                    <TabsList className="grid w-full grid-cols-9">
-                        <TabsTrigger value="assistant">
-                            <Bot className="mr-2 h-4 w-4" />
-                            Assistant
-                        </TabsTrigger>
-                        <ProFeatureTab value="ideas" isProfessional={!!isProfessional}>
-                            <Lightbulb className="mr-2 h-4 w-4" />
-                            Ideas
-                        </ProFeatureTab>
-                         <ProFeatureTab value="story" isProfessional={!!isProfessional}>
-                            <Wand2 className="mr-2 h-4 w-4" />
-                            Story
-                        </ProFeatureTab>
-                         <ProFeatureTab value="stats" isProfessional={!!isProfessional}>
-                            <BarChart3 className="mr-2 h-4 w-4" />
-                            Stats
-                        </ProFeatureTab>
-                    </TabsList>
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
-                    <TabsContent value="assistant" className="mt-4">
-                        <AssistantView />
-                    </TabsContent>
-                    <TabsContent value="ideas" className="mt-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Impactful Ideas</CardTitle>
-                                <CardDescription>Generate, share, and vote on ideas that can change the world.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <IdeasView currentUser={currentUser} />
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                    <TabsContent value="story" className="mt-4">
-                        <StoryGeneratorView currentUser={currentUser} />
-                    </TabsContent>
-                    <TabsContent value="stats" className="mt-4">
-                        <AppStatisticsView />
-                    </TabsContent>
-                </Tabs>
-            </TooltipProvider>
-        </main>
-    );
+  return (
+    <div className="w-full space-y-6">
+      {/* AI Space Header Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/80 via-purple-950/60 to-slate-950 p-5 sm:p-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                  AI Space
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                  AI Command Hub
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                Access Smart Assistant, Automated Storyteller, Idea Lab, and AI Insights in one unified space.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Unified AI Tools Navigation Tabs */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as AiSpaceTab)}
+        className="w-full space-y-5"
+      >
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 h-auto p-1.5 gap-1.5 bg-slate-900/90 border border-border/60 rounded-2xl">
+          <TabsTrigger
+            value="assistant"
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
+          >
+            <Bot className="h-4 w-4 shrink-0" />
+            <span className="truncate">Assistant</span>
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="story"
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
+          >
+            <Wand2 className="h-4 w-4 shrink-0" />
+            <span className="truncate">Storyteller</span>
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="ideas"
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
+          >
+            <Lightbulb className="h-4 w-4 shrink-0" />
+            <span className="truncate">Idea Lab</span>
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="stats"
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
+          >
+            <BarChart3 className="h-4 w-4 shrink-0" />
+            <span className="truncate">AI Insights</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="assistant" className="mt-0 focus-visible:outline-none">
+          <AssistantView />
+        </TabsContent>
+
+        <TabsContent value="story" className="mt-0 focus-visible:outline-none">
+          <StoryGeneratorView currentUser={currentUser} />
+        </TabsContent>
+
+        <TabsContent value="ideas" className="mt-0 focus-visible:outline-none">
+          <Card className="rounded-2xl border-border/60 shadow-lg">
+            <CardHeader>
+              <CardTitle>Impactful Ideas Lab</CardTitle>
+              <CardDescription>
+                Generate, share, and vote on creative ideas with AI.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <IdeasView currentUser={currentUser} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stats" className="mt-0 focus-visible:outline-none">
+          <AppStatisticsView />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }

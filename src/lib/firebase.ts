@@ -27,7 +27,7 @@ export const isFirebaseConfigValid = Boolean(
 );
 
 // Initialize Firebase Safely (Vercel SSR compatible)
-let app: FirebaseApp | undefined;
+export let app: FirebaseApp | undefined;
 if (isFirebaseConfigValid) {
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);

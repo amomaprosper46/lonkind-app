@@ -49,6 +49,8 @@ const ideasPrompt = ai.definePrompt({
     `,
 });
 
+const ideaGenerationRateLimit = new Map<string, number>();
+
 const generateIdeasFlow = ai.defineFlow(
   {
     name: 'generateIdeasFlow',
@@ -56,6 +58,15 @@ const generateIdeasFlow = ai.defineFlow(
     outputSchema: GenerateIdeasOutputSchema,
   },
   async (input) => {
+    const lastGen = ideaGenerationRateLimit.get(input.userId) || 0;
+    if (Date.now() - lastGen < 15_000) {
+      return {
+        success: false,
+        message: 'Please wait a few seconds before generating more ideas.',
+      };
+    }
+    ideaGenerationRateLimit.set(input.userId, Date.now());
+
     const userRef = adminDb.collection('users').doc(input.userId);
 
     try {

@@ -23,6 +23,20 @@ export async function POST(req: NextRequest) {
     // Store in Firestore doc under 'sendchamp_otp_verifications'
     const docId = cleanPhone.replace(/[^a-zA-Z0-9]/g, '_');
     const otpDocRef = db.collection('sendchamp_otp_verifications').doc(docId);
+
+    // Rate limit: block resending if an unexpired OTP was created less than 60 seconds ago
+    const existingSnap = await otpDocRef.get();
+    if (existingSnap.exists) {
+      const existingData = existingSnap.data();
+      const existingExpiresAt = Number(existingData?.expiresAt || 0);
+      // expiresAt is createdAt + 5 mins (300,000ms), so > 240,000ms remaining means < 60s elapsed
+      if (existingExpiresAt - Date.now() > 4 * 60 * 1000) {
+        return NextResponse.json(
+          { error: 'Please wait 60 seconds before requesting another verification code.' },
+          { status: 429 }
+        );
+      }
+    }
     
     // Also store in legacy doc ref for backwards compatibility
     const legacyDocRef = db.collection('twilio_otp_verifications').doc(docId);

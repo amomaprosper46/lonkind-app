@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Zap } from 'lucide-react';
+import GoldenLionSvgGift from './gifts/GoldenLionSvgGift';
+import RoyalCrownSvgGift from './gifts/RoyalCrownSvgGift';
 
 interface SuperGiftDetail {
     id: string;
@@ -18,17 +20,31 @@ export default function SuperGiftOverlay() {
 
     useEffect(() => {
         const handleSuperGift = (event: Event) => {
+            // Do not double-play if the Live Stream stage renderer is currently active
+            if (typeof document !== 'undefined' && document.querySelector('[data-live-gift-stage="active"]')) {
+                return;
+            }
             const customEvent = event as CustomEvent<SuperGiftDetail>;
             if (customEvent.detail && customEvent.detail.coins >= 100) {
+                const newId = Math.random().toString();
                 setCurrentGift({
                     ...customEvent.detail,
-                    id: Math.random().toString(),
+                    id: newId,
                 });
 
-                // Auto dismiss after 4.5 seconds
-                setTimeout(() => {
-                    setCurrentGift(prev => (prev?.id === customEvent.detail.id ? null : prev));
-                }, 4500);
+                const isCustomSvgGift =
+                    customEvent.detail.label === 'Lion' ||
+                    customEvent.detail.label === 'Majestic Lion' ||
+                    customEvent.detail.label === 'Golden Lion' ||
+                    customEvent.detail.label === 'Royal Crown' ||
+                    customEvent.detail.label === 'Crown';
+
+                if (!isCustomSvgGift) {
+                    // Auto dismiss after 4.5 seconds for non-custom-stage gifts
+                    setTimeout(() => {
+                        setCurrentGift(prev => (prev?.id === newId ? null : prev));
+                    }, 4500);
+                }
             }
         };
 
@@ -38,6 +54,32 @@ export default function SuperGiftOverlay() {
 
     // Also allow dismissing by clicking
     const handleDismiss = () => setCurrentGift(null);
+
+    if (
+        currentGift &&
+        (currentGift.label === 'Lion' ||
+            currentGift.label === 'Majestic Lion' ||
+            currentGift.label === 'Golden Lion')
+    ) {
+        return (
+            <GoldenLionSvgGift
+                senderName={currentGift.senderName}
+                onComplete={handleDismiss}
+            />
+        );
+    }
+
+    if (
+        currentGift &&
+        (currentGift.label === 'Royal Crown' || currentGift.label === 'Crown')
+    ) {
+        return (
+            <RoyalCrownSvgGift
+                senderName={currentGift.senderName}
+                onComplete={handleDismiss}
+            />
+        );
+    }
 
     return (
         <AnimatePresence>

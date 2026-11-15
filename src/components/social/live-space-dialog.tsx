@@ -25,6 +25,9 @@ import AgoraRTC, {
   useRemoteAudioTracks,
 } from "agora-rtc-react";
 
+import KingLionGift from './gifts/KingLionGift';
+import { CLOUDFLARE_LION_GIFT_STREAM } from '@/lib/cloudflare-stream-gifts';
+
 const agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
 // Gift Animation Component to render full-screen premium gift animations
@@ -37,11 +40,23 @@ const GiftAnimationOverlay = ({ gifts }: { gifts: any[] }) => {
             // Only show gifts from the last 10 seconds to avoid old popups
             if (Date.now() - latestGift.timestamp < 10000) {
                 setCurrentGift(latestGift);
-                const timer = setTimeout(() => setCurrentGift(null), 4000);
-                return () => clearTimeout(timer);
+                if (latestGift.giftName !== 'Lion' && latestGift.giftName !== 'Majestic Lion') {
+                    const timer = setTimeout(() => setCurrentGift(null), 4000);
+                    return () => clearTimeout(timer);
+                }
             }
         }
     }, [gifts]);
+
+    if (currentGift && (currentGift.giftName === 'Lion' || currentGift.giftName === 'Majestic Lion')) {
+        return (
+            <KingLionGift
+                senderName={currentGift.senderName || 'Viewer'}
+                cloudflareVideoIdOrUrl={CLOUDFLARE_LION_GIFT_STREAM.hlsManifestUrl}
+                onComplete={() => setCurrentGift(null)}
+            />
+        );
+    }
 
     return (
         <AnimatePresence>
@@ -63,10 +78,9 @@ const GiftAnimationOverlay = ({ gifts }: { gifts: any[] }) => {
                     <motion.div
                         initial={{ scale: 0.1, y: 100, rotate: currentGift.giftName === 'Universe' ? -90 : 0 }}
                         animate={{ 
-                            scale: currentGift.giftName === 'Lion' ? [1, 1.5, 1.2, 1] : 2,
+                            scale: 2,
                             y: 0,
                             rotate: currentGift.giftName === 'Universe' ? 360 : 0,
-                            x: currentGift.giftName === 'Lion' ? [-10, 10, -10, 10, 0] : 0 // Shake effect for Lion
                         }}
                         transition={{ 
                             duration: currentGift.giftName === 'Universe' ? 4 : 0.8,

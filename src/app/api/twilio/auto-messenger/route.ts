@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTwilioSms, sendTwilioWhatsApp, broadcastTwilioNewsAlert } from '@/lib/twilio';
-import { adminDb as db } from '@/lib/firebase-admin';
+import { adminAuth, adminDb as db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 
 export async function POST(req: NextRequest) {
   try {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized: Admin token required.' }, { status: 401 });
+    }
+    const token = authHeader.split('Bearer ')[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    const adminDoc = await db.collection('admins').doc(decoded.uid).get();
+    if (!adminDoc.exists && decoded.email !== 'admin@lonkind.com') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required.' }, { status: 403 });
+    }
+
     const body = await req.json();
     const { recipientPhone, message, channel = 'sms', isBroadcast = false, newsTitle = 'Platform Update' } = body;
 

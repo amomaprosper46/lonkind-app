@@ -4,15 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SignUpForm } from '@/components/social/sign-up-form';
 import { SignInForm } from '@/components/social/sign-in-form';
-import { Users, Video, Share2, Loader2, WifiOff, AlertTriangle } from 'lucide-react';
+import { Users, Video, Share2, Loader2, WifiOff, AlertTriangle, Radio } from 'lucide-react';
 import SocialDashboard from './social-dashboard';
 import { auth, db, isFirebaseConfigValid } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, User, sendPasswordResetEmail, RecaptchaVerifier, updateProfile, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 import PresenceSystem from './presence-system';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+
+const LiveStreamView = dynamic(() => import('./live-stream-view'), { ssr: false });
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
@@ -79,27 +82,32 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
         setIsSaving(true);
         try {
             const usersRef = collection(db, 'users');
-            let finalHandle = '';
-            let isHandleUnique = false;
+            const isLonkindAdmin =
+                name.trim().toLowerCase() === 'lonkind' ||
+                user.email?.toLowerCase() === 'admin@lonkind.com';
+            let finalHandle = isLonkindAdmin ? 'lonkind' : '';
+            let isHandleUnique = isLonkindAdmin;
             const baseHandle = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
-            try {
-                // Try up to 10 times to find a unique handle
-                for (let i = 0; i < 10; i++) {
-                    const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
-                    const q = query(usersRef, where('handle', '==', handleCandidate));
-                    const handleDoc = await getDocs(q);
-                    if (handleDoc.empty) {
-                        finalHandle = handleCandidate;
-                        isHandleUnique = true;
-                        break;
+            if (!isLonkindAdmin) {
+                try {
+                    // Try up to 10 times to find a unique handle
+                    for (let i = 0; i < 10; i++) {
+                        const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
+                        const q = query(usersRef, where('handle', '==', handleCandidate));
+                        const handleDoc = await getDocs(q);
+                        if (handleDoc.empty) {
+                            finalHandle = handleCandidate;
+                            isHandleUnique = true;
+                            break;
+                        }
                     }
+                } catch (e: any) {
+                    console.warn("Could not verify handle uniqueness (permission denied or network issue). Proceeding with generated handle.", e);
+                    // Fallback: just use a highly random handle to avoid collisions
+                    finalHandle = baseHandle + Math.floor(10000 + Math.random() * 90000); 
+                    isHandleUnique = true;
                 }
-            } catch (e: any) {
-                console.warn("Could not verify handle uniqueness (permission denied or network issue). Proceeding with generated handle.", e);
-                // Fallback: just use a highly random handle to avoid collisions
-                finalHandle = baseHandle + Math.floor(10000 + Math.random() * 90000); 
-                isHandleUnique = true;
             }
 
             if (!isHandleUnique) {
@@ -108,23 +116,26 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
                  return;
             }
 
-            const avatarUrl = placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
-            const isProfessionalAccount = user.email?.toLowerCase() === 'admin@lonkind.com';
+            const avatarUrl = isLonkindAdmin
+                ? 'https://impactful-ideas.web.app/logo.png'
+                : placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
+            const isProfessionalAccount = isLonkindAdmin;
 
             try {
                 const userDocRef = doc(db, "users", user.uid);
                 await setDoc(userDocRef, {
                     uid: user.uid,
-                    name: name,
+                    name: isLonkindAdmin ? 'Lonkind' : name.trim(),
                     handle: finalHandle,
                     avatarUrl: avatarUrl,
                     ...(user.email && { email: user.email.toLowerCase() }),
                     ...(user.phoneNumber && { phoneNumber: user.phoneNumber }),
                     isProfessional: isProfessionalAccount,
-                    bio: isProfessionalAccount ? 'CEO of Lonkind. Connecting the world, one idea at a time.' : 'Hey there! I am using Lonkind.',
+                    isAdmin: isProfessionalAccount,
+                    bio: isProfessionalAccount ? 'Official Lonkind Account. Connecting the world, one idea at a time.' : 'Hey there! I am using Lonkind.',
                     followersCount: 0,
                     followingCount: 0,
-                    balance: isProfessionalAccount ? 123.45 : 0,
+                    balance: 0,
                     coins: 0,
                     diamonds: 0,
                 });
@@ -134,7 +145,7 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
             }
 
             try {
-                await updateProfile(user, { displayName: name, photoURL: avatarUrl });
+                await updateProfile(user, { displayName: isLonkindAdmin ? 'Lonkind' : name.trim(), photoURL: avatarUrl });
             } catch (e: any) {
                 console.error("Error during updateProfile:", e);
                 throw new Error("Auth profile update failed: " + e.message);
@@ -142,12 +153,9 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
 
             if (isProfessionalAccount) {
                 try {
-                  await addDummyFollowers({ userId: user.uid, count: 500000 });
-                  await setDoc(doc(db, 'users', user.uid), { followingCount: 1, followersCount: 500000, coins: 1000000, diamonds: 1000000 }, { merge: true });
-                  await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date() });
+                  await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date(), name: 'Lonkind' });
                 } catch (e: any) {
-                  console.error("Error during professional account setup:", e);
-                  throw new Error("Admin setup failed: " + e.message);
+                  console.warn("Admin registry setup notice:", e);
                 }
             }
 
@@ -198,6 +206,12 @@ function SocialHomePageInner() {
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
   const [isResetLoading, setIsResetLoading] = React.useState(false);
   const [resetEmail, setResetEmail] = React.useState('');
+
+  // Guest Live Stream Viewer State (Watch Live Before Sign-Up Wall)
+  const [guestLiveHostUid, setGuestLiveHostUid] = React.useState<string | null>(null);
+  const [isGuestAuthModalOpen, setIsGuestAuthModalOpen] = React.useState(false);
+  const [publicActiveStreams, setPublicActiveStreams] = React.useState<any[]>([]);
+  const guestIdRef = React.useRef<string>(`guest_${Math.floor(100000 + Math.random() * 900000)}`);
   
   const recaptchaContainerRef = React.useRef<HTMLDivElement>(null);
   const { t, isLoading: isLoadingTranslations } = useLocalization();
@@ -209,6 +223,15 @@ function SocialHomePageInner() {
 
     if (typeof window !== 'undefined' && typeof window.navigator !== 'undefined') {
         setIsOnline(window.navigator.onLine);
+    }
+
+    // Check URL for shared live link (?live=HOST_UID or ?host=HOST_UID) so guests jump straight into the live broadcast
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const liveParam = params.get('live') || params.get('host');
+      if (liveParam) {
+        setGuestLiveHostUid(liveParam.replace(/^live_/, ''));
+      }
     }
     
     window.addEventListener('online', handleOnline);
@@ -226,6 +249,26 @@ function SocialHomePageInner() {
         window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Listen for active live streams so guests on the landing page can watch in 1 tap
+  React.useEffect(() => {
+    if (user) return;
+    const streamsCol = collection(db, 'live_streams');
+    const q = query(streamsCol, where('status', '==', 'active'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((s: any) => {
+          if (s.startedAt && typeof s.startedAt.toDate === 'function') {
+            const ageMs = Date.now() - s.startedAt.toDate().getTime();
+            if (ageMs > 12 * 60 * 60 * 1000) return false;
+          }
+          return true;
+        });
+      setPublicActiveStreams(list);
+    }, () => {});
+    return () => unsub();
+  }, [user]);
   
     React.useEffect(() => {
     const checkIsNewUser = async () => {
@@ -260,6 +303,7 @@ function SocialHomePageInner() {
   }, [user]);
 
   const handleAuthSuccess = () => {
+    setIsGuestAuthModalOpen(false);
     // A small delay to allow the auth state to propagate and avoid a flicker.
     setTimeout(() => {
         setShowAuth(false);
@@ -338,6 +382,67 @@ function SocialHomePageInner() {
             </>
         );
       }
+
+      // If a visitor clicked a ?live=HOST_UID link or tapped "Watch Live as Guest", let them watch immediately!
+      if (guestLiveHostUid) {
+        return (
+          <>
+            <div ref={recaptchaContainerRef}></div>
+            <div className="fixed inset-0 z-50 bg-black flex flex-col">
+              <LiveStreamView
+                hostUid={guestLiveHostUid}
+                userId={guestIdRef.current}
+                userName="Guest Viewer"
+                isHost={false}
+                isGuest={true}
+                onLeave={() => {
+                  setGuestLiveHostUid(null);
+                  if (typeof window !== 'undefined') {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('live');
+                    url.searchParams.delete('host');
+                    window.history.replaceState({}, '', url.toString());
+                  }
+                }}
+                onRequireAuth={() => {
+                  setAuthView('signUp');
+                  setIsGuestAuthModalOpen(true);
+                }}
+              />
+            </div>
+
+            <Dialog open={isGuestAuthModalOpen} onOpenChange={setIsGuestAuthModalOpen}>
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-xl font-extrabold">
+                    <span>{authView === 'signUp' ? 'Join Lonkind' : t('sign_in_header')}</span>
+                  </DialogTitle>
+                  <DialogDescription>
+                    {authView === 'signUp'
+                      ? 'Create your account to chat live, connect with creators, and send virtual gifts!'
+                      : t('sign_in_desc')}
+                  </DialogDescription>
+                </DialogHeader>
+                {authView === 'signIn' ? (
+                  <SignInForm
+                    onSignIn={handleAuthSuccess}
+                    onForgotPassword={() => {
+                      setIsGuestAuthModalOpen(false);
+                      setIsResetDialogOpen(true);
+                    }}
+                    onShowSignUp={() => setAuthView('signUp')}
+                  />
+                ) : (
+                  <SignUpForm
+                    onSignUp={handleAuthSuccess}
+                    onShowSignIn={() => setAuthView('signIn')}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
+          </>
+        );
+      }
       
       return (
          <>
@@ -354,6 +459,33 @@ function SocialHomePageInner() {
               </header>
           
               <main className="flex-1">
+                  {publicActiveStreams.length > 0 && (
+                    <div className="bg-gradient-to-r from-rose-600 via-pink-600 to-indigo-600 text-white py-3 px-4 shadow-lg">
+                      <div className="container flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-3 w-3 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
+                          </span>
+                          <span className="font-extrabold text-sm sm:text-base">
+                            🔴 {publicActiveStreams[0].hostName || 'Creator'} is LIVE right now!
+                          </span>
+                          <span className="hidden md:inline text-xs text-rose-100">
+                            Watch the live broadcast instantly as a Guest — no login needed to preview!
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => setGuestLiveHostUid((publicActiveStreams[0].hostUid || publicActiveStreams[0].id).replace(/^live_/, ''))}
+                          className="bg-white text-rose-600 hover:bg-rose-50 font-black text-xs rounded-full px-4 shadow-md"
+                        >
+                          <Radio className="h-3.5 w-3.5 mr-1.5 animate-pulse" />
+                          Watch Live as Guest
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   <section className="container grid items-center gap-8 py-12 md:grid-cols-2 lg:py-24">
                   <div className="space-y-4">
                       <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
@@ -362,9 +494,21 @@ function SocialHomePageInner() {
                       <p className="text-lg text-muted-foreground">
                           {t('tagline')}
                       </p>
-                      <Button size="lg" onClick={openSignUpCard}>
-                          {t('launch_button')}
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button size="lg" onClick={openSignUpCard}>
+                            {t('launch_button')}
+                        </Button>
+                        {publicActiveStreams.length > 0 && (
+                          <Button
+                            size="lg"
+                            variant="outline"
+                            onClick={() => setGuestLiveHostUid((publicActiveStreams[0].hostUid || publicActiveStreams[0].id).replace(/^live_/, ''))}
+                            className="border-rose-500/50 text-rose-500 hover:bg-rose-500/10 font-bold"
+                          >
+                            🔴 Watch Live Now ({publicActiveStreams.length})
+                          </Button>
+                        )}
+                      </div>
                   </div>
                   <div className="flex items-center justify-center">
                       {showAuth ? (

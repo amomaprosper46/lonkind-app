@@ -49,12 +49,23 @@ export async function searchPosts(input: SearchPostsInput): Promise<SearchPostsO
   }
 
   try {
-    // 1. Tokenize the Search Input into lowercase match clusters
-    const searchTokens = searchText
+    // 1. Tokenize the Search Input into lowercase match clusters (supporting #hashtags and @handles)
+    const rawTokens = searchText
       .toLowerCase()
       .split(/\s+/)
-      .filter(token => token.length > 1)
-      .slice(0, 10); // Firestore maximum capacity limit for array-contains-any
+      .map(t => t.trim())
+      .filter(token => token.length > 1);
+
+    const expandedTokens: string[] = [];
+    for (const token of rawTokens) {
+      const clean = token.replace(/^[@#]/, '');
+      if (clean.length > 1) {
+        expandedTokens.push(clean);
+        expandedTokens.push(`#${clean}`);
+      }
+    }
+
+    const searchTokens = Array.from(new Set(expandedTokens)).slice(0, 10); // Firestore maximum capacity limit for array-contains-any
 
     if (searchTokens.length === 0) {
       return { posts: [] };
@@ -73,7 +84,9 @@ export async function searchPosts(input: SearchPostsInput): Promise<SearchPostsO
 
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      
+      if (data.isHidden || data.moderationStatus === 'removed') return;
+      if (data.groupId !== null && data.groupId !== undefined && data.groupId !== '') return;
+
       const timestampValue = data.timestamp?.toDate 
         ? data.timestamp.toDate().toISOString() 
         : new Date().toISOString();

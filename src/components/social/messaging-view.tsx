@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft, BadgeCheck, Star, Heart, Medal, Globe, Languages } from 'lucide-react';
+import { Search, Send, MessageSquare, Loader2, Copy, Check, Mic, Square, Trash2, ChevronLeft, BadgeCheck, Star, Heart, Medal, Globe, Languages, Image as ImageIcon } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -21,6 +21,120 @@ import { sendPushNotification } from '@/app/actions/sendNotification';
 import Link from 'next/link';
 import { MessageActionMenu } from '@/components/social/MessageActionMenu';
 import { useLongPress } from '@/hooks/useLongPress';
+import { useLiveUserProfile } from '@/hooks/use-live-user-profile';
+
+function ConversationListItem({
+    convo,
+    otherUser,
+    isSelected,
+    onSelect,
+    lastMessageText,
+}: {
+    convo: Conversation;
+    otherUser: { uid: string; name: string; avatarUrl: string; handle?: string; isProfessional?: boolean; badges?: string[] };
+    isSelected: boolean;
+    onSelect: (convo: Conversation) => void;
+    lastMessageText: (convo: Conversation) => string;
+}) {
+    const liveOther = useLiveUserProfile(otherUser.uid, otherUser.avatarUrl, otherUser.name, otherUser.handle);
+    const displayHandle = liveOther.handle !== 'member' ? liveOther.handle : otherUser.handle;
+
+    return (
+        <div
+            className={`flex items-center p-4 cursor-pointer border-b border-border/50 hover:bg-accent/50 transition-colors ${isSelected ? 'bg-accent' : ''}`}
+            onClick={() => onSelect(convo)}
+        >
+            <Avatar className="h-12 w-12">
+                <AvatarImage src={liveOther.avatarUrl} alt={liveOther.name || 'User'} />
+                <AvatarFallback>{liveOther.name?.charAt(0) || '?'}</AvatarFallback>
+            </Avatar>
+            <div className="ml-4 flex-1 overflow-hidden">
+                <div className="flex justify-between items-center select-none">
+                    <div className="flex items-center gap-1 overflow-hidden">
+                        {displayHandle ? (
+                            <Link href={`/profile/${displayHandle}`} className="font-semibold truncate hover:underline" onClick={(e) => e.stopPropagation()}>
+                                {liveOther.name || 'Unknown'}
+                            </Link>
+                        ) : (
+                            <p className="font-semibold truncate">{liveOther.name || 'Unknown'}</p>
+                        )}
+                        {(liveOther.isProfessional || otherUser.isProfessional || displayHandle === 'admin_lonkind') && (
+                            <BadgeCheck className="h-4 w-4 text-primary shrink-0" />
+                        )}
+                    </div>
+                    {convo.lastMessage?.timestamp && (
+                        <p className="text-xs text-muted-foreground whitespace-nowrap">
+                            {formatDistanceToNow(convo.lastMessage.timestamp.toDate(), { addSuffix: true })}
+                        </p>
+                    )}
+                </div>
+                <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground truncate">{lastMessageText(convo)}</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ActiveChatHeader({
+    otherUser,
+    conversationId,
+    onBack,
+}: {
+    otherUser?: { uid: string; name: string; avatarUrl: string; handle?: string; isProfessional?: boolean; badges?: string[] };
+    conversationId?: string;
+    onBack: () => void;
+}) {
+    const liveOther = useLiveUserProfile(otherUser?.uid, otherUser?.avatarUrl, otherUser?.name, otherUser?.handle);
+    const displayHandle = liveOther.handle !== 'member' ? liveOther.handle : otherUser?.handle;
+
+    return (
+        <CardHeader className="p-4 border-b flex-row items-center justify-between gap-4 bg-background">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Button variant="ghost" size="icon" className="md:hidden shrink-0" onClick={onBack}>
+                    <ChevronLeft className="h-5 w-5" />
+                </Button>
+                <div className="relative shrink-0">
+                    <Avatar>
+                        {displayHandle ? (
+                            <Link href={`/profile/${displayHandle}`}>
+                                <AvatarImage src={liveOther.avatarUrl} alt={liveOther.name || 'User'} />
+                                <AvatarFallback>{liveOther.name?.charAt(0) || '?'}</AvatarFallback>
+                            </Link>
+                        ) : (
+                            <>
+                                <AvatarImage src={liveOther.avatarUrl} alt={liveOther.name || 'User'} />
+                                <AvatarFallback>{liveOther.name?.charAt(0) || '?'}</AvatarFallback>
+                            </>
+                        )}
+                    </Avatar>
+                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-background" title="Active" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1 select-none overflow-hidden">
+                        {displayHandle ? (
+                            <Link href={`/profile/${displayHandle}`}>
+                                <h2 className="text-base sm:text-lg font-bold truncate hover:underline">{liveOther.name || 'Unknown'}</h2>
+                            </Link>
+                        ) : (
+                            <h2 className="text-base sm:text-lg font-bold truncate">{liveOther.name || 'Unknown'}</h2>
+                        )}
+                        {(liveOther.isProfessional || otherUser?.isProfessional || displayHandle === 'admin_lonkind') && (
+                            <BadgeCheck className="h-4 w-4 text-primary shrink-0" />
+                        )}
+                    </div>
+                    <span className="text-[11px] text-emerald-500 font-medium">Audio & Video Call Ready</span>
+                </div>
+            </div>
+            <CallButton
+                targetUserId={otherUser?.uid}
+                targetUserName={liveOther.name || otherUser?.name || 'User'}
+                targetUserAvatar={liveOther.avatarUrl || otherUser?.avatarUrl || ''}
+                conversationId={conversationId}
+            />
+        </CardHeader>
+    );
+}
 
 const conversationsRef = collection(db, 'conversations');
 
@@ -39,8 +153,11 @@ interface Message {
     senderId: string;
     text?: string;
     audioUrl?: string;
-    type: 'text' | 'audio';
+    imageUrl?: string;
+    audioDurationSec?: number;
+    type: 'text' | 'audio' | 'image';
     timestamp: any;
+    deletedFor?: string[];
 }
 
 interface MessagingViewProps {
@@ -101,9 +218,33 @@ function MessageBubble({ msg, user, setSelectedMessage, setActionMenuOpen, handl
         `max-w-xs lg:max-w-md p-3 rounded-xl ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-background shadow-sm'} ${msg.type === 'audio' ? 'p-2' : ''}`
       )}>
         {msg.type === 'text' ? (
-          <p>{msg.text}</p>
+          <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+        ) : msg.type === 'image' && msg.imageUrl ? (
+          <div className="space-y-1.5">
+            <a href={msg.imageUrl} target="_blank" rel="noopener noreferrer">
+              <img
+                src={msg.imageUrl}
+                alt="Chat attachment"
+                className="max-h-64 rounded-lg object-cover border border-border/30"
+              />
+            </a>
+            {msg.text && <p className="text-sm pt-1">{msg.text}</p>}
+          </div>
         ) : (
-          <audio controls src={msg.audioUrl} className="h-10" />
+          <div className="flex flex-col gap-1.5 min-w-[210px] sm:min-w-[240px]">
+            <div className="flex items-center justify-between text-[11px] font-bold opacity-90 px-1">
+              <span className="inline-flex items-center gap-1">
+                <Mic className="h-3.5 w-3.5" /> Voice Note
+              </span>
+              {typeof msg.audioDurationSec === 'number' && msg.audioDurationSec > 0 && (
+                <span>
+                  {Math.floor(msg.audioDurationSec / 60)}:
+                  {String(msg.audioDurationSec % 60).padStart(2, '0')}
+                </span>
+              )}
+            </div>
+            <audio controls src={msg.audioUrl} preload="metadata" className="h-9 w-full rounded-lg" />
+          </div>
         )}
 
         {/* AI Voice Note & Chat Translator Result Banner */}
@@ -166,8 +307,11 @@ export default function MessagingView({ initialConversationId }: MessagingViewPr
     const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
 
     const [isRecording, setIsRecording] = useState(false);
+    const [recordingSeconds, setRecordingSeconds] = useState(0);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const imageInputRef = useRef<HTMLInputElement | null>(null);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -425,40 +569,76 @@ const handleSendMessage = async () => {
         }
     };
     
-    const handleSendAudio = async () => {
-        if (!audioBlob || !user || !selectedConversation) return;
+    const handleSendAudioBlob = async (blobToUpload: Blob, durationSec?: number) => {
+        if (!blobToUpload || !user || !selectedConversation) return;
         setIsSending(true);
         try {
-            const storageRef = ref(storage, `audio_messages/${selectedConversation.id}/${Date.now()}.webm`);
-            const snapshot = await uploadBytes(storageRef, audioBlob);
+            const ext = blobToUpload.type.includes('mp4') ? 'm4a' : 'webm';
+            const storageRef = ref(storage, `audio_messages/${selectedConversation.id}/${Date.now()}.${ext}`);
+            const snapshot = await uploadBytes(storageRef, blobToUpload, {
+                contentType: blobToUpload.type || 'audio/webm',
+            });
             const downloadURL = await getDownloadURL(snapshot.ref);
 
-             await addDoc(collection(db, 'conversations', selectedConversation.id, 'messages'), {
+            await addDoc(collection(db, 'conversations', selectedConversation.id, 'messages'), {
                 senderId: user.uid,
                 audioUrl: downloadURL,
+                audioDurationSec: durationSec ?? recordingSeconds,
                 type: 'audio',
                 timestamp: serverTimestamp(),
             });
 
             setAudioBlob(null);
+            setRecordingSeconds(0);
 
             const recipientUid = selectedConversation.participantUids.find(id => id !== user.uid);
             if (recipientUid) {
-                 sendPushNotification(
-                     recipientUid,
-                     `${user.displayName || 'Someone'} sent you a voice message`,
-                     '🎙️ New voice message received.',
-                     { url: `/?view=messages&conversationId=${selectedConversation.id}`, type: 'new_message', conversationId: selectedConversation.id }
-                 ).catch(console.error);
+                sendPushNotification(
+                    recipientUid,
+                    `${user.displayName || 'Someone'} sent you a voice note`,
+                    '🎙️ New voice note received.',
+                    { url: `/?view=messages&conversationId=${selectedConversation.id}`, type: 'new_message', conversationId: selectedConversation.id }
+                ).catch(console.error);
             }
-
         } catch (e) {
             console.error("Error sending audio message:", e);
-            toast({ variant: 'destructive', title: 'Send Failed', description: 'Could not send voice message.' });
+            toast({ variant: 'destructive', title: 'Send Failed', description: 'Could not send voice note.' });
         } finally {
             setIsSending(false);
         }
-    }
+    };
+
+    const handleSendAudio = async () => {
+        if (!audioBlob) return;
+        await handleSendAudioBlob(audioBlob, recordingSeconds);
+    };
+
+    const handleSendImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user || !selectedConversation) return;
+        setIsSending(true);
+        try {
+            const storageRef = ref(storage, `chat_images/${selectedConversation.id}/${Date.now()}_${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            await addDoc(collection(db, 'conversations', selectedConversation.id, 'messages'), {
+                senderId: user.uid,
+                imageUrl: downloadURL,
+                text: newMessage.trim() || undefined,
+                type: 'image',
+                timestamp: serverTimestamp(),
+            });
+
+            setNewMessage('');
+        } catch (err) {
+            console.error('Error sending image in chat:', err);
+            toast({ variant: 'destructive', title: 'Upload Failed', description: 'Could not send image.' });
+        } finally {
+            setIsSending(false);
+            if (imageInputRef.current) imageInputRef.current.value = '';
+        }
+    };
 
      const handleCopyMessage = (text: string, messageId: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -473,31 +653,79 @@ const handleSendMessage = async () => {
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorderRef.current = new MediaRecorder(stream);
+            const preferredMimeTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/mp4',
+                'audio/ogg;codecs=opus',
+            ];
+            let selectedMime = '';
+            if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+                selectedMime = preferredMimeTypes.find((m) => MediaRecorder.isTypeSupported(m)) || '';
+            }
+            const recorder = selectedMime
+                ? new MediaRecorder(stream, { mimeType: selectedMime })
+                : new MediaRecorder(stream);
+
+            mediaRecorderRef.current = recorder;
             const audioChunks: Blob[] = [];
 
-            mediaRecorderRef.current.ondataavailable = event => {
-                audioChunks.push(event.data);
+            recorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
             };
 
-            mediaRecorderRef.current.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                setAudioBlob(audioBlob);
-                 stream.getTracks().forEach(track => track.stop());
+            recorder.onstop = () => {
+                const mimeType = recorder.mimeType || selectedMime || 'audio/webm';
+                const recordedBlob = new Blob(audioChunks, { type: mimeType });
+                setAudioBlob(recordedBlob);
+                stream.getTracks().forEach((track) => track.stop());
+                if (recordingTimerRef.current) {
+                    clearInterval(recordingTimerRef.current);
+                    recordingTimerRef.current = null;
+                }
             };
 
-            mediaRecorderRef.current.start();
+            setRecordingSeconds(0);
+            setAudioBlob(null);
+            recorder.start();
             setIsRecording(true);
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingSeconds((prev) => prev + 1);
+            }, 1000);
         } catch (err) {
             console.error('Error accessing microphone:', err);
-            toast({ variant: 'destructive', title: 'Mic Access Denied', description: 'Please allow microphone access to record audio.' });
+            toast({ variant: 'destructive', title: 'Mic Access Denied', description: 'Please allow microphone access to record a voice note.' });
         }
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current) {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
-            setIsRecording(false);
+        }
+        setIsRecording(false);
+        if (recordingTimerRef.current) {
+            clearInterval(recordingTimerRef.current);
+            recordingTimerRef.current = null;
+        }
+    };
+
+    const cancelRecording = () => {
+        if (mediaRecorderRef.current) {
+            mediaRecorderRef.current.onstop = () => {
+                mediaRecorderRef.current?.stream?.getTracks().forEach((t) => t.stop());
+            };
+            if (mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+            }
+        }
+        setIsRecording(false);
+        setAudioBlob(null);
+        setRecordingSeconds(0);
+        if (recordingTimerRef.current) {
+            clearInterval(recordingTimerRef.current);
+            recordingTimerRef.current = null;
         }
     };
 
@@ -515,7 +743,8 @@ const handleSendMessage = async () => {
 
     const lastMessageText = (convo: Conversation) => {
         if (!convo.lastMessage) return "No messages yet";
-        if (convo.lastMessage.type === 'audio') return "Sent a voice message";
+        if (convo.lastMessage.type === 'audio') return "🎙️ Voice note";
+        if ((convo.lastMessage as any).type === 'image') return "📷 Sent a photo";
         return convo.lastMessage.text || "";
     }
 
@@ -555,38 +784,16 @@ const handleSendMessage = async () => {
                                 if (!otherUser) return null;
 
                                 return (
-                                <div key={convo.id} 
-                                    className={`flex items-center p-4 cursor-pointer border-b border-border/50 hover:bg-accent/50 transition-colors ${selectedConversation?.id === convo.id ? 'bg-accent' : ''}`}
-                                    onClick={() => handleSelectConversation(convo)}>
-                                    <Avatar className="h-12 w-12">
-                                        <AvatarImage src={otherUser.avatarUrl} alt={otherUser.name || 'User'} />
-                                        {/* Added optional chaining and fallback character */}
-                                        <AvatarFallback>{otherUser.name?.charAt(0) || '?'}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="ml-4 flex-1 overflow-hidden">
-                                        <div className="flex justify-between items-center select-none">
-                                            <div className="flex items-center gap-1 overflow-hidden">
-                                                {otherUser.handle ? (
-                                                    <Link href={`/profile/${otherUser.handle}`} className="font-semibold truncate hover:underline" onClick={(e) => e.stopPropagation()}>
-                                                        {otherUser.name || 'Unknown'}
-                                                    </Link>
-                                                ) : (
-                                                    <p className="font-semibold truncate">{otherUser.name || 'Unknown'}</p>
-                                                )}
-                                                {(otherUser.isProfessional || otherUser.handle === 'admin_lonkind') && <BadgeCheck className="h-4 w-4 text-primary shrink-0" />}
-                                            </div>
-                                            {convo.lastMessage?.timestamp && (
-                                                 <p className="text-xs text-muted-foreground whitespace-nowrap">
-                                                    {formatDistanceToNow(convo.lastMessage.timestamp.toDate(), { addSuffix: true })}
-                                                 </p>
-                                            )}
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <p className="text-sm text-muted-foreground truncate">{lastMessageText(convo)}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )})
+                                    <ConversationListItem
+                                        key={convo.id}
+                                        convo={convo}
+                                        otherUser={otherUser}
+                                        isSelected={selectedConversation?.id === convo.id}
+                                        onSelect={handleSelectConversation}
+                                        lastMessageText={lastMessageText}
+                                    />
+                                );
+                            })
                         )}
                     </ScrollArea>
                 </div>
@@ -595,40 +802,16 @@ const handleSendMessage = async () => {
                 <div className={cn("flex flex-col bg-secondary/30 transition-all", selectedConversation ? "w-full md:w-2/3" : "hidden md:flex md:w-2/3")}>
                     {selectedConversation ? (
                         <>
-                            <CardHeader className="p-4 border-b flex-row items-center gap-4 bg-background">
-                                <Button variant="ghost" size="icon" className="md:hidden shrink-0" onClick={() => setSelectedConversation(null)}>
-                                    <ChevronLeft className="h-5 w-5" />
-                                </Button>
-                                <Avatar>
-                                    {getOtherParticipant(selectedConversation)?.handle ? (
-                                        <Link href={`/profile/${getOtherParticipant(selectedConversation)?.handle}`}>
-                                            <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
-                                            <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
-                                        </Link>
-                                    ) : (
-                                        <>
-                                            <AvatarImage src={getOtherParticipant(selectedConversation)?.avatarUrl} alt={getOtherParticipant(selectedConversation)?.name || 'User'} />
-                                            <AvatarFallback>{getOtherParticipant(selectedConversation)?.name?.charAt(0) || '?'}</AvatarFallback>
-                                        </>
-                                    )}
-                                </Avatar>
-                                 <div className="flex items-center gap-1 select-none overflow-hidden">
-                                    {getOtherParticipant(selectedConversation)?.handle ? (
-                                        <Link href={`/profile/${getOtherParticipant(selectedConversation)?.handle}`}>
-                                            <h2 className="text-xl font-bold truncate hover:underline">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
-                                        </Link>
-                                    ) : (
-                                        <h2 className="text-xl font-bold truncate">{getOtherParticipant(selectedConversation)?.name || 'Unknown'}</h2>
-                                    )}
-                                     {(getOtherParticipant(selectedConversation)?.isProfessional || getOtherParticipant(selectedConversation)?.handle === 'admin_lonkind') && <BadgeCheck className="h-5 w-5 text-primary shrink-0" />}
-                                 </div>
-                                 <CallButton targetUserId={getOtherParticipant(selectedConversation)?.uid} />
-                            </CardHeader>
+                            <ActiveChatHeader
+                                otherUser={getOtherParticipant(selectedConversation)}
+                                conversationId={selectedConversation.id}
+                                onBack={() => setSelectedConversation(null)}
+                            />
                             <ScrollArea className="flex-1 p-4">
                                 <div className="space-y-2">
                                                     {messages
                       // Filter out messages the user has deleted
-                      .filter(msg => !(msg.deletedFor?.includes(user?.uid)))
+                      .filter(msg => !(user?.uid && msg.deletedFor?.includes(user.uid)))
                       .map(msg => {
                         return (
                           <MessageBubble
@@ -690,42 +873,73 @@ const handleSendMessage = async () => {
                             </ScrollArea>
                             <CardContent className="p-4 border-t bg-background">
                                 {isRecording ? (
-                                    <div className="flex items-center gap-2">
-                                        <Button size="icon" variant="destructive" onClick={stopRecording}>
-                                            <Square className="h-5 w-5"/>
+                                    <div className="flex items-center gap-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl px-3.5 py-2">
+                                        <Button size="icon" variant="ghost" onClick={cancelRecording} className="h-9 w-9 rounded-full text-rose-400 hover:text-rose-300 hover:bg-rose-500/20" title="Cancel Voice Note">
+                                            <Trash2 className="h-4 w-4" />
                                         </Button>
-                                        <div className="flex-1 text-center text-muted-foreground flex items-center justify-center gap-2">
-                                           <span className="relative flex h-3 w-3">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                        <div className="flex-1 flex items-center justify-center gap-2.5 text-sm font-semibold text-rose-400">
+                                            <span className="relative flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
                                             </span>
-                                            Recording...
+                                            <span>
+                                                Recording Voice Note ({Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')})
+                                            </span>
                                         </div>
+                                        <Button size="sm" variant="destructive" onClick={stopRecording} className="rounded-xl gap-1.5 font-bold">
+                                            <Square className="h-3.5 w-3.5" /> Stop & Preview
+                                        </Button>
                                     </div>
                                 ) : audioBlob ? (
-                                     <div className="flex items-center gap-2">
-                                        <Button size="icon" variant="destructive" onClick={() => setAudioBlob(null)}>
-                                            <Trash2 className="h-5 w-5"/>
+                                    <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl px-3 py-2">
+                                        <Button size="icon" variant="ghost" onClick={() => { setAudioBlob(null); setRecordingSeconds(0); }} className="h-9 w-9 rounded-full text-rose-400 hover:bg-rose-500/20" title="Discard Voice Note">
+                                            <Trash2 className="h-4 w-4" />
                                         </Button>
-                                        <audio controls src={URL.createObjectURL(audioBlob)} className="flex-1 h-10"></audio>
-                                        <Button size="icon" onClick={handleSendAudio} disabled={isSending}>
-                                            {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5"/>}
+                                        <audio controls src={URL.createObjectURL(audioBlob)} className="flex-1 h-9" />
+                                        <Button size="sm" onClick={handleSendAudio} disabled={isSending} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold gap-1.5">
+                                            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                            Send Voice Note
                                         </Button>
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2">
+                                        <input
+                                            ref={imageInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleSendImageFile}
+                                            className="hidden"
+                                        />
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => imageInputRef.current?.click()}
+                                            disabled={isSending}
+                                            title="Send Photo"
+                                            className="rounded-full shrink-0 text-muted-foreground hover:text-indigo-400"
+                                        >
+                                            <ImageIcon className="h-5 w-5" />
+                                        </Button>
                                         <Input 
-                                            placeholder="Type a message..." 
+                                            placeholder="Type a message or record a voice note..." 
                                             value={newMessage}
                                             onChange={handleTyping}
-                                            onKeyPress={(e) => e.key === 'Enter' && !isSending && handleSendMessage()}
+                                            onKeyDown={(e) => e.key === 'Enter' && !isSending && handleSendMessage()}
                                             disabled={isSending}
+                                            className="rounded-full"
                                         />
-                                        <Button size="icon" onClick={handleSendMessage} disabled={isSending || !newMessage.trim()}>
-                                            <Send className="h-5 w-5"/>
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            onClick={startRecording}
+                                            disabled={isSending}
+                                            title="Record Voice Note"
+                                            className="rounded-full shrink-0 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+                                        >
+                                            <Mic className="h-5 w-5" />
                                         </Button>
-                                        <Button size="icon" variant="outline" onClick={startRecording}>
-                                            <Mic className="h-5 w-5"/>
+                                        <Button size="icon" onClick={handleSendMessage} disabled={isSending || !newMessage.trim()} className="rounded-full shrink-0">
+                                            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                                         </Button>
                                     </div>
                                 )}

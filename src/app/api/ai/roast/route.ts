@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { adminAuth } from '@/lib/firebase-admin';
+
+const roastRateLimit = new Map<string, number>();
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +11,27 @@ export async function POST(req: NextRequest) {
     if (!userId || !name || !handle) {
       return NextResponse.json({ error: 'User ID, name, and handle are required.' }, { status: 400 });
     }
+
+    const authHeader = req.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const decoded = await adminAuth.verifyIdToken(authHeader.split('Bearer ')[1]);
+        if (decoded.uid !== userId) {
+          return NextResponse.json({ error: 'Forbidden: User ID mismatch.' }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid authentication token.' }, { status: 401 });
+      }
+    }
+
+    const lastCall = roastRateLimit.get(userId) || 0;
+    if (Date.now() - lastCall < 15_000) {
+      return NextResponse.json(
+        { error: 'Please wait a few seconds before generating another roast.' },
+        { status: 429 }
+      );
+    }
+    roastRateLimit.set(userId, Date.now());
 
     // Lazy-load the AI flow to prevent SSR/build crashes
     const { generateProfileRoast } = await import('@/ai/flows/generate-profile-roast');

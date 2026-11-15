@@ -22,9 +22,9 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatDistanceToNow } from 'date-fns';
 import dynamic from 'next/dynamic';
-import { CallBackProps, STATUS } from 'react-joyride';
+import { STATUS } from 'react-joyride';
 
-const Joyride = dynamic(() => import('react-joyride').then(mod => mod.Joyride), { ssr: false });
+const Joyride = dynamic<any>(() => import('react-joyride').then(mod => mod.Joyride as any), { ssr: false });
 import PersonalAiView from './personal-ai-view';
 import AICommandCenterView from './ai-command-center-view';
 import LeaderboardView from './leaderboard-view';
@@ -36,10 +36,12 @@ import SuperGiftOverlay from './super-gift-overlay';
 
 import { DockedChatProvider, useDockedChat } from './docked-chat-context';
 import DockedChatContainer from './docked-chat-container';
+import IncomingCallOverlay from './incoming-call-overlay';
 
 // ✅ Decoupled Import Architecture
 import { searchPosts } from '@/ai/flows/search-posts';
 import type { SearchPostsOutput } from '@/ai/flows/search-posts';
+import { recommendationTracker } from '@/lib/recommendation-tracker';
 
 import { Separator } from '../ui/separator';
 import { useSearchParams } from 'next/navigation';
@@ -84,7 +86,7 @@ type SocialDashboardProps = {
   onSignOut: () => void;
 };
 
-type View = 'home' | 'explore' | 'groups' | 'friends' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin' | 'live';
+type View = 'home' | 'explore' | 'groups' | 'friends' | 'suggestions' | 'friend-requests' | 'messages' | 'videos' | 'saved' | 'settings' | 'ai-command-center' | 'personal-ai' | 'story-writer' | 'spaces' | 'nearby' | 'group-details' | 'wallet' | 'profile' | 'leaderboard' | 'admin' | 'live';
 
 export interface SuggestedUser {
     id: string;
@@ -238,20 +240,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [selectedLiveHostUid, setSelectedLiveHostUid] = useState<string | null>(null);
   const [activeLiveStreams, setActiveLiveStreams] = useState<any[]>([]);
 
-  // Real-time listener for all active streams (restricted to local dev server while Live Stream is locked on production)
+  // Real-time listener for all active streams
   useEffect(() => {
-    const isDevServer =
-      typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.startsWith('192.168.') ||
-        window.location.hostname.startsWith('10.'));
-
-    if (!isDevServer) {
-      setActiveLiveStreams([]);
-      return;
-    }
-
     const streamsCol = collection(db, 'live_streams');
     const q = query(streamsCol, where('status', '==', 'active'));
     const unsub = onSnapshot(q, (snapshot) => {
@@ -287,6 +277,24 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [mutedUsers, setMutedUsers] = useState<MutedUser[]>([]);
+  const [exploreInitialSearchQuery, setExploreInitialSearchQuery] = useState('');
+
+  const blockedUidsSet = React.useMemo(
+    () => new Set(blockedUsers.map((b) => b.uid)),
+    [blockedUsers]
+  );
+  const mutedUidsSet = React.useMemo(
+    () => new Set(mutedUsers.map((m) => m.uid)),
+    [mutedUsers]
+  );
+  const activeLiveUidsSet = React.useMemo(() => {
+    const set = new Set<string>();
+    activeLiveStreams.forEach((s) => {
+      const uid = (s.hostUid || s.id || '').replace(/^live_/, '');
+      if (uid) set.add(uid);
+    });
+    return set;
+  }, [activeLiveStreams]);
 
   const [friendRequests, setFriendRequests] = useState<any[]>([]);
   const [friendSuggestions, setFriendSuggestions] = useState<any[]>([]);
@@ -303,6 +311,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const conversationId = searchParams.get('conversationId');
     const groupId = searchParams.get('groupId');
     const tag = searchParams.get('hashtag') || searchParams.get('tag');
+    const liveHost = searchParams.get('live') || searchParams.get('host');
+
+    if (liveHost) {
+      setSelectedLiveHostUid(liveHost.replace(/^live_/, ''));
+      setCurrentView('live');
+      return;
+    }
 
     if (tag) {
       setActiveHashtag(tag.startsWith('#') ? tag : `#${tag}`);
@@ -322,6 +337,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   }, [searchParams]);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const welcomeTriggeredRef = useRef(false);
   
     useEffect(() => {
         const userDocRef = doc(db, 'users', user.uid);
@@ -329,6 +345,33 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             if (docSnap.exists()) {
                 const userData = docSnap.data() as CurrentUser;
                 setCurrentUser(userData);
+
+                // Automatically trigger official follow + welcome DM once for new users (no free coins)
+                const isLonkindAdmin =
+                    userData.name?.trim().toLowerCase() === 'lonkind' ||
+                    userData.handle?.toLowerCase() === 'lonkind' ||
+                    userData.handle === 'admin_lonkind' ||
+                    userData.email?.toLowerCase() === 'admin@lonkind.com';
+
+                if (isLonkindAdmin && !welcomeTriggeredRef.current) {
+                    welcomeTriggeredRef.current = true;
+                    setDoc(doc(db, 'admins', user.uid), { addedAt: new Date(), name: 'Lonkind' }, { merge: true }).catch(() => {});
+                    if (!userData.isProfessional || userData.handle !== 'lonkind') {
+                        updateDoc(userDocRef, {
+                            isProfessional: true,
+                            isAdmin: true,
+                            ...(userData.name?.trim().toLowerCase() === 'lonkind' ? { name: 'Lonkind', handle: 'lonkind' } : {}),
+                        }).catch(() => {});
+                    }
+                } else if (!(userData as any).welcomePackClaimed && !welcomeTriggeredRef.current && user.uid !== '7KTSOaVtOGepngVE7LO3prZvzuo1') {
+                    welcomeTriggeredRef.current = true;
+                    user.getIdToken().then((token) => {
+                        fetch('/api/onboarding/welcome-pack', {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}` },
+                        }).catch(() => {});
+                    }).catch(() => {});
+                }
             } else {
                  setCurrentUser({
                     name: user.displayName || 'Anonymous',
@@ -577,6 +620,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     });
                     transaction.update(postRef, { [`reactions.${reaction}`]: increment(1) });
                     newReactionsMap.set(postId, reaction);
+                    recommendationTracker.track(currentUser.uid, {
+                        type: 'reaction',
+                        post: { ...postData, id: postId },
+                        postId,
+                        authorUid,
+                        reactionType: reaction,
+                    });
                     
                     if (!existingReaction && authorUid !== currentUser.uid) {
                          const notificationRef = doc(collection(db, 'users', authorUid, 'notifications'));
@@ -659,6 +709,12 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             }
             
             await batch.commit();
+            recommendationTracker.track(currentUser.uid, {
+                type: 'comment',
+                post: { ...postData, id: postId },
+                postId,
+                authorUid,
+            });
             return true;
         } catch(e) {
             console.error("Error adding comment: ", e);
@@ -709,7 +765,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const handleAcceptFriendRequest = async (notif: Notification, e: React.MouseEvent) => {
         e.preventDefault(); // Prevent link navigation
         e.stopPropagation();
-        if (!currentUser) return;
+        if (!currentUser || !notif.fromUser) return;
         const senderId = notif.fromUser.uid;
 
         try {
@@ -847,6 +903,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 newAvatarUrl = await getDownloadURL(snapshot.ref);
                 updates.avatarUrl = newAvatarUrl;
             }
+
+            if (data.coverFile) {
+                const coverToUpload = await compressImage(data.coverFile);
+                const coverStorageRef = ref(storage, `covers/${authUser.uid}/${Date.now()}_${coverToUpload.name}`);
+                const coverSnap = await uploadBytes(coverStorageRef, coverToUpload);
+                updates.coverUrl = await getDownloadURL(coverSnap.ref);
+            }
             
             if (Object.keys(updates).length > 0) {
                  const userDocRef = doc(db, 'users', authUser.uid);
@@ -859,8 +922,27 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     photoURL: updates.avatarUrl || currentUser.avatarUrl,
                 });
             }
+
+            // Retroactively sync new avatarUrl, name, and handle across all historical posts,
+            // comments, direct message conversations, friends lists, and notifications
+            if (updates.avatarUrl || updates.name || updates.handle) {
+                authUser.getIdToken().then((token) => {
+                    fetch('/api/profile/sync-avatar', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                            avatarUrl: updates.avatarUrl || currentUser.avatarUrl,
+                            name: updates.name || currentUser.name,
+                            handle: updates.handle || currentUser.handle,
+                        }),
+                    }).catch((err) => console.warn('Background avatar sync warning:', err));
+                }).catch(() => {});
+            }
     
-            toast({ title: 'Profile Updated', description: 'Your changes have been saved.' });
+            toast({ title: 'Profile Updated', description: 'Your profile and historical posts have been updated everywhere.' });
             return true;
         } catch (error) {
             console.error("Error updating profile:", error);
@@ -968,12 +1050,18 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     };
     
     const handleUnblockUser = async (uid: string) => {
-      // Retained placeholder for continued logic
+        if (!currentUser) return;
+        try {
+            await deleteDoc(doc(db, 'users', currentUser.uid, 'blockedUsers', uid));
+        } catch (error) {
+            console.error("Error unblocking user:", error);
+            throw error;
+        }
     };
 
     const { openChat } = useDockedChat();
 
-    const handleJoyrideCallback = async (data: CallBackProps) => {
+    const handleJoyrideCallback = async (data: any) => {
         const { status } = data;
         const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
@@ -1031,7 +1119,11 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <Button variant="ghost" size="icon" onClick={() => changeView('home')} className="mr-3 -ml-2 h-9 w-9 text-slate-400 hover:text-foreground">
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
-                    <span className="font-semibold text-base tracking-tight capitalize text-foreground">{currentView.replace('-', ' ')}</span>
+                    <span className="font-semibold text-base tracking-tight capitalize text-foreground">
+                        {currentView === 'ai-command-center' || currentView === 'personal-ai' || currentView === 'story-writer'
+                            ? 'AI Space'
+                            : currentView.replace('-', ' ')}
+                    </span>
                 </div>
             )}
 
@@ -1055,10 +1147,23 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                         <Input
                             id="omni-search-input"
-                            placeholder="Search accounts or posts..."
+                            placeholder="Search accounts, posts, #hashtags, or topics..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onFocus={() => setIsSearchFocused(true)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && searchQuery.trim()) {
+                                    if (currentUser?.uid) {
+                                        recommendationTracker.track(currentUser.uid, {
+                                            type: 'search',
+                                            searchQuery: searchQuery.trim(),
+                                        });
+                                    }
+                                    setExploreInitialSearchQuery(searchQuery.trim());
+                                    setIsSearchFocused(false);
+                                    changeView('explore');
+                                }
+                            }}
                             className="w-full bg-secondary/60 border-border text-foreground placeholder:text-muted-foreground pl-9 pr-4 rounded-xl focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0 h-9 transition-all"
                         />
                         {isSearchFocused && (searchQuery.trim() !== '' || isSearchLoading) && (
@@ -1103,6 +1208,24 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                                 ))}
                                             </div>
                                         )}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const q = searchQuery.trim();
+                                                if (q && currentUser?.uid) {
+                                                    recommendationTracker.track(currentUser.uid, {
+                                                        type: 'search',
+                                                        searchQuery: q,
+                                                    });
+                                                }
+                                                setExploreInitialSearchQuery(q);
+                                                setIsSearchFocused(false);
+                                                changeView('explore');
+                                            }}
+                                            className="w-full mt-2 pt-2 border-t border-slate-800/60 text-xs font-semibold text-indigo-400 hover:text-indigo-300 py-1.5 text-center transition-colors"
+                                        >
+                                            View all search results for &ldquo;{searchQuery}&rdquo; →
+                                        </button>
                                     </>
                                 )}
                             </div>
@@ -1111,7 +1234,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
 
                     {/* Nav Actions */}
                     <div className="flex items-center gap-2">
-                        {/* AI Quick-Launch Button (visible on all screens) */}
+                        {/* Lonki AI Quick-Launch Button (visible on all screens) */}
                         <Button
                             variant="ghost"
                             size="icon"
@@ -1264,16 +1387,25 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     <NavigationItem label="Saved Content" icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} />
                     
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Ecosystem</div>
-                    <NavigationItem label="AI Command Center" icon={Wand2} active={currentView === 'ai-command-center'} onClick={() => changeView('ai-command-center')} />
-                    <NavigationItem label="Lonki Personal AI" icon={BrainCircuit} active={currentView === 'personal-ai'} onClick={() => changeView('personal-ai')} />
-                    <NavigationItem label="Automated Storyteller" icon={Lightbulb} active={currentView === 'story-writer'} onClick={() => changeView('story-writer')} />
+                    <NavigationItem
+                        label="Lonki Personal AI"
+                        icon={BrainCircuit}
+                        active={currentView === 'personal-ai'}
+                        onClick={() => changeView('personal-ai')}
+                    />
+                    <NavigationItem
+                        label="AI Space"
+                        icon={Wand2}
+                        active={currentView === 'ai-command-center' || currentView === 'story-writer'}
+                        onClick={() => changeView('ai-command-center')}
+                    />
 
                     <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Finance & Tools</div>
                     <NavigationItem id="tour-wallet" label="Creator Wallet" icon={Wallet} active={currentView === 'wallet'} onClick={() => changeView('wallet')} />
                     <NavigationItem label="Leaderboard" icon={Trophy} active={currentView === 'leaderboard'} onClick={() => changeView('leaderboard')} />
                     <NavigationItem label="Settings" icon={Cog} active={currentView === 'settings'} onClick={() => changeView('settings')} />
                     
-                    {(currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind') && (
+                    {(currentUser?.name?.trim().toLowerCase() === 'lonkind' || currentUser?.handle?.toLowerCase() === 'lonkind' || currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind' || (currentUser as any)?.isAdmin) && (
                         <>
                             <div className="pt-4 pb-2 px-3 text-xs font-semibold text-rose-500 uppercase tracking-wider">Administration</div>
                             <NavigationItem label="System Dashboard" icon={ShieldAlert} active={currentView === 'admin'} onClick={() => changeView('admin')} />
@@ -1316,11 +1448,22 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onComment={(post) => setSelectedPostForComments(post)}
                                 onSavePost={handleSavePost}
                                 onDeletePost={handleDeletePost}
+                                onReportPost={handleReportPost}
+                                onMuteUser={handleMuteUser}
+                                mutedUids={mutedUidsSet}
+                                blockedUids={blockedUidsSet}
+                                activeLiveUids={activeLiveUidsSet}
+                                onWatchLive={(hostUid) => {
+                                    setSelectedLiveHostUid(hostUid.replace(/^live_/, ''));
+                                    changeView('live');
+                                }}
+                                onOpenVideos={() => changeView('videos')}
+                                initialSearchQuery={exploreInitialSearchQuery}
                             />
                         )}
                         {currentView === 'groups' && <GroupsView currentUser={currentUser} onGroupSelect={(id: string) => changeView('group-details', id)} />}
                         {currentView === 'suggestions' && <SuggestionsPage />}
-                        {currentView === 'friend-requests' && <FriendRequestsPage currentUser={currentUser} friendRequests={friendRequests} friendSuggestions={friendSuggestions} onAcceptRequest={handleAcceptFriendRequest} onAddFriend={handleAddFriend} sentRequests={sentFriendRequests} />}
+                        {currentView === 'friend-requests' && <FriendRequestsPage />}
                         {currentView === 'friends' && <FriendsView currentUser={currentUser} friendRequests={friendRequests} friendSuggestions={friendSuggestions} onAcceptRequest={handleAcceptFriendRequest} onAddFriend={handleAddFriend} sentRequests={sentFriendRequests} />}
                         {currentView === 'group-details' && activeGroupId && (
                             <GroupDetailsView 
@@ -1358,10 +1501,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onDeletePost={handleDeletePost}
                             />
                         )}
-                        {currentView === 'ai-command-center' && <AICommandCenterView currentUser={currentUser} />}
-                        {currentView === 'spaces' && <SpacesView currentUser={currentUser} />}
                         {currentView === 'personal-ai' && <PersonalAiView />}
-                        {currentView === 'story-writer' && <StoryGeneratorView currentUser={currentUser} />}
+                        {(currentView === 'ai-command-center' || currentView === 'story-writer') && (
+                            <AICommandCenterView
+                                currentUser={currentUser}
+                                initialTab={currentView === 'story-writer' ? 'story' : 'assistant'}
+                            />
+                        )}
+                        {currentView === 'spaces' && <SpacesView currentUser={currentUser} />}
                         {currentView === 'wallet' && <WalletView currentUser={currentUser} />}
                         {currentView === 'leaderboard' && <LeaderboardView />}
                         {currentView === 'settings' && (
@@ -1371,9 +1518,12 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onUpdateProfile={handleUpdateProfile} 
                                 onPasswordReset={handlePasswordReset}
                                 onDeleteAccount={handleDeleteAccount}
+                                blockedUsers={blockedUsers}
+                                onUnblockUser={handleUnblockUser}
+                                onGoToWallet={() => changeView('wallet')}
                             />
                         )}
-                        {currentView === 'admin' && (currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind') && <AdminDashboardView />}
+                        {currentView === 'admin' && (currentUser?.name?.trim().toLowerCase() === 'lonkind' || currentUser?.handle?.toLowerCase() === 'lonkind' || currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind' || (currentUser as any)?.isAdmin) && <AdminDashboardView />}
                         {currentView === 'live' && (
                             <LiveStreamView
                                 hostUid={(selectedLiveHostUid || currentUser?.uid || '').replace(/^live_/, '')}
@@ -1557,9 +1707,8 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                     const input = document.getElementById('omni-search-input');
                                     if (input) { input.focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
                                 }} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Search className="mr-2 h-4 w-4" /> Search</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('ai-command-center')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wand2 className="mr-2 h-4 w-4" /> AI Command Center</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('personal-ai')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><BrainCircuit className="mr-2 h-4 w-4" /> Lonki Personal AI</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('story-writer')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Lightbulb className="mr-2 h-4 w-4" /> Automated Storyteller</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => changeView('personal-ai')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><BrainCircuit className="mr-2 h-4 w-4 text-indigo-400" /> Lonki Personal AI</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => changeView('ai-command-center')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wand2 className="mr-2 h-4 w-4 text-purple-400" /> AI Space</DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-slate-800" />
                                 <DropdownMenuItem onClick={() => changeView('leaderboard')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Trophy className="mr-2 h-4 w-4 text-amber-400" /> Leaderboard</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => changeView('settings')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Cog className="mr-2 h-4 w-4 text-indigo-400" /> Settings</DropdownMenuItem>
@@ -1573,6 +1722,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             )}
 
             {/* Micro-Overlay Global Drawer Shell for Post Discussions Comments sheet thread views */}
+            <IncomingCallOverlay currentUserUid={currentUser?.uid} currentUserName={currentUser?.name} />
             {selectedPostForComments && (
                 <CommentSheet
                     post={selectedPostForComments}

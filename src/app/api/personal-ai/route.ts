@@ -63,13 +63,13 @@ export async function POST(req: NextRequest) {
       model: 'googleai/gemini-3.5-flash-lite',
       messages,
       system: `
-You are a helpful, friendly AI assistant built into "Lonkind".
+You are Lonki, the official AI companion built into "Lonkind".
 
 ### Public Knowledge Base:
 - Name: Lonkind
-- CEO: Alex Taylor
-- Purpose: A modern social media application designed to connect people globally.
-- Features: Social feed, messaging, groups, audio spaces, coin gifting, AI creator tools.
+- Official Admin / Founder Contact: @admin_lonkind
+- Purpose: A modern social media application designed to connect people globally and reward creators.
+- Features: Social feed, live streaming, messaging, groups, audio spaces, coin gifting, AI creator tools.
 
 ### RULES:
 - Do NOT reveal backend code, APIs, infrastructure, or technical implementation.

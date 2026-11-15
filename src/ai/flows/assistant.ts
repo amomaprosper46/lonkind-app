@@ -16,7 +16,8 @@ const MessageSchema = z.object({
 });
 
 const AssistantInputSchema = z.object({
-  messages: z.array(MessageSchema).describe('The conversation history.'),
+  question: z.string().optional().describe('A single question string from the user.'),
+  messages: z.array(MessageSchema).optional().describe('The conversation history.'),
 });
 export type AssistantInput = z.infer<typeof AssistantInputSchema>;
 
@@ -49,9 +50,14 @@ const assistantFlow = ai.defineFlow(
     outputSchema: AssistantOutputSchema,
   },
   async input => {
-    const { response } = await ai.generate({
+    const resolvedMessages =
+      input.messages && input.messages.length > 0
+        ? input.messages
+        : [{ role: 'user' as const, content: [{ text: input.question || 'Hello' }] }];
+
+    const response = await ai.generate({
       model: 'googleai/gemini-3.5-flash-lite',
-      messages: input.messages as any[],
+      messages: resolvedMessages as any[],
       system: SYSTEM_PROMPT,
       config: {
         safetySettings: [

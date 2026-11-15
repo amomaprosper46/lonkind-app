@@ -2,27 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb as db } from '@/lib/firebase-admin';
 import crypto from 'crypto';
+import {
+  buildIdempotencyKey,
+  commitDoubleEntryJournalInTx,
+  DoubleEntryLeg,
+} from '@/lib/ledger';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 
 /**
- * POST: Paystack Webhook Handler
- *
- * Receives server-to-server transfer result notifications from Paystack.
- * Secured by:
- *  - HMAC SHA512 signature verification (x-paystack-signature header)
- *  - Idempotency check (each webhook reference stored in webhookLogs)
- *
- * Configure in Paystack Dashboard → Settings → Webhooks:
- *   URL: https://lonkind.com/api/paystack/webhook
+ * POST: Paystack Webhook Handler (ACID Double-Entry Ledger)
  */
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
     const signature = req.headers.get('x-paystack-signature') || '';
 
-    // ── HMAC SHA512 Signature Verification ───────────────────────
-    // Reject any request not signed by Paystack's secret key
     const expectedSig = crypto
       .createHmac('sha512', PAYSTACK_SECRET_KEY)
       .update(rawBody)
@@ -32,53 +27,78 @@ export async function POST(req: NextRequest) {
       console.warn('[Paystack Webhook] Invalid signature — request rejected');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
-    // ─────────────────────────────────────────────────────────────
 
     const payload = JSON.parse(rawBody);
     const { event, data } = payload;
 
     if (!data?.reference) {
-      return NextResponse.json({ received: true }); // Ignore malformed payloads
-    }
-
-    // ── Idempotency: skip already-processed webhooks ─────────────
-    const webhookLogRef = db.collection('webhookLogs').doc(`ps_${data.reference}`);
-    const alreadyProcessed = await webhookLogRef.get();
-    if (alreadyProcessed.exists) {
-      return NextResponse.json({ received: true, duplicate: true });
-    }
-    // Mark as processed immediately (before any DB writes to prevent races)
-    await webhookLogRef.set({
-      event,
-      reference: data.reference,
-      processedAt: FieldValue.serverTimestamp(),
-    });
-    // ─────────────────────────────────────────────────────────────
-
-    // Strip the _exec suffix added during transfer initiation
-    const payoutId = data.reference.replace('_exec', '');
-    const payoutRef = db.collection('payoutRequests').doc(payoutId);
-    const payoutSnap = await payoutRef.get();
-
-    if (!payoutSnap.exists) {
-      // Could be a coin-purchase transfer or unknown — log and acknowledge
-      console.info(`[Paystack Webhook] ${event} — no matching payoutRequest for ${payoutId}`);
       return NextResponse.json({ received: true });
     }
 
-    const payoutData = payoutSnap.data()!;
-    const userRef = db.collection('users').doc(payoutData.userId);
-    const auditRef = db.collection('wallet_audit_logs').doc();
+    const webhookLogRef = db.collection('webhookLogs').doc(`ps_${data.reference}_${event}`);
+    const payoutId = String(data.reference).replace('_exec', '');
+    const payoutRef = db.collection('payoutRequests').doc(payoutId);
 
     if (event === 'transfer.success') {
-      // ── Transfer confirmed by Paystack ──────────────────────────
       await db.runTransaction(async (tx) => {
+        const [webhookSnap, payoutSnap] = await Promise.all([
+          tx.get(webhookLogRef),
+          tx.get(payoutRef),
+        ]);
+        if (webhookSnap.exists || !payoutSnap.exists) return;
+
+        const payoutData = payoutSnap.data()!;
+        if (payoutData.status === 'completed') return;
+
+        const userRef = db.collection('users').doc(payoutData.userId);
+        const diamondAmount = Number(payoutData.diamondAmount || 0);
+        const idempotencyKey = buildIdempotencyKey('payout_settled_ps', payoutId);
+
+        if (diamondAmount > 0) {
+          const legs: DoubleEntryLeg[] = [
+            {
+              accountId: 'LONKIND_PAYOUT_ESCROW_DIAMONDS',
+              accountKind: 'SYSTEM_ESCROW',
+              asset: 'DIAMONDS',
+              direction: 'DEBIT',
+              amount: diamondAmount,
+              balanceBefore: diamondAmount,
+              balanceAfter: 0,
+            },
+            {
+              accountId: 'EXTERNAL_GATEWAY_PAYSTACK',
+              accountKind: 'EXTERNAL_GATEWAY',
+              asset: 'DIAMONDS',
+              direction: 'CREDIT',
+              amount: diamondAmount,
+              balanceBefore: 0,
+              balanceAfter: diamondAmount,
+            },
+          ];
+
+          commitDoubleEntryJournalInTx(db, tx, {
+            journalType: 'PAYOUT_SETTLED',
+            idempotencyKey,
+            reference: payoutId,
+            actorUid: payoutData.userId,
+            description: `Paystack transfer settled for payout ${payoutId}`,
+            legs,
+            metadata: { transferCode: data.transfer_code || null, event },
+          });
+        }
+
+        tx.set(webhookLogRef, {
+          event,
+          reference: data.reference,
+          processedAt: FieldValue.serverTimestamp(),
+        });
+
         tx.update(payoutRef, {
           status: 'completed',
           paystackTransferCode: data.transfer_code || null,
           webhookConfirmedAt: FieldValue.serverTimestamp(),
         });
-        // Notify creator
+
         const notifRef = userRef.collection('notifications').doc();
         tx.set(notifRef, {
           type: 'payout_approved',
@@ -87,33 +107,76 @@ export async function POST(req: NextRequest) {
           timestamp: FieldValue.serverTimestamp(),
           read: false,
         });
-        // Audit log
-        tx.set(auditRef, {
-          userId: payoutData.userId,
-          type: 'payout_confirmed',
-          delta: 0,
-          currency: 'diamonds',
-          reference: payoutId,
-          gatewayRef: data.transfer_code || data.reference,
-          payoutMethod: 'paystack',
-          timestamp: FieldValue.serverTimestamp(),
-          ip: 'paystack-webhook',
-        });
       });
-
     } else if (event === 'transfer.failed' || event === 'transfer.reversed') {
-      // ── Transfer failed — refund diamonds to creator ────────────
       await db.runTransaction(async (tx) => {
+        const [webhookSnap, payoutSnap] = await Promise.all([
+          tx.get(webhookLogRef),
+          tx.get(payoutRef),
+        ]);
+        if (webhookSnap.exists || !payoutSnap.exists) return;
+
+        const payoutData = payoutSnap.data()!;
+        // Guard against double-refund if already failed/rejected
+        if (['failed', 'rejected', 'cancelled'].includes(payoutData.status)) return;
+
+        const userRef = db.collection('users').doc(payoutData.userId);
+        const userSnap = await tx.get(userRef);
+        const diamondsBefore = Number(userSnap.data()?.diamonds || 0);
+        const refundDiamonds = Number(payoutData.diamondAmount || 0);
+        const diamondsAfter = diamondsBefore + refundDiamonds;
+        const idempotencyKey = buildIdempotencyKey('payout_refund_ps', payoutId);
+
+        if (refundDiamonds > 0) {
+          const legs: DoubleEntryLeg[] = [
+            {
+              accountId: 'LONKIND_PAYOUT_ESCROW_DIAMONDS',
+              accountKind: 'SYSTEM_ESCROW',
+              asset: 'DIAMONDS',
+              direction: 'DEBIT',
+              amount: refundDiamonds,
+              balanceBefore: refundDiamonds,
+              balanceAfter: 0,
+            },
+            {
+              accountId: payoutData.userId,
+              accountKind: 'USER',
+              asset: 'DIAMONDS',
+              direction: 'CREDIT',
+              amount: refundDiamonds,
+              balanceBefore: diamondsBefore,
+              balanceAfter: diamondsAfter,
+            },
+          ];
+
+          commitDoubleEntryJournalInTx(db, tx, {
+            journalType: 'PAYOUT_REFUND',
+            idempotencyKey,
+            reference: payoutId,
+            actorUid: payoutData.userId,
+            description: `Paystack transfer failed/reversed — refunded ${refundDiamonds} diamonds`,
+            legs,
+            metadata: { reason: data.reason || event, event },
+          });
+        }
+
+        tx.set(webhookLogRef, {
+          event,
+          reference: data.reference,
+          processedAt: FieldValue.serverTimestamp(),
+        });
+
         tx.update(payoutRef, {
           status: 'failed',
           failureReason: data.reason || event,
           webhookFailedAt: FieldValue.serverTimestamp(),
         });
-        // Refund diamonds
+
         tx.update(userRef, {
-          diamonds: FieldValue.increment(payoutData.diamondAmount || 0),
+          diamonds: diamondsAfter,
+          updatedAt: FieldValue.serverTimestamp(),
         });
-        // Notify creator
+
         const notifRef = userRef.collection('notifications').doc();
         tx.set(notifRef, {
           type: 'payout_rejected',
@@ -123,26 +186,12 @@ export async function POST(req: NextRequest) {
           timestamp: FieldValue.serverTimestamp(),
           read: false,
         });
-        // Audit log
-        tx.set(auditRef, {
-          userId: payoutData.userId,
-          type: 'payout_refund',
-          delta: payoutData.diamondAmount || 0,
-          currency: 'diamonds',
-          reference: payoutId,
-          gatewayRef: data.reference,
-          payoutMethod: 'paystack',
-          timestamp: FieldValue.serverTimestamp(),
-          ip: 'paystack-webhook',
-        });
       });
     }
 
     return NextResponse.json({ received: true });
-
   } catch (error: any) {
     console.error('[Paystack Webhook] Error:', error);
-    // Always return 200 to Paystack — they retry on non-2xx responses
     return NextResponse.json({ received: true, error: 'Processing error' });
   }
 }
