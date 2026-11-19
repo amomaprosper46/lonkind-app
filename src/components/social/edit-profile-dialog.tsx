@@ -30,6 +30,8 @@ export interface ProfileData {
     coverFile?: File;
     businessUrl?: string;
     followerPrivacy?: 'public' | 'private';
+    lastSeenVisible?: boolean;
+    ghostMode?: boolean;
 }
 
 interface EditProfileDialogProps {

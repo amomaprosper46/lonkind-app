@@ -45,6 +45,8 @@ self.addEventListener('notificationclick', (event) => {
       targetUrl = '/?view=friends';
     } else if (data.type === 'payout_approved' || data.type === 'payout_rejected') {
       targetUrl = '/?view=wallet';
+    } else if (data.type === 'scheduled_live_started' && data.hostUid) {
+      targetUrl = `/?view=live&host=${encodeURIComponent(data.hostUid)}`;
     }
   }
 

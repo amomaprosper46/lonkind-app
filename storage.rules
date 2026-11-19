@@ -2,52 +2,120 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Helper function: Checks if the user is authenticated
+
+    /* ====================================================================== */
+    /* SECURITY HELPERS                                                       */
+    /* ====================================================================== */
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Helper function: Checks if the token uid matches the target folder parameter
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    /**
-     * PUBLIC/APP SYSTEM ASSETS
-     * Anyone can read (e.g., app logos, public landing images). Only admins can update them.
-     */
-    match /public/{allPaths=**} {
-      allow read: if true;
-      allow write: if isAuthenticated() && 
+    function isAdmin() {
+      return isAuthenticated() &&
         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    /**
-     * USER PERSONAL VAULT (Profiles, Uploads, Personal Media)
-     * Files are strictly isolated to the authenticated owner.
-     */
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if isOwner(userId);
-    }
-    
-    /**
-     * POSTS MEDIA
-     * Anyone can read posts. Only the owner can write to their folder.
-     */
-    match /posts/{userId}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+    function isImageUnder5MB() {
+      return request.resource != null
+        && request.resource.contentType != null
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 5 * 1024 * 1024;
     }
 
-    /**
-     * AVATARS MEDIA
-     * Anyone can view avatars. Only the owner can upload their avatar.
-     */
+    function isVideoUnder50MB() {
+      return request.resource != null
+        && request.resource.contentType != null
+        && request.resource.contentType.matches('video/.*')
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    function isSafePostMediaUnder50MB() {
+      return request.resource != null
+        && request.resource.contentType != null
+        && (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType.matches('video/.*') ||
+          request.resource.contentType.matches('audio/.*')
+        )
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    /* ====================================================================== */
+    /* PUBLIC / APP SYSTEM ASSETS                                             */
+    /* ====================================================================== */
+
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* AVATARS (`avatars/{userId}/...`) — image/* ONLY, max 5 MB, owner-only  */
+    /* ====================================================================== */
+
     match /avatars/{userId}/{allPaths=**} {
       allow read: if true;
-      allow write: if isOwner(userId);
+      allow write: if isOwner(userId) && isImageUnder5MB();
+      allow delete: if isOwner(userId) || isAdmin();
     }
-    
+
+    /* ====================================================================== */
+    /* STREAM THUMBNAILS & COVERS — image/* ONLY, max 5 MB, owner-only        */
+    /* ====================================================================== */
+
+    match /thumbnails/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isImageUnder5MB();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    match /stream_thumbnails/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isImageUnder5MB();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* LIVE HIGHLIGHT CLIPS (`clips/{userId}/...`) — video/*, 50 MB, owner    */
+    /* ====================================================================== */
+
+    match /clips/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isVideoUnder50MB();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* FEED POSTS MEDIA (`posts/{userId}/...`)                                */
+    /* ====================================================================== */
+
+    match /posts/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isSafePostMediaUnder50MB();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* USER PERSONAL VAULT (`users/{userId}/...`)                             */
+    /* ====================================================================== */
+
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isSafePostMediaUnder50MB();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* DEFAULT DENY FALLBACK                                                  */
+    /* ====================================================================== */
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
   }
 }

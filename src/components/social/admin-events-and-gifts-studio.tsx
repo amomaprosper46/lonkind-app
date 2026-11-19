@@ -29,12 +29,20 @@ import { toast } from '@/hooks/use-toast';
 
 const GIFT_PRESETS = [
   {
-    id: 'lion',
-    name: 'Golden Lion',
-    emoji: '🦁',
-    price: 10000,
+    id: 'yacht',
+    name: 'Luxury Yacht',
+    emoji: '🛥️',
+    price: 30000,
     defaultPrompt:
-      'A majestic male lion sculpted from gleaming 24K liquid metallic gold emerging from a golden portal, thick flowing golden mane, fierce glowing amber eyes, roaring powerfully with shockwaves and floating gold embers',
+      'A luxury golden-and-white mega yacht cruising across glowing bioluminescent neon ocean waves at night with golden fireworks exploding above the deck',
+  },
+  {
+    id: 'phoenix',
+    name: 'Fire Phoenix',
+    emoji: '🦅',
+    price: 40000,
+    defaultPrompt:
+      'A mythical celestial Fire Phoenix made of radiant molten gold and solar flames rising with massive glowing wings spread wide, scattering golden embers and shockwaves',
   },
   {
     id: 'crown',
@@ -125,7 +133,7 @@ export default function AdminEventsAndGiftsStudio({
   const [isUpdatingPerm, setIsUpdatingPerm] = useState(false);
 
   // 4. AI Gift Video Studio State
-  const [selectedGiftId, setSelectedGiftId] = useState('lion');
+  const [selectedGiftId, setSelectedGiftId] = useState('phoenix');
   const [aiPrompt, setAiPrompt] = useState(GIFT_PRESETS[0].defaultPrompt);
   const [aiEngine, setAiEngine] = useState<'veo2' | 'fal'>('veo2');
   const [previewVideoUrl, setPreviewVideoUrl] = useState('');

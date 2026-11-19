@@ -5,26 +5,56 @@ import { doc, updateDoc } from 'firebase/firestore';
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 
+export interface PushTokenResult {
+    token: string | null;
+    permission: NotificationPermission | 'unsupported';
+}
+
+/**
+ * Ensures push notification permission is requested cleanly if not already granted,
+ * retrieves the user's Web Push FCM token, saves it to `users/{uid}.fcmToken`,
+ * and returns the token + permission state for features like "Remind Me".
+ */
+export async function ensurePushTokenForUser(uid: string): Promise<PushTokenResult> {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+        return { token: null, permission: 'unsupported' };
+    }
+
+    try {
+        let permission: NotificationPermission = Notification.permission;
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
+        }
+        if (permission !== 'granted') {
+            return { token: null, permission };
+        }
+
+        const messaging = await getMessagingInstance();
+        if (!messaging) {
+            return { token: null, permission: 'unsupported' };
+        }
+
+        const token = await getToken(messaging, VAPID_KEY ? { vapidKey: VAPID_KEY } : undefined);
+        if (token && uid) {
+            try {
+                const userRef = doc(db, 'users', uid);
+                await updateDoc(userRef, { fcmToken: token });
+            } catch {
+                // Non-fatal if profile doc update is throttled
+            }
+        }
+        return { token: token || null, permission };
+    } catch {
+        return { token: null, permission: Notification.permission };
+    }
+}
+
 /**
  * Requests notification permission and saves the FCM token to Firestore.
  * Uses the lazy getMessagingInstance() to ensure FCM is properly initialized.
  */
 export async function requestNotificationPermission(uid: string) {
-    try {
-        const messaging = await getMessagingInstance();
-        if (!messaging) return; // Not supported on this browser
-
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return;
-
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-        if (token) {
-            const userRef = doc(db, 'users', uid);
-            await updateDoc(userRef, { fcmToken: token });
-        }
-    } catch (err) {
-        // Silent — permission denied or not supported
-    }
+    await ensurePushTokenForUser(uid);
 }
 
 /**

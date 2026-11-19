@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
-import {
-  buildIdempotencyKey,
-  commitDoubleEntryJournalInTx,
-  DoubleEntryLeg,
-} from '@/lib/ledger';
+import { settleCoinPurchaseWithFirstTimeBonus } from '@/lib/first-purchase-bonus';
 
-const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY;
+const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 
 const CURRENCY_RATE_PER_COIN: Record<string, number> = {
   NGN: 10,
@@ -35,12 +30,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let verifyUrl = '';
-    if (transaction_id) {
-      verifyUrl = `https://api.flutterwave.com/v3/transactions/${transaction_id}/verify`;
-    } else {
-      verifyUrl = `https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`;
-    }
+    const verifyUrl = transaction_id
+      ? `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(transaction_id)}/verify`
+      : `https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`;
 
     const verifyResponse = await fetch(verifyUrl, {
       headers: {
@@ -62,22 +54,32 @@ export async function POST(req: NextRequest) {
     }
 
     const txData = verifyData.data;
-    const { userId, coinAmount, purpose } = txData.meta || {};
-    const amountPaid = txData.amount;
+    const meta = txData.meta || {};
+    let userId = meta.userId;
+    let numCoins = Number(meta.coinAmount || meta.coins || 0);
+    const amountPaid = Number(txData.amount || 0);
     const currency = (txData.currency || 'NGN').toUpperCase();
     const txRef = String(txData.tx_ref || reference || transaction_id);
 
-    if (!userId || !coinAmount || Number(coinAmount) <= 0) {
+    if (!userId || !numCoins) {
+      const pendingSnap = await adminDb.collection('transactions').doc(txRef).get();
+      if (pendingSnap.exists) {
+        const p = pendingSnap.data() || {};
+        if (!userId && p.userId) userId = p.userId;
+        if (!numCoins && p.coinsAdded) numCoins = Number(p.coinsAdded);
+      }
+    }
+
+    if (!userId || !numCoins || numCoins <= 0) {
       return NextResponse.json({ error: 'Invalid payment metadata' }, { status: 400 });
     }
 
-    const numCoins = Number(coinAmount);
-    const rate = CURRENCY_RATE_PER_COIN[currency] || CURRENCY_RATE_PER_COIN['NGN'];
-    const expectedMinAmount = numCoins * rate * 0.7;
+    const rate = CURRENCY_RATE_PER_COIN[currency] || CURRENCY_RATE_PER_COIN.NGN;
+    const expectedMinAmount = Number((numCoins * rate * 0.55).toFixed(2));
 
-    if (amountPaid < expectedMinAmount) {
+    if (amountPaid + 0.01 < expectedMinAmount) {
       console.error(
-        `[Flutterwave Verify] Fraud/tamper detected for user ${userId}. Paid ${currency} ${amountPaid}, expected minimum ${expectedMinAmount} for ${numCoins} coins.`
+        `[Flutterwave Verify] Price mismatch for user ${userId}. Paid ${currency} ${amountPaid}, expected minimum ${expectedMinAmount} for ${numCoins} coins.`
       );
       return NextResponse.json(
         { error: 'Payment amount does not match coins requested' },
@@ -85,94 +87,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = adminDb;
-    const txDocRef = db.collection('transactions').doc(txRef);
-    const userRef = db.collection('users').doc(userId);
-    const idempotencyKey = buildIdempotencyKey('coin_purchase_flutterwave', txRef);
-    const idempotencyRef = db.collection('ledger_idempotency').doc(idempotencyKey);
-
-    const txResult = await db.runTransaction(async (transaction) => {
-      const [idemSnap, existingTxSnap, userSnap] = await Promise.all([
-        transaction.get(idempotencyRef),
-        transaction.get(txDocRef),
-        transaction.get(userRef),
-      ]);
-
-      if (idemSnap.exists || existingTxSnap.exists) {
-        return { alreadyProcessed: true };
-      }
-
-      const coinsBefore = Number(userSnap.data()?.coins || 0);
-      const coinsAfter = coinsBefore + numCoins;
-
-      const legs: DoubleEntryLeg[] = [
-        {
-          accountId: 'EXTERNAL_GATEWAY_FLUTTERWAVE',
-          accountKind: 'EXTERNAL_GATEWAY',
-          asset: 'COINS',
-          direction: 'DEBIT',
-          amount: numCoins,
-          balanceBefore: numCoins,
-          balanceAfter: 0,
-        },
-        {
-          accountId: userId,
-          accountKind: 'USER',
-          asset: 'COINS',
-          direction: 'CREDIT',
-          amount: numCoins,
-          balanceBefore: coinsBefore,
-          balanceAfter: coinsAfter,
-        },
-      ];
-
-      const { journalId } = commitDoubleEntryJournalInTx(db, transaction, {
-        journalType: 'COIN_PURCHASE',
-        idempotencyKey,
-        reference: txRef,
-        actorUid: userId,
-        description: `Flutterwave verified coin purchase (${numCoins} L) ref=${txRef}`,
-        legs,
-        metadata: {
-          gateway: 'flutterwave',
-          reference: txRef,
-          flwTransactionId: txData.id,
-          amountPaid,
-          currency,
-          numCoins,
-        },
-      });
-
-      transaction.set(
-        txDocRef,
-        {
-          id: txRef,
-          journalId,
-          userId,
-          flutterwaveReference: txRef,
-          flwTransactionId: txData.id,
-          amount: amountPaid,
-          currency: currency || 'NGN',
-          coinsAdded: numCoins,
-          coinsBefore,
-          coinsAfter,
-          status: 'success',
-          type: purpose || 'coin_purchase',
-          time: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      transaction.set(
-        userRef,
-        {
-          coins: coinsAfter,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return { alreadyProcessed: false, journalId };
+    const txResult = await settleCoinPurchaseWithFirstTimeBonus(adminDb, {
+      gateway: 'flutterwave',
+      providerTransactionId: String(txData.id || transaction_id || txRef),
+      reference: txRef,
+      userId,
+      baseCoins: numCoins,
+      amountPaid,
+      currency: currency || 'NGN',
+      purpose: meta.purpose || 'coin_purchase',
+      source: 'flutterwave_verify',
     });
 
     if (txResult.alreadyProcessed) {
@@ -180,15 +104,22 @@ export async function POST(req: NextRequest) {
         success: true,
         message: 'Already processed',
         alreadyProcessed: true,
-        coinsAdded: numCoins,
+        coinsAdded: txResult.totalCoinsCredited,
+        baseCoins: txResult.baseCoins,
+        bonusCoins: txResult.bonusCoins,
       });
     }
 
     return NextResponse.json({
       success: true,
       journalId: txResult.journalId,
-      message: `Successfully credited ${numCoins} coins to your account!`,
-      coinsAdded: numCoins,
+      message:
+        txResult.bonusCoins > 0
+          ? `Successfully credited ${txResult.baseCoins.toLocaleString()} coins + ${txResult.bonusCoins.toLocaleString()} First-Time Bonus coins!`
+          : `Successfully credited ${txResult.totalCoinsCredited.toLocaleString()} coins to your account!`,
+      coinsAdded: txResult.totalCoinsCredited,
+      baseCoins: txResult.baseCoins,
+      bonusCoins: txResult.bonusCoins,
     });
   } catch (error: any) {
     console.error('Flutterwave verify error:', error);

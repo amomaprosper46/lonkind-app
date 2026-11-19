@@ -7,6 +7,7 @@ import {
   commitDoubleEntryJournalInTx,
   DoubleEntryLeg,
 } from '@/lib/ledger';
+import { settleCoinPurchaseWithFirstTimeBonus } from '@/lib/first-purchase-bonus';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 
@@ -36,6 +37,46 @@ export async function POST(req: NextRequest) {
     }
 
     const webhookLogRef = db.collection('webhookLogs').doc(`ps_${data.reference}_${event}`);
+
+    // =========================================================================
+    // CASE 1: COIN PURCHASE (`charge.success`)
+    // =========================================================================
+    if (event === 'charge.success' && data?.status === 'success') {
+      const reference = String(data.reference);
+      const meta = data.metadata || {};
+      let userId = meta.userId;
+      let numCoins = Number(meta.coinAmount || meta.coins || 0);
+      const amountPaid = Number(data.amount || 0) / 100;
+      const currency = (data.currency || 'NGN').toUpperCase();
+
+      if (!userId || !numCoins) {
+        const pendingSnap = await db.collection('transactions').doc(reference).get();
+        if (pendingSnap.exists) {
+          const p = pendingSnap.data() || {};
+          if (!userId && p.userId) userId = p.userId;
+          if (!numCoins && p.coinsAdded) numCoins = Number(p.coinsAdded);
+        }
+      }
+
+      if (userId && numCoins > 0) {
+        await settleCoinPurchaseWithFirstTimeBonus(db, {
+          gateway: 'paystack',
+          providerTransactionId: String(data.id || reference),
+          reference,
+          userId,
+          baseCoins: numCoins,
+          amountPaid,
+          currency,
+          purpose: 'coin_purchase',
+          source: 'paystack_webhook',
+          webhookLogDocId: `ps_${data.reference}_${event}`,
+          webhookEvent: event,
+        });
+      }
+
+      return NextResponse.json({ received: true, credited: true });
+    }
+
     const payoutId = String(data.reference).replace('_exec', '');
     const payoutRef = db.collection('payoutRequests').doc(payoutId);
 

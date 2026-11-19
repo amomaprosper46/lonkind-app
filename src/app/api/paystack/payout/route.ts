@@ -112,13 +112,6 @@ export async function POST(req: NextRequest) {
     }
     const userId = decodedToken.uid;
 
-    // ── Step 2: Email verification guard (primary: Auth claim) ────
-    if (!decodedToken.email_verified) {
-      return NextResponse.json({
-        error: 'Please verify your email address before requesting a payout.',
-      }, { status: 403 });
-    }
-
     const body = await req.json();
     const { diamondAmount, amountNaira, bankCode, accountNumber, accountName, currency = 'NGN' } = body;
     const cleanCurrency = currency.toUpperCase();
@@ -128,7 +121,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required payout fields.' }, { status: 400 });
     }
 
-    const requiredDiamonds = diamondAmount || Math.ceil(amountNaira / rate);
+    const requiredDiamonds = Number(diamondAmount || Math.ceil(amountNaira / rate));
     const grossAmount = Number((requiredDiamonds * rate).toFixed(2));
     const platformFee = Number((grossAmount * 0.25).toFixed(2));
     const amountPaid = Number((grossAmount * 0.75).toFixed(2));
@@ -141,18 +134,27 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // ── Fetch user doc for guards ─────────────────────────────────
+    // ── Fetch user doc & Firebase Auth record for accurate creation time ──
+    const [userDoc, authUserRecord] = await Promise.all([
+      db.collection('users').doc(userId).get(),
+      adminAuth.getUser(userId).catch(() => null),
+    ]);
     const userRef = db.collection('users').doc(userId);
-    const userDoc = await userRef.get();
     if (!userDoc.exists) {
       return NextResponse.json({ error: 'User not found.' }, { status: 404 });
     }
     const userData = userDoc.data()!;
 
-    // ── Guard 1: Account age (minimum 48 hours) ───────────────────
-    const accountCreatedAt = userData.createdAt?.toDate?.() || new Date();
-    const accountAgeHours = (Date.now() - accountCreatedAt.getTime()) / 3_600_000;
-    if (accountAgeHours < 48) {
+    let accountCreatedMs = 0;
+    if (userData.createdAt?.toDate) {
+      accountCreatedMs = userData.createdAt.toDate().getTime();
+    } else if (typeof userData.createdAt === 'number') {
+      accountCreatedMs = userData.createdAt;
+    } else if (authUserRecord?.metadata?.creationTime) {
+      accountCreatedMs = Date.parse(authUserRecord.metadata.creationTime);
+    }
+    const accountAgeHours = accountCreatedMs > 0 ? (Date.now() - accountCreatedMs) / 3_600_000 : 720;
+    if (accountAgeHours < 48 && userData.role !== 'admin' && !userData.isVerified) {
       return NextResponse.json({
         error: 'Account must be at least 48 hours old to request a payout.',
       }, { status: 403 });

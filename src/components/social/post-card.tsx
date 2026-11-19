@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp, Sparkles, EyeOff, TrendingUp, Flame } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp, Sparkles, EyeOff, TrendingUp, Flame, Scissors } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Timestamp } from 'firebase/firestore';
@@ -72,6 +72,11 @@ export interface Post {
         visualCues: string[];
         anchorSignoff: string;
     } | null;
+    isLiveClip?: boolean;
+    clipId?: string;
+    sourceStreamId?: string;
+    clipDurationSec?: number;
+    clippedByName?: string;
 }
 
 interface PostCardProps {
@@ -468,6 +473,15 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                             {(author as any).badges?.includes('Whale') && <span title="Whale" className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/30">🐋 Whale</span>}
                             {(author as any).badges?.includes('Top Supporter') && <span title="Top Supporter" className="inline-flex items-center rounded-full bg-pink-500/15 px-2 py-0.5 text-[10px] font-bold text-pink-600 dark:text-pink-400 border border-pink-500/30">💖 Top Supporter</span>}
                             {(author as any).badges?.includes('Rising Star') && <span title="Rising Star" className="inline-flex items-center rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">⭐ Rising Star</span>}
+                            {post.isLiveClip && (
+                                <span
+                                    title="Captured from a live broadcast on Lonkind"
+                                    className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-600 to-fuchsia-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-sm"
+                                >
+                                    <Scissors className="h-2.5 w-2.5" />
+                                    LIVE CLIP
+                                </span>
+                            )}
                         </div>
                         <p className="text-sm text-muted-foreground">@{author.handle} &middot; {formattedTimestamp}</p>
                     </div>
@@ -621,18 +635,26 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                                         )}
                                     </>
                                 ) : videoUrl && (
-                                    <video
-                                        ref={videoElementRef}
-                                        src={videoUrl}
-                                        controls
-                                        playsInline
-                                        preload="metadata"
-                                        onPlay={handleVideoPlay}
-                                        onPause={handleVideoPauseOrEnd}
-                                        onEnded={handleVideoPauseOrEnd}
-                                        className="w-full h-auto max-h-[680px] bg-black"
-                                        data-ai-hint="social media post video"
-                                    />
+                                    <div className="relative">
+                                        <video
+                                            ref={videoElementRef}
+                                            src={videoUrl}
+                                            controls
+                                            playsInline
+                                            preload="metadata"
+                                            onPlay={handleVideoPlay}
+                                            onPause={handleVideoPauseOrEnd}
+                                            onEnded={handleVideoPauseOrEnd}
+                                            className="w-full h-auto max-h-[680px] bg-black"
+                                            data-ai-hint="social media post video"
+                                        />
+                                        {post.isLiveClip && (
+                                            <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-600/90 backdrop-blur-md border border-white/20 text-[10px] font-black uppercase tracking-wider text-white shadow-lg">
+                                                <Scissors className="h-3 w-3" />
+                                                <span>LIVE CLIP{post.clipDurationSec ? ` • ${post.clipDurationSec}s` : ''}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         )}

@@ -3,6 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /* ====================================================================== */
+    /* GLOBAL SECURITY HELPERS                                                */
+    /* ====================================================================== */
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -17,54 +21,109 @@ service cloud.firestore {
          (request.auth.token != null && request.auth.token.email == 'admin@lonkind.com'));
     }
 
-    /* ---------------- USERS ---------------- */
+    // Financial, role, and trust fields that NO client may ever forge or mutate directly
+    function protectedUserKeys() {
+      return [
+        'walletBalance', 'coins', 'diamonds', 'balance', 'balanceUSD', 'balanceNaira',
+        'earningsNaira', 'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
+        'hasMadeFirstPurchase', 'firstPurchaseAt', 'promoBonusCoinsReceived',
+        'isAdmin', 'isVerified', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
+        'isProfessional', 'fraudFlagged', 'velocityFlagged', 'createdAt'
+      ];
+    }
+
+    function hasValidInitialWalletState() {
+      return !request.resource.data.keys().hasAny([
+        'walletBalance', 'balance', 'balanceUSD', 'balanceNaira', 'earningsNaira',
+        'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
+        'hasMadeFirstPurchase', 'firstPurchaseAt', 'promoBonusCoinsReceived',
+        'isAdmin', 'isVerified', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
+        'isProfessional', 'fraudFlagged', 'velocityFlagged'
+      ]) &&
+      (!('coins' in request.resource.data) || request.resource.data.coins == 0) &&
+      (!('diamonds' in request.resource.data) || request.resource.data.diamonds == 0);
+    }
+
+    // Enforce realistic First + Last Name on direct client-side user document creation
+    function hasValidRealName() {
+      return request.resource.data.name is string &&
+        request.resource.data.name.size() >= 5 &&
+        request.resource.data.name.size() <= 50 &&
+        request.resource.data.name.matches('^[^0-9\\s]{2,}( [^0-9\\s]{2,})+$');
+    }
+
+    // Resolves whether caller is the stream's host (supports both `hostId` and `hostUid`)
+    function isStreamHost(streamId) {
+      return isSignedIn() && (
+        streamId == 'live_' + request.auth.uid ||
+        (exists(/databases/$(database)/documents/streams/$(streamId)) && (
+          get(/databases/$(database)/documents/streams/$(streamId)).data.get('hostUid', '') == request.auth.uid ||
+          get(/databases/$(database)/documents/streams/$(streamId)).data.get('hostId', '') == request.auth.uid
+        )) ||
+        (exists(/databases/$(database)/documents/live_streams/$(streamId)) && (
+          get(/databases/$(database)/documents/live_streams/$(streamId)).data.get('hostUid', '') == request.auth.uid ||
+          get(/databases/$(database)/documents/live_streams/$(streamId)).data.get('hostId', '') == request.auth.uid
+        ))
+      );
+    }
+
+    function getStreamHostId(streamId) {
+      return exists(/databases/$(database)/documents/streams/$(streamId))
+        ? get(/databases/$(database)/documents/streams/$(streamId)).data.get(
+            'hostUid',
+            get(/databases/$(database)/documents/streams/$(streamId)).data.get('hostId', '')
+          )
+        : (exists(/databases/$(database)/documents/live_streams/$(streamId))
+            ? get(/databases/$(database)/documents/live_streams/$(streamId)).data.get(
+                'hostUid',
+                get(/databases/$(database)/documents/live_streams/$(streamId)).data.get('hostId', '')
+              )
+            : '');
+    }
+
+    function isAppointedMod(streamId) {
+      return isSignedIn() &&
+        getStreamHostId(streamId) != '' &&
+        exists(/databases/$(database)/documents/users/$(getStreamHostId(streamId))/moderators/$(request.auth.uid));
+    }
+
+    function isRestrictedFromStream(streamId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/streams/$(streamId)/restricted_users/$(request.auth.uid)) &&
+        (
+          get(/databases/$(database)/documents/streams/$(streamId)/restricted_users/$(request.auth.uid)).data.type == 'BAN' ||
+          get(/databases/$(database)/documents/streams/$(streamId)/restricted_users/$(request.auth.uid)).data.expiresAt > request.time
+        );
+    }
+
+    /* ====================================================================== */
+    /* 1. USERS & WALLETS (`users/{userId}`)                                  */
+    /* ====================================================================== */
 
     match /users/{userId} {
-
+      // Authenticated users can read public profile docs (private vaults live in subcollections)
       allow get, list: if isSignedIn();
 
-      allow create: if isOwner(userId);
+      // Prevent minting coins/walletBalance, forging roles, or registering fake/single-word names on signup
+      allow create: if isAdmin() || (isOwner(userId) && hasValidInitialWalletState() && hasValidRealName());
 
+      // Users may ONLY edit their own non-financial profile/privacy/blockedWords fields
       allow update: if isSignedIn() && (
         isAdmin() ||
-        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'coins', 'diamonds', 'balance', 'balanceUSD', 'balanceNaira', 'earningsNaira',
-          'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
-          'isVerified', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
-          'isProfessional', 'fraudFlagged', 'velocityFlagged', 'createdAt'
-        ])) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount']))
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedUserKeys())) ||
+        // Safe follower counter updates from accepted follows
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount'])
       );
 
       allow delete: if isOwner(userId) || isAdmin();
 
-      match /friends/{friendId} {
-        allow read, write: if isSignedIn() &&
-          (request.auth.uid == userId || request.auth.uid == friendId);
+      /* Private User Subcollections (Strictly Owner-Only) */
+      match /private/{docId} {
+        allow read, write: if isOwner(userId) || isAdmin();
       }
 
-      match /friendRequests/{senderId} {
-        allow read: if isSignedIn() &&
-          (request.auth.uid == userId || request.auth.uid == senderId);
-
-        allow create: if isSignedIn() && request.auth.uid == senderId;
-
-        allow delete: if isSignedIn() &&
-          (request.auth.uid == userId || request.auth.uid == senderId);
-      }
-
-      match /notifications/{notificationId} {
-        allow read, update, delete: if isOwner(userId);
-        allow create: if isSignedIn();
-      }
-
-      match /following/{followingId} {
-        allow read, write: if isOwner(userId);
-      }
-
-      match /followers/{followerId} {
-        allow read: if true;
-        allow write: if isSignedIn() && request.auth.uid == followerId;
+      match /settings/{docId} {
+        allow read, write: if isOwner(userId) || isAdmin();
       }
 
       match /savedPosts/{postId} {
@@ -86,23 +145,314 @@ service cloud.firestore {
       match /interactionSignals/{signalId} {
         allow read, write, delete: if isOwner(userId);
       }
+
+      match /notifications/{notificationId} {
+        allow read, update, delete: if isOwner(userId);
+        allow create: if isSignedIn();
+      }
+
+      /* Social Graph & Appointed Live Moderators */
+      match /friends/{friendId} {
+        allow read, write: if isSignedIn() &&
+          (request.auth.uid == userId || request.auth.uid == friendId);
+      }
+
+      match /moderators/{modUid} {
+        allow read: if true;
+        allow create, update, delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /friendRequests/{senderId} {
+        allow read: if isSignedIn() &&
+          (request.auth.uid == userId || request.auth.uid == senderId);
+        allow create: if isSignedIn() && request.auth.uid == senderId;
+        allow delete: if isSignedIn() &&
+          (request.auth.uid == userId || request.auth.uid == senderId);
+      }
+
+      match /followRequests/{senderId} {
+        allow read: if isSignedIn() &&
+          (request.auth.uid == userId || request.auth.uid == senderId);
+        allow create: if isSignedIn() && request.auth.uid == senderId;
+        allow delete: if isSignedIn() &&
+          (request.auth.uid == userId || request.auth.uid == senderId);
+      }
+
+      match /following/{followingId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /followers/{followerId} {
+        allow read: if true;
+        allow create, update: if isSignedIn() && request.auth.uid == followerId;
+        allow delete: if isSignedIn() && (request.auth.uid == followerId || isOwner(userId));
+      }
     }
 
-    /* ---------------- POSTS ---------------- */
+    /* ====================================================================== */
+    /* 2. FOLLOWER REQUESTS & PRIVACY (`follows` & `follower_requests`)       */
+    /* ====================================================================== */
 
-    match /posts/{postId} {
+    match /follows/{followId} {
+      allow read: if isSignedIn() && (
+        resource.data.targetUserId == request.auth.uid ||
+        resource.data.followerId == request.auth.uid ||
+        isAdmin()
+      );
 
-      allow read: if true;
+      // Caller can only create a follow request for themselves
+      allow create: if isSignedIn()
+        && request.resource.data.followerId == request.auth.uid
+        && request.resource.data.targetUserId != request.auth.uid
+        && request.resource.data.status in ['PENDING', 'ACCEPTED'];
 
-      allow create: if isSignedIn();
+      // CRITICAL: ONLY the target creator can approve (ACCEPTED), block (BLOCKED), or change status
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (resource.data.targetUserId == request.auth.uid &&
+         request.resource.data.followerId == resource.data.followerId &&
+         request.resource.data.targetUserId == resource.data.targetUserId &&
+         request.resource.data.status in ['ACCEPTED', 'BLOCKED', 'PENDING'])
+      );
+
+      // Target creator can remove/decline a follower; follower can cancel their own request / unfollow
+      allow delete: if isSignedIn() && (
+        resource.data.targetUserId == request.auth.uid ||
+        resource.data.followerId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    match /follower_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.targetUserId == request.auth.uid ||
+        resource.data.followerId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.followerId == request.auth.uid
+        && request.resource.data.targetUserId != request.auth.uid
+        && request.resource.data.status == 'PENDING';
 
       allow update: if isSignedIn() && (
         isAdmin() ||
-        request.auth.uid == resource.data.author.uid ||
-        // only allow safe engagement counter/reaction updates by non-authors
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'likes', 'likesCount', 'commentsCount', 'sharesCount'])
+        (resource.data.targetUserId == request.auth.uid &&
+         request.resource.data.followerId == resource.data.followerId &&
+         request.resource.data.targetUserId == resource.data.targetUserId &&
+         request.resource.data.status in ['ACCEPTED', 'BLOCKED'])
       );
 
+      allow delete: if isSignedIn() && (
+        resource.data.targetUserId == request.auth.uid ||
+        resource.data.followerId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    /* ====================================================================== */
+    /* 3. LIVE STREAMS, CHAT, POLLS, GIFTS, GUESTS & MODERATORS               */
+    /* ====================================================================== */
+
+    match /streams/{streamId} {
+      allow read: if true;
+
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.get('hostUid', '') == request.auth.uid ||
+        request.resource.data.get('hostId', '') == request.auth.uid ||
+        streamId == 'live_' + request.auth.uid
+      );
+
+      // Host controls settings, pinnedMessage, streamGoal definition, and activeGuests.
+      // Viewers may only increment `likesCount` (and `streamGoal.currentAmount` for LIKES goals).
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        isStreamHost(streamId) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'updatedAt']) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'streamGoal', 'updatedAt']) &&
+          resource.data.streamGoal != null &&
+          resource.data.streamGoal.type == 'LIKES' &&
+          request.resource.data.streamGoal.type == resource.data.streamGoal.type &&
+          request.resource.data.streamGoal.title == resource.data.streamGoal.title &&
+          request.resource.data.streamGoal.targetAmount == resource.data.streamGoal.targetAmount &&
+          request.resource.data.streamGoal.currentAmount >= resource.data.streamGoal.currentAmount
+        )
+      );
+
+      allow delete: if isAdmin() || isStreamHost(streamId);
+
+      // Polls: ONLY host creates/deletes; authenticated users can cast exactly ONE vote
+      match /polls/{pollId} {
+        allow read: if true;
+        allow create, delete: if isAdmin() || isStreamHost(streamId);
+        allow update: if isAdmin() || isStreamHost(streamId) || (
+          isSignedIn() &&
+          resource.data.status == 'active' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'voters', 'totalVotes']) &&
+          !(request.auth.uid in resource.data.get('voters', {}).keys()) &&
+          request.resource.data.voters.diff(resource.data.get('voters', {})).affectedKeys().hasOnly([request.auth.uid]) &&
+          request.resource.data.totalVotes == resource.data.get('totalVotes', 0) + 1
+        );
+      }
+
+      // Paid Gifts: Server-side Admin SDK ACID transaction ONLY (`/api/streams/send-gift`)
+      match /gifts/{giftId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Multi-Guest Join Requests
+      match /guest_requests/{guestUid} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.auth.uid == guestUid
+          && request.resource.data.status == 'PENDING';
+        allow update: if isAdmin() || isStreamHost(streamId);
+        allow delete: if isAdmin() || isStreamHost(streamId) || (isSignedIn() && request.auth.uid == guestUid);
+      }
+
+      // WebRTC Co-Host Signaling
+      match /guest_signals/{signalId} {
+        allow read, create, delete: if isSignedIn();
+      }
+
+      // Live Chat Messages: senderId must match auth UID AND user must not be muted/banned
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && !isRestrictedFromStream(streamId);
+        allow update, delete: if isAdmin() || isStreamHost(streamId) || isAppointedMod(streamId) || (
+          isSignedIn() && resource.data.senderId == request.auth.uid
+        );
+      }
+
+      // Restricted Users (Muted 10m / Banned): ONLY Host or Appointed Moderators may manage
+      match /restricted_users/{restrictedUid} {
+        allow read: if isSignedIn() && (
+          request.auth.uid == restrictedUid ||
+          isStreamHost(streamId) ||
+          isAppointedMod(streamId) ||
+          isAdmin()
+        );
+        allow create, update, delete: if isAdmin() || isStreamHost(streamId) || isAppointedMod(streamId);
+      }
+    }
+
+    match /live_streams/{streamId} {
+      allow read: if true;
+
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.get('hostUid', '') == request.auth.uid ||
+        request.resource.data.get('hostId', '') == request.auth.uid ||
+        streamId == 'live_' + request.auth.uid
+      );
+
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        isStreamHost(streamId) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewerCount', 'likesCount', 'updatedAt'])
+      );
+
+      allow delete: if isAdmin() || isStreamHost(streamId);
+
+      // Real-time WebRTC viewer signaling (supports signed-in users and guest_* viewers)
+      match /viewers/{viewerId} {
+        allow read: if true;
+        allow write, delete: if isSignedIn() || viewerId.matches('^guest_[a-zA-Z0-9_]+$');
+      }
+
+      // Live chat announcements: enforce senderId match + mute/ban block + Host/Mod deletion
+      match /chat/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && !isRestrictedFromStream(streamId);
+        allow update, delete: if isAdmin() || isStreamHost(streamId) || isAppointedMod(streamId) || (
+          isSignedIn() && resource.data.senderId == request.auth.uid
+        );
+      }
+
+      // Legacy co-host requests (scoped strictly to requester or host)
+      match /cohost_requests/{requestId} {
+        allow read: if isSignedIn();
+        allow create, delete: if isAdmin() || isStreamHost(streamId) || (isSignedIn() && request.auth.uid == requestId);
+        allow update: if isAdmin() || isStreamHost(streamId);
+      }
+
+      // Top gifters leaderboard (server-side gift API writes via Admin SDK; host/admin may manage)
+      match /contributors/{contributorId} {
+        allow read: if true;
+        allow write: if isAdmin() || isStreamHost(streamId);
+      }
+    }
+
+    /* ====================================================================== */
+    /* SCHEDULED STREAMS & REMIND ME                                          */
+    /* ====================================================================== */
+
+    match /scheduled_streams/{scheduleId} {
+      allow read: if true;
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.hostId == request.auth.uid
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.hostId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subscribersCount', 'updatedAt'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.hostId == request.auth.uid);
+
+      match /reminders/{reminderUid} {
+        // Protect FCM push tokens from unauthorized reads
+        allow read: if isSignedIn() && (
+          request.auth.uid == reminderUid ||
+          isAdmin() ||
+          get(/databases/$(database)/documents/scheduled_streams/$(scheduleId)).data.hostId == request.auth.uid
+        );
+        allow create, update, delete: if isSignedIn() && (
+          request.auth.uid == reminderUid ||
+          isAdmin()
+        );
+      }
+    }
+
+    /* ====================================================================== */
+    /* LIVE HIGHLIGHT CLIPS                                                   */
+    /* ====================================================================== */
+
+    match /clips/{clipId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.clippedByUid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.hostId == request.auth.uid ||
+        resource.data.clippedByUid == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'viewsCount', 'updatedAt'])
+      );
+      allow delete: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.hostId == request.auth.uid ||
+          resource.data.clippedByUid == request.auth.uid
+        )
+      );
+    }
+
+    /* ====================================================================== */
+    /* POSTS, STORIES, GROUPS, SPACES                                         */
+    /* ====================================================================== */
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.author.uid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.author.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'likes', 'likesCount', 'commentsCount', 'sharesCount'])
+      );
       allow delete: if isSignedIn() && (
         isAdmin() ||
         request.auth.uid == resource.data.author.uid
@@ -115,245 +465,169 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.author.uid;
+        allow create: if isSignedIn() && request.resource.data.author.uid == request.auth.uid;
+        allow update, delete: if isSignedIn() && (request.auth.uid == resource.data.author.uid || isAdmin());
       }
     }
 
-    /* ---------------- STORIES ---------------- */
-
     match /stories/{storyId} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() &&
-        request.auth.uid == resource.data.authorUid;
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (request.auth.uid == resource.data.authorUid || isAdmin());
     }
 
-    /* ---------------- REPORTS ---------------- */
+    match /groups/{groupId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /spaces/{spaceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.host.uid;
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.host.uid || isAdmin());
+    }
+
+    /* ====================================================================== */
+    /* 4. SUPPORT TICKETS, REPORTS & APPEALS                                  */
+    /* ====================================================================== */
+
+    match /support_tickets/{ticketId} {
+      // Any user (logged-in or public support visitor) can open a ticket; users can ONLY read their own
+      allow create: if request.resource.data.status == 'OPEN' && (
+        (isSignedIn() && request.resource.data.userId == request.auth.uid) ||
+        (!isSignedIn() && (!('userId' in request.resource.data) || request.resource.data.userId == null || request.resource.data.userId == 'guest'))
+      );
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
 
     match /reports/{reportId} {
       allow create: if isSignedIn();
       allow read, list, update, delete: if isAdmin();
     }
 
-    /* ---------------- APPEALS ---------------- */
-
     match /appeals/{appealId} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read, list, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
-    /* ---------------- GROUPS ---------------- */
-
-    match /groups/{groupId} {
-      allow read: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-    }
-
-    /* ---------------- SPACES ---------------- */
-
-    match /spaces/{spaceId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() &&
-        request.auth.uid == request.resource.data.host.uid;
-
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() &&
-        request.auth.uid == resource.data.host.uid;
-    }
-
-    /* ---------------- LIVE STREAMS ---------------- */
-
-    match /live_streams/{streamId} {
-      // Anyone can see active live streams on home feed
-      allow read: if true;
-      allow create: if isSignedIn() && (
-        isAdmin() ||
-        request.resource.data.hostUid == request.auth.uid ||
-        streamId == 'live_' + request.auth.uid
-      );
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        resource.data.hostUid == request.auth.uid ||
-        streamId == 'live_' + request.auth.uid ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewerCount', 'likesCount', 'totalCoins', 'updatedAt'])
-      );
-      allow delete: if isSignedIn() && (
-        isAdmin() ||
-        resource.data.hostUid == request.auth.uid ||
-        streamId == 'live_' + request.auth.uid
-      );
-
-      // Real-time viewer tracking (supports signed-in users and guest_* WebRTC viewers)
-      match /viewers/{viewerId} {
-        allow read: if true;
-        allow write, delete: if isSignedIn() || viewerId.matches('^guest_[a-zA-Z0-9_]+$');
-      }
-
-      // Live chat & gift stream announcements
-      match /chat/{messageId} {
-        allow read: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isAdmin() || (
-          isSignedIn() && (
-            resource.data.senderId == request.auth.uid ||
-            streamId == 'live_' + request.auth.uid
-          )
-        );
-      }
-
-      // Split-screen co-host guest requests
-      match /cohost_requests/{requestId} {
-        allow read: if isSignedIn();
-        allow create, update, delete: if isSignedIn();
-      }
-
-      // Top gifters & contributor leaderboard
-      match /contributors/{contributorId} {
-        allow read: if true;
-        allow write: if isAdmin() || (
-          isSignedIn() && (
-            request.auth.uid == contributorId ||
-            streamId == 'live_' + request.auth.uid
-          )
-        );
-      }
-    }
-
-    /* ---------------- TRANSACTIONS (FIXED) ---------------- */
-
-    match /transactions/{txId} {
-      allow read: if isSignedIn() &&
-        request.auth.uid == resource.data.userId;
-
-      allow create, update, delete: if false;
-    }
-
-    /* ---------------- PAYOUTS ---------------- */
-
-    match /payouts/{payoutId} {
-      allow read: if isSignedIn() &&
-        request.auth.uid == resource.data.userId;
-
-      allow create, update, delete: if false;
-    }
-
-    /* ---------------- GIFTS ---------------- */
-
-    match /gifts/{giftId} {
-      allow read: if true;
-
-      allow create, update, delete: if false;
-    }
-
-    /* ---------------- CONVERSATIONS ---------------- */
+    /* ====================================================================== */
+    /* DIRECT MESSAGES (`conversations`)                                      */
+    /* ====================================================================== */
 
     match /conversations/{conversationId} {
-
       allow create: if isSignedIn() &&
         request.auth.uid in request.resource.data.participantUids;
-
       allow read, update, delete: if isSignedIn() &&
         request.auth.uid in resource.data.participantUids;
 
       match /messages/{messageId} {
-        // Read messages
         allow read: if isSignedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
 
-        // Create a new message
         allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid &&
           request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
 
-        // Update for edit by sender or per‑user delete
         allow update: if isSignedIn() && (
-          // Sender can edit text and set editedAt, but cannot modify other fields
           (resource.data.senderId == request.auth.uid &&
             request.resource.data.text is string &&
             request.resource.data.editedAt == request.time &&
             request.resource.data.deletedFor == resource.data.deletedFor &&
             request.resource.data.type == resource.data.type) ||
-          // Any participant can add themselves to deletedFor (per‑user delete)
           (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids &&
             request.resource.data.deletedFor.toSet() == resource.data.get('deletedFor', []).toSet().union([request.auth.uid].toSet()) &&
             request.resource.data.text == resource.data.text &&
             request.resource.data.type == resource.data.type)
         );
-        // No hard delete allowed
-        // (delete) is implicitly denied by not granting it
       }
     }
 
-    /* ---------------- ADMINS ---------------- */
+    /* ====================================================================== */
+    /* FINANCIAL LEDGER, WALLETS, PAYOUTS & PLATFORM CONFIG (SERVER-ONLY)     */
+    /* ====================================================================== */
 
     match /admins/{userId} {
       allow read, write: if isAdmin() || (isSignedIn() && request.auth.token.email == 'admin@lonkind.com' && request.auth.uid == userId);
     }
 
-    /* ---------------- WALLETS (server-write only) -------------- */
-
     match /wallets/{userId} {
-      allow read: if isOwner(userId);
-      allow write: if false; // Admin SDK only — no client writes ever
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false; // Admin SDK only — zero client writes
     }
 
-    /* -------------- PAYOUT REQUESTS (server-write only) -------- */
+    match /transactions/{txId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow create, update, delete: if false;
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow create, update, delete: if false;
+    }
 
     match /payoutRequests/{requestId} {
-      allow read: if isSignedIn() &&
-        request.auth.uid == resource.data.userId;
-      allow create, update, delete: if false; // Admin SDK only
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow create, update, delete: if false;
     }
 
-    /* -------------- PAYOUT IDEMPOTENCY (server-write only) ----- */
+    match /payout_requests/{requestId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow create, update, delete: if false;
+    }
 
     match /payoutIdempotency/{keyId} {
-      allow read, write: if false; // Admin SDK only — internal dedup store
+      allow read, write: if false;
     }
-
-    /* -------------- WEBHOOK LOGS (server-write only) ----------- */
 
     match /webhookLogs/{logId} {
       allow read: if isAdmin();
-      allow create, update, delete: if false; // Admin SDK only
+      allow create, update, delete: if false;
     }
-
-    /* -------------- AUDIT LOGS (append-only, admin-read) ------- */
 
     match /wallet_audit_logs/{logId} {
       allow read: if isAdmin();
-      allow create, update, delete: if false; // Admin SDK only — append-only
+      allow create, update, delete: if false;
     }
-
-    /* ------ DOUBLE-ENTRY LEDGER (append-only, server-write only) ------ */
 
     match /ledger_journals/{journalId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.actorUid == request.auth.uid);
-      allow create, update, delete: if false; // Admin SDK ACID Transaction only
+      allow create, update, delete: if false;
     }
 
     match /ledger_entries/{entryId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.accountId == request.auth.uid);
-      allow create, update, delete: if false; // Admin SDK ACID Transaction only
+      allow create, update, delete: if false;
     }
 
     match /ledger_idempotency/{keyId} {
-      allow read, write: if false; // Admin SDK ACID Transaction only
+      allow read, write: if false;
     }
 
-    /* -------------- TRENDING HASHTAGS (server-write only) ------ */
+    match /gifts/{giftId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
 
     match /trending_hashtags/{tagId} {
-      allow read: if true; // Publicly readable for trending UI
-      allow write: if false; // Cloud Functions only
+      allow read: if true;
+      allow write: if false;
     }
 
-    /* -------------- PLATFORM SETTINGS (events & gift overrides) ------ */
-
     match /platform_settings/{docId} {
-      allow read: if true; // Publicly readable for live stream events & gift overrides
+      allow read: if true;
       allow write: if isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* DEFAULT DENY FALLBACK                                                  */
+    /* ====================================================================== */
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

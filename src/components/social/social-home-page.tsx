@@ -450,8 +450,14 @@ function SocialHomePageInner() {
           <div className="flex flex-col min-h-screen">
               <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
                   <div className="container flex items-center justify-between h-16">
-                  <Link href="/" className="flex items-center gap-2">
-                      <Image src="/logo.png" alt={`${t('app_name')} Logo`} width={32} height={32} />
+                  <Link href="/" className="flex items-center gap-2.5 group">
+                      <Image
+                          src="/logo.png"
+                          alt={`${t('app_name')} Logo`}
+                          width={36}
+                          height={36}
+                          className="h-9 w-9 rounded-xl object-cover border border-cyan-400/40 shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300"
+                      />
                       <span className="text-xl font-bold">{t('app_name')}</span>
                   </Link>
                   <Button onClick={openSignInCard}>{t('sign_in_link')}</Button>

@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useTheme } from 'next-themes';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -17,20 +16,26 @@ import {
   HelpCircle,
   Wallet,
   Shield,
-  Users,
   Settings as SettingsIcon,
-  EyeOff,
-  UserX,
   KeyRound,
   Palette,
-  Sun,
-  Moon,
-  Monitor,
   ExternalLink,
   Mail,
   User,
   Trash2,
   Camera,
+  AtSign,
+  Globe,
+  Bell,
+  Image as ImageIcon,
+  Eye,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Database,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -48,15 +53,40 @@ import { Form, FormControl, FormField, FormItem } from '../ui/form';
 import { submitSupportTicket } from '@/ai/flows/submit-support-ticket';
 import { toast } from '@/hooks/use-toast';
 import type { ProfileData } from './edit-profile-dialog';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Switch } from '../ui/switch';
 import type { CurrentUser } from './social-dashboard';
-
-interface BlockedUserItem {
-  uid: string;
-  name: string;
-  handle: string;
-}
+import {
+  SETTINGS_ROUTE_MAP,
+  getBreadcrumbTrail,
+  useUserSettings,
+  type SettingsRouteId,
+} from '@/lib/settings-schema';
+import {
+  SettingsNavRow,
+  PrivacySecurityMenu,
+  PrivateFollowersMenu,
+  PendingFollowerRequestsScreen,
+  RemoveFollowersScreen,
+  ActivityStatusMenu,
+  TwoFactorAuthMenu,
+  BlockedAccountsMenu,
+  type BlockedUserItem,
+} from './settings-privacy-submenus';
+import { LiveChatSafetySettingsPanel } from './live-moderation-system';
+import {
+  NotificationsHubMenu,
+  PushNotificationsScreen,
+  EmailNotificationsScreen,
+  InAppNotificationsScreen,
+  AppearanceDisplayMenu,
+  DataStorageTelemetryMenu,
+} from './settings-channel-submenus';
+import {
+  NetworkSettingsHub,
+  NetworkDataSaverSubMenu,
+  NetworkBackgroundSyncSubMenu,
+  NetworkOfflineQueueSubMenu,
+} from './network-settings-menu';
+import { Wifi } from 'lucide-react';
 
 interface SettingsViewProps {
   user: CurrentUser;
@@ -67,6 +97,7 @@ interface SettingsViewProps {
   blockedUsers?: BlockedUserItem[];
   onUnblockUser?: (uid: string) => Promise<void>;
   onGoToWallet?: () => void;
+  onViewProfile?: () => void;
 }
 
 const supportFormSchema = z.object({
@@ -83,38 +114,76 @@ export default function SettingsView({
   blockedUsers = [],
   onUnblockUser,
   onGoToWallet,
+  onViewProfile,
 }: SettingsViewProps) {
-  const { theme, setTheme } = useTheme();
-  const [displayName, setDisplayName] = useState(user.name);
+  // Multi-layered nested settings navigation state ("Settings on Top of Settings")
+  const [activeRoute, setActiveRoute] = useState<SettingsRouteId>('root');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Persisted Firestore + localStorage User Settings state manager
+  const { settings, isSaving: isSavingSettings, updateSettings } = useUserSettings(user?.uid);
+
+  // Account & Profile Form States
+  const [displayName, setDisplayName] = useState(user.name || '');
+  const [handleInput, setHandleInput] = useState(user.handle || '');
   const [bio, setBio] = useState(user.bio || '');
   const [businessUrl, setBusinessUrl] = useState(user.businessUrl || '');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
-  const [isUnblockingMap, setIsUnblockingMap] = useState<Record<string, boolean>>({});
 
-  const [lastSeenVisible, setLastSeenVisible] = useState(true);
-  const [ghostMode, setGhostMode] = useState(false);
-  const [isFollowersPrivate, setIsFollowersPrivate] = useState(user.followerPrivacy === 'private');
+  // Hydrate route from URL `?settingsPath=...` if present
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search).get('settingsPath') as SettingsRouteId | null;
+    if (sp && SETTINGS_ROUTE_MAP[sp]) {
+      setActiveRoute(sp);
+    }
+  }, []);
 
-  const handleFollowerPrivacyChange = async (checked: boolean) => {
-    setIsFollowersPrivate(checked);
-    try {
-      await onUpdateProfile({ followerPrivacy: checked ? 'private' : 'public' });
-      toast({ title: 'Privacy Updated', description: 'Your follower list privacy has been updated.' });
-    } catch {
-      setIsFollowersPrivate(!checked);
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not update privacy setting.' });
+  useEffect(() => {
+    setDisplayName(user.name || '');
+    setHandleInput(user.handle || '');
+    setBio(user.bio || '');
+    setBusinessUrl(user.businessUrl || '');
+  }, [user.name, user.handle, user.bio, user.businessUrl]);
+
+  const navigateTo = (route: SettingsRouteId) => {
+    setActiveRoute(route);
+    setSearchQuery('');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (route === 'root') url.searchParams.delete('settingsPath');
+      else url.searchParams.set('settingsPath', route);
+      window.history.replaceState({}, '', url.toString());
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
-  useEffect(() => {
-    setDisplayName(user.name);
-    setBio(user.bio || '');
-    setBusinessUrl(user.businessUrl || '');
-  }, [user.name, user.bio, user.businessUrl]);
+  const goBack = () => {
+    const parent = SETTINGS_ROUTE_MAP[activeRoute]?.parent;
+    navigateTo(parent || 'root');
+  };
+
+  const breadcrumbs = useMemo(() => getBreadcrumbTrail(activeRoute), [activeRoute]);
+  const currentRouteMeta = SETTINGS_ROUTE_MAP[activeRoute];
+
+  // Global search across all nested levels (Level 1, Level 2, Level 3)
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return Object.values(SETTINGS_ROUTE_MAP).filter(
+      (route) =>
+        route.id !== 'root' &&
+        (route.title.toLowerCase().includes(q) ||
+          route.subtitle.toLowerCase().includes(q) ||
+          route.keywords.some((kw) => kw.toLowerCase().includes(q)))
+    );
+  }, [searchQuery]);
 
   const supportForm = useForm<z.infer<typeof supportFormSchema>>({
     resolver: zodResolver(supportFormSchema),
@@ -128,18 +197,41 @@ export default function SettingsView({
     setAvatarPreviewUrl(URL.createObjectURL(file));
   };
 
+  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreviewUrl(URL.createObjectURL(file));
+  };
+
   const handleProfileSave = async () => {
-    if (!displayName.trim()) return;
+    if (!displayName.trim()) {
+      toast({ variant: 'destructive', title: 'Name Required', description: 'Please enter a display name.' });
+      return;
+    }
+    const cleanHandle = handleInput.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (cleanHandle.length < 3) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Username',
+        description: 'Handle must be at least 3 characters (letters, numbers, underscores).',
+      });
+      return;
+    }
+
     setIsSavingProfile(true);
     try {
       const ok = await onUpdateProfile({
         name: displayName.trim(),
+        handle: cleanHandle,
         bio: bio.trim(),
         businessUrl: businessUrl.trim(),
         ...(avatarFile ? { avatarFile } : {}),
+        ...(coverFile ? { coverFile } : {}),
       });
       if (ok) {
         setAvatarFile(null);
+        setCoverFile(null);
       }
     } catch {
       toast({ variant: 'destructive', title: 'Update Failed', description: 'Failed to update account profile.' });
@@ -185,254 +277,470 @@ export default function SettingsView({
     }
   };
 
-  const handleLocalUnblock = async (userId: string) => {
-    if (!onUnblockUser) return;
-    setIsUnblockingMap((prev) => ({ ...prev, [userId]: true }));
-    try {
-      await onUnblockUser(userId);
-      toast({ title: 'User Unblocked' });
-    } catch {
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to unblock user.' });
-    } finally {
-      setIsUnblockingMap((prev) => ({ ...prev, [userId]: false }));
-    }
-  };
-
   const hasProfileChanges =
-    displayName.trim() !== user.name ||
+    displayName.trim() !== (user.name || '') ||
+    handleInput.trim().toLowerCase() !== (user.handle || '').toLowerCase() ||
     bio.trim() !== (user.bio || '') ||
     businessUrl.trim() !== (user.businessUrl || '') ||
-    avatarFile !== null;
+    avatarFile !== null ||
+    coverFile !== null;
+
+  const activeCoverSrc = coverPreviewUrl || (user as any).coverUrl;
+  const isSoftwareStyle = settings.appearance.layoutStyle === 'software_engineering';
 
   return (
-    <div className="w-full space-y-6">
-      {/* Top Profile & Settings Banner */}
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-slate-900/95 via-indigo-950/40 to-slate-900/95 p-5 sm:p-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <label htmlFor="settings-avatar-upload" className="relative cursor-pointer group shrink-0" title="Click to change profile picture">
-              <Avatar className="h-14 w-14 border-2 border-indigo-500/50 shadow-lg group-hover:opacity-85 transition-opacity">
-                <AvatarImage src={avatarPreviewUrl || user.avatarUrl} alt={user.name} />
-                <AvatarFallback className="bg-indigo-600 text-white font-bold text-lg">
-                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
-                </AvatarFallback>
-              </Avatar>
-              <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md border border-slate-900">
-                <Camera className="h-3.5 w-3.5" />
-              </span>
-              <input
-                id="settings-avatar-upload"
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarFileChange}
-                className="hidden"
-              />
-            </label>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground truncate">
-                  {user.name}
-                </h1>
-                <Badge variant="secondary" className="text-xs font-semibold">
-                  @{user.handle}
-                </Badge>
+    <div className={`w-full ${isSoftwareStyle ? 'space-y-4' : 'space-y-6'}`}>
+      {/* ==================================================================== */}
+      {/* TOP STACK HEADER: BREADCRUMBS, BACK BUTTON & LIVE SYNC INDICATOR     */}
+      {/* ==================================================================== */}
+      <div className="rounded-2xl border border-border/60 bg-card shadow-lg overflow-hidden">
+        {activeRoute === 'root' ? (
+          <>
+            {/* Root Profile Banner */}
+            <div className="relative h-32 sm:h-36 bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 overflow-hidden">
+              {activeCoverSrc && (
+                <img src={activeCoverSrc} alt="Cover" className="h-full w-full object-cover" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
+              <div className="absolute top-3 right-3 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950/75 border border-white/15 text-[11px] font-semibold text-emerald-300 backdrop-blur-md">
+                  {isSavingSettings ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" /> Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3 w-3" /> Cloud Synced
+                    </>
+                  )}
+                </span>
               </div>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
-                {user.email || 'Manage your account, privacy, appearance, and support preferences.'}
-              </p>
+            </div>
+
+            <div className="px-5 pb-5 pt-0 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div className="flex items-end gap-3.5 -mt-10 relative z-10 min-w-0">
+                <Avatar className="h-20 w-20 border-4 border-background shadow-xl shrink-0">
+                  <AvatarImage src={avatarPreviewUrl || user.avatarUrl} alt={user.name} />
+                  <AvatarFallback className="bg-indigo-600 text-white font-bold text-2xl">
+                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 pb-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground truncate">
+                      {user.name}
+                    </h1>
+                    <Badge variant="secondary" className="text-xs font-semibold">
+                      @{user.handle}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {user.email || 'Lonkind Settings Architecture'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-end">
+                {onViewProfile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onViewProfile}
+                    className="rounded-xl gap-1.5 text-xs font-bold"
+                  >
+                    <Eye className="h-3.5 w-3.5 text-indigo-400" />
+                    My Profile
+                  </Button>
+                )}
+                {onGoToWallet && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onGoToWallet}
+                    className="rounded-xl gap-1.5 border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 text-xs font-bold"
+                  >
+                    <Wallet className="h-3.5 w-3.5" />
+                    Wallet
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onSignOut}
+                  className="rounded-xl gap-1.5 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs font-bold"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign Out
+                </Button>
+              </div>
+            </div>
+
+            {/* Global Nested Settings Search Bar */}
+            <div className="px-5 pb-5">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search any setting (e.g., 2FA, private followers, telemetry, read receipts, layout)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-9 rounded-xl bg-secondary/50 border-border/60 h-10 text-xs sm:text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Nested Stack Navigation Header with Interactive Breadcrumb Trail & Back Button */
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900/95 via-indigo-950/35 to-slate-900/95 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goBack}
+                className="rounded-xl gap-1.5 -ml-2 text-xs font-bold text-indigo-400 hover:bg-indigo-500/10"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Back to {SETTINGS_ROUTE_MAP[currentRouteMeta.parent || 'root'].title}
+              </Button>
+
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/70 border border-border/60 text-[11px] font-semibold text-emerald-400">
+                {isSavingSettings ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3 w-3" /> Saved
+                  </>
+                )}
+              </span>
+            </div>
+
+            {/* Clickable Multi-Level Breadcrumbs */}
+            <nav aria-label="Settings breadcrumb" className="flex items-center flex-wrap gap-1 text-[11px] font-semibold">
+              {breadcrumbs.map((crumb, idx) => {
+                const isLast = idx === breadcrumbs.length - 1;
+                return (
+                  <React.Fragment key={crumb.id}>
+                    {idx > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground/60" />}
+                    <button
+                      type="button"
+                      disabled={isLast}
+                      onClick={() => navigateTo(crumb.id)}
+                      className={`px-2 py-0.5 rounded-md transition-colors ${
+                        isLast
+                          ? 'bg-indigo-600/25 text-indigo-300 border border-indigo-500/30 cursor-default'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                      }`}
+                    >
+                      {crumb.title}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </nav>
+
+            <div>
+              <h2 className={`text-lg sm:text-xl font-extrabold tracking-tight text-foreground ${isSoftwareStyle ? 'font-mono' : ''}`}>
+                {currentRouteMeta.title}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{currentRouteMeta.subtitle}</p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-center">
-            {onGoToWallet && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onGoToWallet}
-                className="rounded-xl gap-1.5 border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10"
-              >
-                <Wallet className="h-4 w-4" />
-                <span>Wallet</span>
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onSignOut}
-              className="rounded-xl gap-1.5 border-rose-500/30 text-rose-400 hover:bg-rose-500/10"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sign Out</span>
-            </Button>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Organized Settings Tabs */}
-      <Tabs defaultValue="account" className="w-full space-y-5">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 h-auto p-1.5 gap-1.5 bg-slate-900/90 border border-border/60 rounded-2xl">
-          <TabsTrigger
-            value="account"
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
-          >
-            <User className="h-4 w-4 shrink-0" />
-            <span>Account</span>
-          </TabsTrigger>
+      {/* ==================================================================== */}
+      {/* STACK LEVEL 0: MAIN SETTINGS DASHBOARD (OR LIVE SEARCH RESULTS)      */}
+      {/* ==================================================================== */}
+      {activeRoute === 'root' && (
+        <>
+          {searchQuery.trim() ? (
+            <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-sm font-bold">
+                  Search Results for &ldquo;{searchQuery}&rdquo; ({searchResults.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 divide-y divide-border/50">
+                {searchResults.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-muted-foreground">
+                    No matching settings found. Try searching for &ldquo;2FA&rdquo;, &ldquo;followers&rdquo;, &ldquo;telemetry&rdquo;, or &ldquo;theme&rdquo;.
+                  </div>
+                ) : (
+                  searchResults.map((res) => (
+                    <SettingsNavRow
+                      key={res.id}
+                      icon={SettingsIcon}
+                      iconColor="text-indigo-400"
+                      title={res.title}
+                      description={res.subtitle}
+                      statusText={`Level ${res.level}`}
+                      onClick={() => navigateTo(res.id)}
+                    />
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <SettingsIcon className="h-4 w-4 text-indigo-400" />
+                  Settings Dashboard
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Select a category to open nested sub-settings and privacy controls.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0 divide-y divide-border/50">
+                <SettingsNavRow
+                  icon={User}
+                  iconColor="text-indigo-400"
+                  title="Account & Profile Management"
+                  description="Edit display name, @handle, profile picture, cover banner, bio, password reset, and account deletion."
+                  statusText={`@${user.handle}`}
+                  onClick={() => navigateTo('account')}
+                />
+                <SettingsNavRow
+                  icon={Shield}
+                  iconColor="text-emerald-400"
+                  title="Privacy & Security"
+                  description="Private followers, pending follower requests, remove followers, activity status, read receipts, telemetry opt-out & 2FA."
+                  statusText={
+                    settings.privacy.privateAccount
+                      ? 'Private • 2FA ' + (settings.privacy.twoFactorEnabled ? 'On' : 'Off')
+                      : settings.privacy.twoFactorEnabled
+                      ? '2FA Protected'
+                      : 'Standard'
+                  }
+                  onClick={() => navigateTo('privacy')}
+                />
+                <SettingsNavRow
+                  icon={Bell}
+                  iconColor="text-amber-400"
+                  title="Notifications"
+                  description="Nested channel controls for Push Notifications, Email Notifications, and In-App & 3D Gift Audio."
+                  statusText={
+                    settings.notifications.push.enabled ? 'Push On' : 'Push Paused'
+                  }
+                  onClick={() => navigateTo('notifications')}
+                />
+                <SettingsNavRow
+                  icon={Palette}
+                  iconColor="text-purple-400"
+                  title="Appearance & Display"
+                  description="Color theme, display language, and Knowledge Work vs Software Engineering interface layout style."
+                  statusText={
+                    settings.appearance.layoutStyle === 'software_engineering'
+                      ? 'Engineering UI'
+                      : 'Knowledge Work'
+                  }
+                  onClick={() => navigateTo('appearance')}
+                />
+                <SettingsNavRow
+                  icon={Wifi}
+                  iconColor="text-sky-400"
+                  title="Network & Connection Settings"
+                  description="Live connection status, data saver mode, video auto-play, background sync, and safe offline retry."
+                  statusText={
+                    settings.dataStorage.dataSaverMode ? 'Data Saver On' : 'Standard'
+                  }
+                  onClick={() => navigateTo('network')}
+                />
+                <SettingsNavRow
+                  icon={Database}
+                  iconColor="text-cyan-400"
+                  title="Data & Storage / Telemetry Preferences"
+                  description="Disable telemetry & model training data usage, video auto-play quality, data saver, and local cache."
+                  statusText={
+                    settings.privacy.disableTelemetryAndTraining ? 'Telemetry Off' : 'Telemetry On'
+                  }
+                  onClick={() => navigateTo('data-storage')}
+                />
+                <SettingsNavRow
+                  icon={HelpCircle}
+                  iconColor="text-rose-400"
+                  title="Creator Wallet, Help & Legal Policies"
+                  description="Coins & diamonds summary, submit support tickets, privacy policy, terms of service, and community guidelines."
+                  statusText={`${(user.coins || 0).toLocaleString()} Coins`}
+                  onClick={() => navigateTo('support-legal')}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
 
-          <TabsTrigger
-            value="privacy"
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
-          >
-            <Shield className="h-4 w-4 shrink-0" />
-            <span>Privacy & Safety</span>
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="appearance"
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
-          >
-            <Palette className="h-4 w-4 shrink-0" />
-            <span>Appearance</span>
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="support"
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all"
-          >
-            <HelpCircle className="h-4 w-4 shrink-0" />
-            <span>Help & Legal</span>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* TAB 1: ACCOUNT & SECURITY */}
-        <TabsContent value="account" className="space-y-5 mt-0 focus-visible:outline-none">
+      {/* ==================================================================== */}
+      {/* STACK LEVEL 1: ACCOUNT & PROFILE MANAGEMENT                          */}
+      {/* ==================================================================== */}
+      {activeRoute === 'account' && (
+        <div className="space-y-5">
           <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
             <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <SettingsIcon className="h-4 w-4 text-indigo-400" />
-                Profile & Account Details
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <User className="h-4 w-4 text-indigo-400" />
+                Public Profile, Photos & Identity
               </CardTitle>
               <CardDescription className="text-xs">
-                Update how your name, bio, and links appear across Lonkind.
+                Update your avatar, cover banner, display name, @username, bio, and links.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              {/* Profile Picture Row */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/50">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12 border border-indigo-500/40">
-                    <AvatarImage src={avatarPreviewUrl || user.avatarUrl} alt={user.name} />
-                    <AvatarFallback className="bg-indigo-600 text-white font-bold">
-                      {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-semibold">Profile Picture</p>
-                    <p className="text-xs text-muted-foreground">
-                      Updating your photo automatically updates all your past posts, comments, messages, and friends lists.
-                    </p>
+            <CardContent className="p-5 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/50">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className="h-12 w-12 border border-indigo-500/40 shrink-0">
+                      <AvatarImage src={avatarPreviewUrl || user.avatarUrl} alt={user.name} />
+                      <AvatarFallback className="bg-indigo-600 text-white font-bold">
+                        {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">Profile Picture</p>
+                      <p className="text-[11px] text-muted-foreground truncate">Syncs across posts & chats</p>
+                    </div>
                   </div>
+                  <label htmlFor="settings-avatar-upload-btn" className="cursor-pointer shrink-0">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 hover:bg-indigo-600/30">
+                      <Camera className="h-3.5 w-3.5" />
+                      {avatarFile ? 'Selected' : 'Upload'}
+                    </span>
+                    <input
+                      id="settings-avatar-upload-btn"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarFileChange}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
-                <label htmlFor="settings-avatar-upload-btn" className="cursor-pointer shrink-0">
-                  <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 hover:bg-indigo-600/30 transition-colors">
-                    <Camera className="h-3.5 w-3.5" />
-                    {avatarFile ? 'Photo Selected' : 'Upload New Photo'}
-                  </span>
-                  <input
-                    id="settings-avatar-upload-btn"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarFileChange}
-                    className="hidden"
-                  />
-                </label>
+
+                <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/50">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-12 w-16 rounded-lg overflow-hidden border border-purple-500/40 bg-gradient-to-r from-indigo-700 to-pink-600 shrink-0 flex items-center justify-center">
+                      {activeCoverSrc ? (
+                        <img src={activeCoverSrc} alt="Cover" className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-5 w-5 text-white/80" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">Cover Banner</p>
+                      <p className="text-[11px] text-muted-foreground truncate">Shown on your profile</p>
+                    </div>
+                  </div>
+                  <label htmlFor="settings-cover-upload-btn" className="cursor-pointer shrink-0">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600/30">
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      {coverFile ? 'Selected' : 'Upload'}
+                    </span>
+                    <input
+                      id="settings-cover-upload-btn"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="settings-display-name" className="text-xs font-semibold">
-                    Display Name
+                  <Label htmlFor="settings-display-name" className="text-xs font-semibold flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-indigo-400" /> Display Name
                   </Label>
                   <Input
                     id="settings-display-name"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Your display name"
                     className="rounded-xl bg-secondary/40"
                   />
                 </div>
-
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                    Email Address
+                  <Label htmlFor="settings-handle" className="text-xs font-semibold flex items-center gap-1.5">
+                    <AtSign className="h-3.5 w-3.5 text-indigo-400" /> Username Handle
                   </Label>
                   <Input
-                    value={user.email || 'No email associated'}
-                    disabled
-                    className="rounded-xl bg-secondary/20 opacity-75 cursor-not-allowed"
+                    id="settings-handle"
+                    value={handleInput}
+                    onChange={(e) => setHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    className="rounded-xl bg-secondary/40"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="settings-bio" className="text-xs font-semibold">
-                  Bio
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="settings-bio" className="text-xs font-semibold">Bio</Label>
+                  <span className="text-[11px] text-muted-foreground">{bio.length}/160</span>
+                </div>
                 <Textarea
                   id="settings-bio"
                   value={bio}
+                  maxLength={160}
                   onChange={(e) => setBio(e.target.value)}
-                  placeholder="Tell the community a little about yourself..."
-                  rows={2}
+                  rows={3}
                   className="rounded-xl bg-secondary/40 resize-none"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="settings-website" className="text-xs font-semibold">
-                  Website or Business Link
-                </Label>
-                <Input
-                  id="settings-website"
-                  value={businessUrl}
-                  onChange={(e) => setBusinessUrl(e.target.value)}
-                  placeholder="https://yourwebsite.com"
-                  className="rounded-xl bg-secondary/40"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="settings-website" className="text-xs font-semibold flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-indigo-400" /> Website / Business Link
+                  </Label>
+                  <Input
+                    id="settings-website"
+                    value={businessUrl}
+                    onChange={(e) => setBusinessUrl(e.target.value)}
+                    placeholder="https://yourwebsite.com"
+                    className="rounded-xl bg-secondary/40"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" /> Email Address
+                  </Label>
+                  <Input value={user.email || 'No email associated'} disabled className="rounded-xl bg-secondary/20 opacity-75" />
+                </div>
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end pt-2 border-t border-border/40">
                 <Button
                   onClick={handleProfileSave}
                   disabled={isSavingProfile || !hasProfileChanges || !displayName.trim()}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold gap-1.5"
                 >
-                  {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Save Changes
+                  {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  Save Profile Changes
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Login & Security Card */}
           <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
+            <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-amber-400" />
-                Password & Security
+                Password & Account Ownership
               </CardTitle>
-              <CardDescription className="text-xs">
-                Manage your account password and active session.
-              </CardDescription>
             </CardHeader>
-            <CardContent className="divide-y divide-border/50 p-0">
+            <CardContent className="p-0 divide-y divide-border/50">
               <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold text-sm">Reset Password</p>
-                  <p className="text-xs text-muted-foreground">
-                    Send a secure password reset link to {user.email || 'your email'}.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Send a reset link to {user.email || 'your email'}.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={onPasswordReset} className="rounded-xl self-start sm:self-center">
                   Send Reset Email
@@ -442,12 +750,9 @@ export default function SettingsView({
               <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-rose-950/10">
                 <div>
                   <p className="font-semibold text-sm text-rose-400 flex items-center gap-1.5">
-                    <Trash2 className="h-4 w-4" />
-                    Delete Account Permanently
+                    <Trash2 className="h-4 w-4" /> Delete Account Permanently
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Permanently remove your profile, posts, and account data.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Permanently remove your profile, posts, and data.</p>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -460,15 +765,12 @@ export default function SettingsView({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete your account and remove your data from our servers.
+                        This action cannot be undone and permanently deletes your Lonkind account.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDelete}
-                        className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                      >
+                      <AlertDialogAction onClick={handleDelete} className="rounded-xl bg-destructive text-destructive-foreground">
                         Continue
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -477,161 +779,142 @@ export default function SettingsView({
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* TAB 2: PRIVACY & SAFETY */}
-        <TabsContent value="privacy" className="space-y-5 mt-0 focus-visible:outline-none">
+      {/* ==================================================================== */}
+      {/* STACK LEVELS 1, 2 & 3: PRIVACY & SECURITY SUB-MENUS                  */}
+      {/* ==================================================================== */}
+      {activeRoute === 'privacy' && (
+        <div className="space-y-5">
+          <PrivacySecurityMenu
+            user={user}
+            settings={settings}
+            updateSettings={updateSettings}
+            onNavigate={navigateTo}
+            blockedUsers={blockedUsers}
+            onUnblockUser={onUnblockUser}
+          />
+          <LiveChatSafetySettingsPanel user={user} />
+        </div>
+      )}
+      {activeRoute === 'privacy-followers' && (
+        <PrivateFollowersMenu
+          user={user}
+          settings={settings}
+          updateSettings={updateSettings}
+          onNavigate={navigateTo}
+          blockedUsers={blockedUsers}
+          onUnblockUser={onUnblockUser}
+        />
+      )}
+      {activeRoute === 'privacy-pending-requests' && <PendingFollowerRequestsScreen user={user} />}
+      {activeRoute === 'privacy-remove-followers' && <RemoveFollowersScreen user={user} />}
+      {activeRoute === 'privacy-activity' && (
+        <ActivityStatusMenu
+          user={user}
+          settings={settings}
+          updateSettings={updateSettings}
+          onNavigate={navigateTo}
+          blockedUsers={blockedUsers}
+          onUnblockUser={onUnblockUser}
+        />
+      )}
+      {activeRoute === 'privacy-2fa' && (
+        <TwoFactorAuthMenu
+          user={user}
+          settings={settings}
+          updateSettings={updateSettings}
+          onNavigate={navigateTo}
+          blockedUsers={blockedUsers}
+          onUnblockUser={onUnblockUser}
+        />
+      )}
+      {activeRoute === 'privacy-blocked' && (
+        <BlockedAccountsMenu blockedUsers={blockedUsers} onUnblockUser={onUnblockUser} />
+      )}
+
+      {/* ==================================================================== */}
+      {/* STACK LEVELS 1 & 2: NOTIFICATIONS (PUSH, EMAIL, IN-APP)              */}
+      {/* ==================================================================== */}
+      {activeRoute === 'notifications' && (
+        <NotificationsHubMenu settings={settings} updateSettings={updateSettings} onNavigate={navigateTo} />
+      )}
+      {activeRoute === 'notifications-push' && (
+        <PushNotificationsScreen settings={settings} updateSettings={updateSettings} />
+      )}
+      {activeRoute === 'notifications-email' && (
+        <EmailNotificationsScreen settings={settings} updateSettings={updateSettings} />
+      )}
+      {activeRoute === 'notifications-inapp' && (
+        <InAppNotificationsScreen settings={settings} updateSettings={updateSettings} />
+      )}
+
+      {/* ==================================================================== */}
+      {/* STACK LEVEL 1: APPEARANCE & DISPLAY                                  */}
+      {/* ==================================================================== */}
+      {activeRoute === 'appearance' && (
+        <AppearanceDisplayMenu settings={settings} updateSettings={updateSettings} />
+      )}
+
+      {/* ==================================================================== */}
+      {/* STACK LEVEL 1 & 2: NETWORK & CONNECTION SETTINGS                     */}
+      {/* ==================================================================== */}
+      {activeRoute === 'network' && (
+        <NetworkSettingsHub
+          settings={settings}
+          updateSettings={updateSettings}
+          onNavigate={navigateTo}
+        />
+      )}
+      {activeRoute === 'network-data-saver' && (
+        <NetworkDataSaverSubMenu settings={settings} updateSettings={updateSettings} />
+      )}
+      {activeRoute === 'network-background-sync' && (
+        <NetworkBackgroundSyncSubMenu settings={settings} updateSettings={updateSettings} />
+      )}
+      {activeRoute === 'network-offline-queue' && (
+        <NetworkOfflineQueueSubMenu settings={settings} updateSettings={updateSettings} />
+      )}
+
+      {/* ==================================================================== */}
+      {/* STACK LEVEL 1: DATA, STORAGE & TELEMETRY                             */}
+      {/* ==================================================================== */}
+      {activeRoute === 'data-storage' && (
+        <DataStorageTelemetryMenu settings={settings} updateSettings={updateSettings} />
+      )}
+
+      {/* ==================================================================== */}
+      {/* STACK LEVEL 1: CREATOR WALLET, HELP & LEGAL                          */}
+      {/* ==================================================================== */}
+      {activeRoute === 'support-legal' && (
+        <div className="space-y-5">
+          {onGoToWallet && (
+            <Card className="rounded-2xl border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-purple-950/40 shadow-sm">
+              <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5 text-amber-400" />
+                    <h3 className="font-bold text-base">Creator Wallet, Coins & Payouts</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Balance: <strong className="text-amber-400">{(user.coins || 0).toLocaleString()} Coins</strong> •{' '}
+                    <strong className="text-cyan-400">{(user.diamonds || 0).toLocaleString()} Diamonds</strong>
+                  </p>
+                </div>
+                <Button onClick={onGoToWallet} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold">
+                  Open Creator Wallet
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Shield className="h-4 w-4 text-emerald-400" />
-                Visibility & Privacy Controls
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Control who can see your online activity and follower list.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="divide-y divide-border/50 p-0">
-              <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-                <div>
-                  <Label className="font-semibold text-sm">Active Status</Label>
-                  <p className="text-xs text-muted-foreground">Show when you are active on Lonkind.</p>
-                </div>
-                <Switch checked={lastSeenVisible} onCheckedChange={setLastSeenVisible} />
-              </div>
-
-              <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-                <div>
-                  <Label className="font-semibold text-sm flex items-center gap-1.5">
-                    <EyeOff className="h-4 w-4 text-indigo-400" />
-                    Ghost Mode
-                  </Label>
-                  <p className="text-xs text-muted-foreground">Browse profiles privately without leaving view traces.</p>
-                </div>
-                <Switch checked={ghostMode} onCheckedChange={setGhostMode} />
-              </div>
-
-              <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-                <div>
-                  <Label className="font-semibold text-sm flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-purple-400" />
-                    Private Followers List
-                  </Label>
-                  <p className="text-xs text-muted-foreground">Hide your followers list from other users on your profile.</p>
-                </div>
-                <Switch checked={isFollowersPrivate} onCheckedChange={handleFollowerPrivacyChange} />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <UserX className="h-4 w-4 text-rose-400" />
-                Blocked Accounts ({blockedUsers.length})
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Blocked users cannot message you or interact with your posts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5">
-              {blockedUsers.length > 0 ? (
-                <div className="space-y-2.5">
-                  {blockedUsers.map((blockedUser) => (
-                    <div
-                      key={blockedUser.uid}
-                      className="flex items-center justify-between p-3 rounded-xl bg-secondary/40 border border-border/50"
-                    >
-                      <div>
-                        <p className="font-semibold text-sm">{blockedUser.name}</p>
-                        <p className="text-xs text-muted-foreground">@{blockedUser.handle}</p>
-                      </div>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl"
-                        disabled={isUnblockingMap[blockedUser.uid] || !onUnblockUser}
-                        onClick={() => handleLocalUnblock(blockedUser.uid)}
-                      >
-                        {isUnblockingMap[blockedUser.uid] ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          'Unblock'
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-6 rounded-xl border border-dashed border-border/60 text-xs text-muted-foreground">
-                  You haven&apos;t blocked any accounts.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* TAB 3: APPEARANCE */}
-        <TabsContent value="appearance" className="space-y-5 mt-0 focus-visible:outline-none">
-          <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Palette className="h-4 w-4 text-indigo-400" />
-                Display Theme
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Choose how Lonkind looks on your device.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[
-                  { id: 'dark', label: 'Dark Mode', desc: 'Sleek midnight theme', icon: Moon },
-                  { id: 'light', label: 'Light Mode', desc: 'Crisp daylight theme', icon: Sun },
-                  { id: 'system', label: 'System Sync', desc: 'Match device setting', icon: Monitor },
-                ].map((item) => {
-                  const Icon = item.icon;
-                  const isActive = theme === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setTheme(item.id)}
-                      className={`flex flex-col items-start p-4 rounded-2xl border text-left transition-all ${
-                        isActive
-                          ? 'border-indigo-500 bg-indigo-500/15 shadow-md'
-                          : 'border-border/60 bg-secondary/20 hover:bg-secondary/40'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full mb-2">
-                        <Icon className={`h-5 w-5 ${isActive ? 'text-indigo-400' : 'text-muted-foreground'}`} />
-                        {isActive && (
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-600 text-white">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-bold text-sm text-foreground">{item.label}</span>
-                      <span className="text-xs text-muted-foreground mt-0.5">{item.desc}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* TAB 4: HELP & LEGAL */}
-        <TabsContent value="support" className="space-y-5 mt-0 focus-visible:outline-none">
-          <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
+            <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <HelpCircle className="h-4 w-4 text-indigo-400" />
                 Contact Help & Support
               </CardTitle>
-              <CardDescription className="text-xs">
-                Have a question or issue? Send a ticket directly to our team.
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-5">
               <Form {...supportForm}>
@@ -666,12 +949,8 @@ export default function SettingsView({
                     )}
                   />
                   <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      disabled={isSubmittingTicket}
-                      className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
-                    >
-                      {isSubmittingTicket ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    <Button type="submit" disabled={isSubmittingTicket} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">
+                      {isSubmittingTicket && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       Submit Support Ticket
                     </Button>
                   </div>
@@ -681,32 +960,17 @@ export default function SettingsView({
           </Card>
 
           <Card className="rounded-2xl border-border/60 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
+            <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <Shield className="h-4 w-4 text-indigo-400" />
                 Legal Policies & Community Guidelines
               </CardTitle>
-              <CardDescription className="text-xs">
-                Review our platform terms, privacy disclosures, and community standards.
-              </CardDescription>
             </CardHeader>
             <CardContent className="divide-y divide-border/50 p-0">
               {[
-                {
-                  href: '/privacy',
-                  title: 'Privacy Policy',
-                  desc: 'Detailed disclosure on data collection, encryption, and account security.',
-                },
-                {
-                  href: '/terms',
-                  title: 'Terms of Service',
-                  desc: 'Rules governing service usage, creator payouts, and user rights.',
-                },
-                {
-                  href: '/rules',
-                  title: 'Community Guidelines & Rules',
-                  desc: 'Safety rules, live stream standards, and content moderation policies.',
-                },
+                { href: '/privacy', title: 'Privacy Policy', desc: 'Data collection, encryption, and account security.' },
+                { href: '/terms', title: 'Terms of Service', desc: 'Service usage, creator payouts, and user rights.' },
+                { href: '/rules', title: 'Community Guidelines & Rules', desc: 'Live stream standards and moderation policies.' },
               ].map((item) => (
                 <a
                   key={item.href}
@@ -724,8 +988,8 @@ export default function SettingsView({
               ))}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   );
 }

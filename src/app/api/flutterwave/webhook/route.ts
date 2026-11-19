@@ -6,12 +6,14 @@ import {
   commitDoubleEntryJournalInTx,
   DoubleEntryLeg,
 } from '@/lib/ledger';
+import { settleCoinPurchaseWithFirstTimeBonus } from '@/lib/first-purchase-bonus';
 
+const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const FLW_WEBHOOK_HASH =
   process.env.FLW_WEBHOOK_HASH ||
   process.env.FLUTTERWAVE_SECRET_HASH ||
   process.env.FLW_SECRET_HASH ||
-  process.env.FLUTTERWAVE_SECRET_KEY;
+  '';
 
 /**
  * POST: Flutterwave Webhook Handler (ACID Double-Entry Ledger)
@@ -20,8 +22,9 @@ export async function POST(req: NextRequest) {
   try {
     const verifHash = req.headers.get('verif-hash') || req.headers.get('verif_hash') || '';
 
-    if (FLW_WEBHOOK_HASH && verifHash && verifHash !== FLW_WEBHOOK_HASH) {
-      console.warn('[Flutterwave Webhook] Invalid verif-hash — request rejected');
+    // If a dedicated webhook secret hash is configured, require an exact match
+    if (FLW_WEBHOOK_HASH && verifHash !== FLW_WEBHOOK_HASH) {
+      console.warn('[Flutterwave Webhook] Missing or invalid verif-hash — request rejected');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
@@ -40,9 +43,29 @@ export async function POST(req: NextRequest) {
     // CASE 1: COIN PURCHASE (charge.completed)
     // =========================================================================
     if (event === 'charge.completed' && data?.status === 'successful') {
-      const meta = data.meta || {};
+      // Server-to-server verification with Flutterwave API so unverified webhooks cannot forge credits
+      let verifiedData = data;
+      if (FLW_SECRET_KEY && data?.id) {
+        try {
+          const vRes = await fetch(
+            `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(String(data.id))}/verify`,
+            {
+              headers: { Authorization: `Bearer ${FLW_SECRET_KEY}` },
+            }
+          );
+          const vJson = await vRes.json();
+          if (vJson.status !== 'success' || vJson.data?.status !== 'successful') {
+            return NextResponse.json({ error: 'Transaction verification failed' }, { status: 400 });
+          }
+          verifiedData = vJson.data;
+        } catch (vErr) {
+          console.warn('[Flutterwave Webhook] Verify call fallback:', vErr);
+        }
+      }
+
+      const meta = verifiedData.meta || data.meta || {};
       let userId = meta.userId;
-      const coinAmount = meta.coinAmount ? Number(meta.coinAmount) : 0;
+      let coinAmount = Number(meta.coinAmount || meta.coins || 0);
 
       if (!userId && txRef.startsWith('flw_tx_')) {
         const parts = txRef.split('_');
@@ -51,108 +74,28 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      if (!userId || !coinAmount) {
+        const pendingSnap = await db.collection('transactions').doc(txRef).get();
+        if (pendingSnap.exists) {
+          const p = pendingSnap.data() || {};
+          if (!userId && p.userId) userId = p.userId;
+          if (!coinAmount && p.coinsAdded) coinAmount = Number(p.coinsAdded);
+        }
+      }
+
       if (userId && coinAmount > 0) {
-        const txDocRef = db.collection('transactions').doc(txRef);
-        const userRef = db.collection('users').doc(userId);
-        const idempotencyKey = buildIdempotencyKey('coin_purchase_flutterwave', txRef);
-        const idempotencyRef = db.collection('ledger_idempotency').doc(idempotencyKey);
-
-        await db.runTransaction(async (tx) => {
-          const [webhookSnap, idemSnap, existingTxSnap, userSnap] = await Promise.all([
-            tx.get(webhookLogRef),
-            tx.get(idempotencyRef),
-            tx.get(txDocRef),
-            tx.get(userRef),
-          ]);
-
-          if (webhookSnap.exists || idemSnap.exists || existingTxSnap.exists) return;
-
-          const coinsBefore = Number(userSnap.data()?.coins || 0);
-          const coinsAfter = coinsBefore + coinAmount;
-
-          const legs: DoubleEntryLeg[] = [
-            {
-              accountId: 'EXTERNAL_GATEWAY_FLUTTERWAVE',
-              accountKind: 'EXTERNAL_GATEWAY',
-              asset: 'COINS',
-              direction: 'DEBIT',
-              amount: coinAmount,
-              balanceBefore: coinAmount,
-              balanceAfter: 0,
-            },
-            {
-              accountId: userId,
-              accountKind: 'USER',
-              asset: 'COINS',
-              direction: 'CREDIT',
-              amount: coinAmount,
-              balanceBefore: coinsBefore,
-              balanceAfter: coinsAfter,
-            },
-          ];
-
-          const { journalId } = commitDoubleEntryJournalInTx(db, tx, {
-            journalType: 'COIN_PURCHASE',
-            idempotencyKey,
-            reference: txRef,
-            actorUid: userId,
-            description: `Flutterwave webhook coin purchase (${coinAmount} L) ref=${txRef}`,
-            legs,
-            metadata: {
-              gateway: 'flutterwave_webhook',
-              reference: txRef,
-              flwTransactionId: data.id,
-              amount: data.amount,
-              currency: data.currency || 'NGN',
-            },
-          });
-
-          tx.set(webhookLogRef, {
-            event,
-            reference: txRef,
-            status: data?.status || 'successful',
-            processedAt: FieldValue.serverTimestamp(),
-          });
-
-          tx.set(
-            txDocRef,
-            {
-              id: txRef,
-              journalId,
-              userId,
-              flutterwaveReference: txRef,
-              flwTransactionId: data.id,
-              amount: data.amount,
-              currency: data.currency || 'NGN',
-              coinsAdded: coinAmount,
-              coinsBefore,
-              coinsAfter,
-              status: 'success',
-              type: meta.purpose || 'coin_purchase',
-              time: FieldValue.serverTimestamp(),
-              source: 'flutterwave_webhook',
-            },
-            { merge: true }
-          );
-
-          tx.set(
-            userRef,
-            {
-              coins: coinsAfter,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-
-          const notifRef = userRef.collection('notifications').doc();
-          tx.set(notifRef, {
-            type: 'coins_purchased',
-            coins: coinAmount,
-            amount: data.amount,
-            currency: data.currency || 'NGN',
-            timestamp: FieldValue.serverTimestamp(),
-            read: false,
-          });
+        await settleCoinPurchaseWithFirstTimeBonus(db, {
+          gateway: 'flutterwave',
+          providerTransactionId: String(verifiedData.id || data.id || txRef),
+          reference: txRef,
+          userId,
+          baseCoins: coinAmount,
+          amountPaid: Number(verifiedData.amount || data.amount || 0),
+          currency: String(verifiedData.currency || data.currency || 'NGN').toUpperCase(),
+          purpose: meta.purpose || 'coin_purchase',
+          source: 'flutterwave_webhook',
+          webhookLogDocId: `flw_${txRef}_${event}`,
+          webhookEvent: event,
         });
       }
 

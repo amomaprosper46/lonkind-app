@@ -69,6 +69,7 @@ import {
   rankAndDiversifyPosts,
 } from '@/lib/recommendation-engine';
 import { recommendationTracker } from '@/lib/recommendation-tracker';
+import UpcomingLivesBanner, { type ScheduledStreamDoc } from './upcoming-lives-banner';
 
 const INITIAL_BATCH_SIZE = 8; // 5-10 posts per batch requirement
 
@@ -108,6 +109,7 @@ export interface ExploreViewProps {
   blockedUids?: Set<string>;
   activeLiveUids?: Set<string>;
   onWatchLive?: (hostUid: string) => void;
+  onStartScheduledLive?: (event: ScheduledStreamDoc) => void;
   onOpenVideos?: () => void;
   initialSearchQuery?: string;
 }
@@ -126,6 +128,7 @@ export default function ExploreView({
   blockedUids,
   activeLiveUids,
   onWatchLive,
+  onStartScheduledLive,
   onOpenVideos,
   initialSearchQuery = '',
 }: ExploreViewProps) {
@@ -1248,6 +1251,13 @@ export default function ExploreView({
         /* SURFACE 2: INTELLIGENT PERSONALIZED EXPLORE FEED                      */
         /* ===================================================================== */
         <div className="space-y-5">
+          {/* Upcoming Scheduled Lives Row */}
+          <UpcomingLivesBanner
+            currentUser={currentUser}
+            onWatchLive={onWatchLive}
+            onStartScheduledLive={onStartScheduledLive}
+          />
+
           {/* Feed Mode Selector + Short Videos Quick Entry */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">

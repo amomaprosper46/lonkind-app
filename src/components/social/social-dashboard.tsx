@@ -33,6 +33,7 @@ import StoryGeneratorView from './story-generator-view';
 import type { ProfileData } from './edit-profile-dialog';
 import HomeFeed from './home-feed';
 import SuperGiftOverlay from './super-gift-overlay';
+import type { ScheduledStreamDoc } from './upcoming-lives-banner';
 
 import { DockedChatProvider, useDockedChat } from './docked-chat-context';
 import DockedChatContainer from './docked-chat-container';
@@ -56,13 +57,55 @@ const LoadingComponent = () => (
     </div>
 );
 
-const MobileNavItem = ({ icon: Icon, active, onClick, title, badge }: { icon: any, active: boolean, onClick: () => void, title?: string, badge?: React.ReactNode }) => (
-    <button onClick={onClick} title={title} className={cn("relative h-10 w-10 flex flex-col items-center justify-center rounded-full transition-all duration-300 shrink-0", active ? "text-indigo-400 bg-indigo-500/10 font-bold" : "text-slate-500 hover:text-slate-300")}>
-        <Icon className={cn("h-5 w-5 transition-transform duration-300", active ? "scale-110" : "scale-100")} />
-        {badge}
-        {active && <span className="absolute -bottom-1 w-1 h-1 bg-indigo-500 rounded-full" />}
-    </button>
-);
+const MobileNavItem = ({
+    icon: Icon,
+    label,
+    active,
+    onClick,
+    href,
+    badge,
+}: {
+    icon: any;
+    label: string;
+    active: boolean;
+    onClick?: () => void;
+    href?: string;
+    badge?: React.ReactNode;
+}) => {
+    const content = (
+        <div
+            className={cn(
+                "relative flex flex-col items-center justify-center gap-1 py-1.5 w-full rounded-xl transition-all duration-200",
+                active ? "text-indigo-400" : "text-muted-foreground hover:text-foreground"
+            )}
+        >
+            {active && (
+                <span className="absolute -top-1.5 w-6 h-0.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+            )}
+            <div className="relative">
+                <Icon className={cn("h-5 w-5 transition-transform duration-200", active ? "scale-110" : "scale-100")} />
+                {badge}
+            </div>
+            <span className={cn("text-[10px] leading-none tracking-tight", active ? "font-bold text-indigo-400" : "font-medium")}>
+                {label}
+            </span>
+        </div>
+    );
+
+    if (href) {
+        return (
+            <Link href={href} className="flex items-center justify-center w-full" aria-label={label}>
+                {content}
+            </Link>
+        );
+    }
+
+    return (
+        <button type="button" onClick={onClick} className="flex items-center justify-center w-full" aria-label={label}>
+            {content}
+        </button>
+    );
+};
 
 const MessagingView = dynamic(() => import('./messaging-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const SettingsView = dynamic(() => import('./settings-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
@@ -77,6 +120,7 @@ const AdminDashboardView = dynamic(() => import('./admin-dashboard-view').then(m
 const FriendsView = dynamic(() => import('./friends-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+const ProfileView = dynamic(() => import('./profile-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
 const SuggestionsPage = dynamic(() => import('@/app/suggestions/page').then(m => m.default), { loading: () => <LoadingComponent />, ssr: false });
 const FriendRequestsPage = dynamic(() => import('@/app/friend-requests/page').then(m => m.default), { loading: () => <LoadingComponent />, ssr: false });
 const LiveStreamView = dynamic(() => import('./live-stream-view'), { ssr: false });
@@ -123,7 +167,7 @@ export interface NotificationFromUser {
 
 export interface Notification {
     id: string;
-    type: 'friend_request' | 'friend_request_accepted' | 'new_reaction' | 'new_comment' | 'new_message' | 'group_post' | 'new_follower' | 'payout_approved' | 'payout_rejected';
+    type: 'friend_request' | 'friend_request_accepted' | 'follow_request_accepted' | 'new_reaction' | 'new_comment' | 'new_message' | 'group_post' | 'new_follower' | 'payout_approved' | 'payout_rejected' | 'scheduled_live_started';
     fromUser?: NotificationFromUser;
     postId?: string;
     reactionType?: ReactionType;
@@ -135,6 +179,12 @@ export interface Notification {
     messageSnippet?: string;
     groupId?: string;
     groupName?: string;
+    // Scheduled live notification fields
+    scheduleId?: string;
+    streamId?: string;
+    hostUid?: string;
+    streamTitle?: string;
+    message?: string;
     // Payout fields
     amount?: number;
     currency?: string;
@@ -153,6 +203,7 @@ export interface CurrentUser {
     balance?: number;
     coins?: number;
     diamonds?: number;
+    hasMadeFirstPurchase?: boolean;
     followerPrivacy?: 'public' | 'private';
     hasCompletedTour?: boolean;
 }
@@ -212,16 +263,21 @@ function DropdownMenuWrapper({ currentUser, onSignOut, changeView }: { currentUs
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 bg-popover border-border text-popover-foreground p-1.5 rounded-xl shadow-2xl z-50" align="end">
-                <DropdownMenuLabel className="px-2.5 py-2 flex flex-col min-w-0">
+                <DropdownMenuLabel
+                    onClick={() => changeView('profile')}
+                    className="px-2.5 py-2 flex flex-col min-w-0 cursor-pointer hover:bg-slate-800/50 rounded-lg transition-colors"
+                >
                     <span className="text-sm font-semibold text-slate-200 truncate">{currentUser?.name || 'Loading profile...'}</span>
-                    <span className="text-xs text-slate-500 truncate">@{currentUser?.handle || 'user'}</span>
+                    <span className="text-xs text-indigo-400 truncate">@{currentUser?.handle || 'user'} • View Profile</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-slate-800/60" />
-                <DropdownMenuItem onClick={() => changeView('settings')} className="gap-2 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-slate-300 focus:bg-slate-800 focus:text-white transition-colors">
-                    <User className="h-3.5 w-3.5" /> Account Settings
+                <DropdownMenuItem onClick={() => changeView('profile')} className="gap-2 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-slate-300 focus:bg-slate-800 focus:text-white transition-colors">
+                    <User className="h-3.5 w-3.5 text-indigo-400" /> View My Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => changeView('wallet')} className="gap-2 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-slate-300 focus:bg-slate-800 focus:text-white transition-colors">
-                    <Wallet className="h-3.5 w-3.5" /> Creator Earnings
+                <DropdownMenuItem asChild className="gap-2 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-slate-300 focus:bg-slate-800 focus:text-white transition-colors">
+                    <Link href="/settings">
+                        <Cog className="h-3.5 w-3.5" /> Settings, Wallet &amp; Saved
+                    </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-slate-800/60" />
                 <DropdownMenuItem onClick={onSignOut} className="gap-2 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-rose-400 focus:bg-rose-950/40 focus:text-rose-300 transition-colors">
@@ -238,6 +294,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [initialConversationId, setInitialConversationId] = useState<string | undefined>(undefined);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [selectedLiveHostUid, setSelectedLiveHostUid] = useState<string | null>(null);
+  const [selectedScheduledStream, setSelectedScheduledStream] = useState<ScheduledStreamDoc | null>(null);
   const [activeLiveStreams, setActiveLiveStreams] = useState<any[]>([]);
 
   // Real-time listener for all active streams
@@ -300,6 +357,22 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
   const [friendSuggestions, setFriendSuggestions] = useState<any[]>([]);
   const [trendingHashtags, setTrendingHashtags] = useState<{tag: string, count: number}[]>([]);
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
+  const [myPosts, setMyPosts] = useState<Post[]>([]);
+
+  useEffect(() => {
+    if (!user?.uid || currentView !== 'profile') return;
+    const postsQuery = query(collection(db, 'posts'), where('author.uid', '==', user.uid));
+    const unsub = onSnapshot(postsQuery, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Post));
+      list.sort((a, b) => {
+        const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
+        const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.timestamp?.seconds ? b.timestamp.seconds * 1000 : 0);
+        return tB - tA;
+      });
+      setMyPosts(list);
+    });
+    return () => unsub();
+  }, [user?.uid, currentView]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -312,8 +385,26 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
     const groupId = searchParams.get('groupId');
     const tag = searchParams.get('hashtag') || searchParams.get('tag');
     const liveHost = searchParams.get('live') || searchParams.get('host');
+    const scheduleId = searchParams.get('scheduleId');
+
+    if (scheduleId) {
+      getDoc(doc(db, 'scheduled_streams', scheduleId))
+        .then((snap) => {
+          if (snap.exists()) {
+            setSelectedScheduledStream({ id: snap.id, ...(snap.data() as Omit<ScheduledStreamDoc, 'id'>) });
+          }
+          setSelectedLiveHostUid(null);
+          setCurrentView('live');
+        })
+        .catch(() => {
+          setSelectedLiveHostUid(null);
+          setCurrentView('live');
+        });
+      return;
+    }
 
     if (liveHost) {
+      setSelectedScheduledStream(null);
       setSelectedLiveHostUid(liveHost.replace(/^live_/, ''));
       setCurrentView('live');
       return;
@@ -895,6 +986,18 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
             if (data.businessUrl !== undefined && data.businessUrl !== currentUser.businessUrl) {
                 updates.businessUrl = data.businessUrl;
             }
+
+            if (data.followerPrivacy !== undefined) {
+                updates.followerPrivacy = data.followerPrivacy;
+            }
+
+            if (data.lastSeenVisible !== undefined) {
+                updates.lastSeenVisible = data.lastSeenVisible;
+            }
+
+            if (data.ghostMode !== undefined) {
+                updates.ghostMode = data.ghostMode;
+            }
             
             if (data.avatarFile) {
                 const fileToUpload = await compressImage(data.avatarFile);
@@ -1135,9 +1238,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 <div className="container max-w-7xl mx-auto h-16 flex items-center justify-between px-4 gap-4">
                     <div className="flex items-center gap-6">
                         <Link href="/" className="flex items-center gap-2.5 group">
-                            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform duration-300">
-                                <Sparkles className="h-4 w-4 text-white animate-pulse" />
-                            </div>
+                            <Image
+                                src="/logo.png"
+                                alt="Lonkind Logo"
+                                width={36}
+                                height={36}
+                                className="h-9 w-9 rounded-xl object-cover border border-cyan-400/40 shadow-lg shadow-blue-500/25 group-hover:scale-105 transition-transform duration-300"
+                            />
                             <span className="hidden sm:inline-block font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">Lonkind</span>
                         </Link>
                     </div>
@@ -1294,6 +1401,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                                     changeView('groups');
                                                 } else if (n.type === 'payout_approved' || n.type === 'payout_rejected') {
                                                     changeView('wallet');
+                                                } else if (n.type === 'scheduled_live_started') {
+                                                    const targetHost = (n.hostUid || n.fromUser?.uid || '').replace(/^live_/, '');
+                                                    if (targetHost) {
+                                                        setSelectedScheduledStream(null);
+                                                        setSelectedLiveHostUid(targetHost);
+                                                        changeView('live');
+                                                    }
                                                 } else if (n.fromUser?.handle) {
                                                     window.location.href = `/profile/${n.fromUser.handle}`;
                                                 }
@@ -1333,11 +1447,17 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                                                     <span className="font-semibold text-slate-100">{n.fromUser?.name || 'Someone'}</span>{' '}
                                                                     {n.type === 'friend_request' && 'sent you a friend request.'}
                                                                     {n.type === 'friend_request_accepted' && 'accepted your friend request! 🎉'}
+                                                                    {n.type === 'follow_request_accepted' && 'accepted your follow request! 🎉'}
                                                                     {n.type === 'new_reaction' && 'reacted to your post.'}
                                                                     {n.type === 'new_comment' && `commented: "${n.commentText?.slice(0, 60)}${(n.commentText?.length || 0) > 60 ? '…' : ''}"`}
                                                                     {n.type === 'new_follower' && 'started following you.'}
                                                                     {n.type === 'new_message' && `sent you a message: "${n.messageSnippet?.slice(0, 40) || ''}…"`}
                                                                     {n.type === 'group_post' && `posted in ${n.groupName || 'a group'}.`}
+                                                                    {n.type === 'scheduled_live_started' && (
+                                                                        <span className="text-rose-300 font-semibold">
+                                                                            is LIVE now: {n.streamTitle || 'Tap to join the broadcast!'} 🔴
+                                                                        </span>
+                                                                    )}
                                                                 </>
                                                             )}
                                                         </p>
@@ -1364,17 +1484,14 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 </div>
             </header>
 
-            {/* Dashboard Core Body Space Layout wrapper */}
-            <div className="flex-1 container max-w-7xl mx-auto px-4 py-6 grid grid-cols-12 gap-6 items-start">
-                {/* Left Side Navigation Panel (Hidden on Mobile) */}
-                <aside className="hidden md:block col-span-12 md:col-span-3 space-y-2 sticky top-24">
+            {/* Dashboard Core Body Space Layout wrapper (pb-24 on mobile so content never hides behind bottom bar) */}
+            <div className="flex-1 container max-w-7xl mx-auto px-4 pt-6 pb-24 md:pb-8 grid grid-cols-12 gap-6 items-start">
+                {/* Clean, Minimal Left Side Navigation Panel (Hidden on Mobile) */}
+                <aside className="hidden md:block col-span-12 md:col-span-3 space-y-2.5 sticky top-24">
                     <NavigationItem label="Home Feed" icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} />
                     <NavigationItem label="Explore" icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} />
-                    <NavigationItem label="Friends & Requests" icon={Users} active={currentView === 'friends'} onClick={() => changeView('friends')} badgeCount={friendRequests.length} />
-                    <NavigationItem label="Suggestions" icon={Sparkles} active={currentView === 'suggestions'} onClick={() => changeView('suggestions')} />
-                    <NavigationItem label="Friend Requests" icon={UserPlus} active={currentView === 'friend-requests'} onClick={() => changeView('friend-requests')} badgeCount={friendRequests.length} />
-                    <NavigationItem label="Direct Messages" icon={MessageSquare} active={currentView === 'messages'} onClick={() => changeView('messages')} badgeCount={0} />
-                    <NavigationItem label="Short Videos" icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} />
+                    <NavigationItem label="Friends" icon={Users} active={currentView === 'friends' || currentView === 'suggestions' || currentView === 'friend-requests'} onClick={() => changeView('friends')} badgeCount={friendRequests.length} />
+                    <NavigationItem label="Messages" icon={MessageSquare} active={currentView === 'messages'} onClick={() => changeView('messages')} badgeCount={0} />
                     <NavigationItem 
                         label="Go Live" 
                         icon={Radio} 
@@ -1383,31 +1500,28 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         badgeVariant="live"
                         onClick={() => { setSelectedLiveHostUid(null); changeView('live'); }} 
                     />
-                    <NavigationItem label="Audio Spaces" icon={Mic} active={currentView === 'spaces'} onClick={() => changeView('spaces')} />
-                    <NavigationItem label="Saved Content" icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} />
-                    
-                    <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Ecosystem</div>
-                    <NavigationItem
-                        label="Lonki Personal AI"
-                        icon={BrainCircuit}
-                        active={currentView === 'personal-ai'}
-                        onClick={() => changeView('personal-ai')}
-                    />
-                    <NavigationItem
-                        label="AI Space"
-                        icon={Wand2}
-                        active={currentView === 'ai-command-center' || currentView === 'story-writer'}
-                        onClick={() => changeView('ai-command-center')}
-                    />
+                    <NavigationItem label="Profile" icon={User} active={currentView === 'profile'} onClick={() => changeView('profile')} />
 
-                    <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Finance & Tools</div>
-                    <NavigationItem id="tour-wallet" label="Creator Wallet" icon={Wallet} active={currentView === 'wallet'} onClick={() => changeView('wallet')} />
-                    <NavigationItem label="Leaderboard" icon={Trophy} active={currentView === 'leaderboard'} onClick={() => changeView('leaderboard')} />
-                    <NavigationItem label="Settings" icon={Cog} active={currentView === 'settings'} onClick={() => changeView('settings')} />
-                    
+                    <div className="pt-3 mt-3 border-t border-border/50">
+                        <Link href="/settings" className="block">
+                            <Button
+                                variant="ghost"
+                                className={cn(
+                                    "w-full justify-start gap-3.5 h-10 px-3 rounded-xl font-medium text-sm transition-all group",
+                                    currentView === 'settings'
+                                        ? "bg-indigo-600 hover:bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-accent border border-transparent hover:border-border/40"
+                                )}
+                            >
+                                <Cog className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-transform group-hover:scale-105" />
+                                <span className="truncate">Settings</span>
+                            </Button>
+                        </Link>
+                    </div>
+
                     {(currentUser?.name?.trim().toLowerCase() === 'lonkind' || currentUser?.handle?.toLowerCase() === 'lonkind' || currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind' || (currentUser as any)?.isAdmin) && (
                         <>
-                            <div className="pt-4 pb-2 px-3 text-xs font-semibold text-rose-500 uppercase tracking-wider">Administration</div>
+                            <div className="pt-4 pb-1 px-3 text-[11px] font-semibold text-rose-500 uppercase tracking-wider">Administration</div>
                             <NavigationItem label="System Dashboard" icon={ShieldAlert} active={currentView === 'admin'} onClick={() => changeView('admin')} />
                         </>
                     )}
@@ -1430,10 +1544,17 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 activeHashtag={activeHashtag}
                                 onClearHashtag={handleClearHashtag}
                                 onWatchLive={(hostUid) => {
+                                    setSelectedScheduledStream(null);
                                     setSelectedLiveHostUid(hostUid.replace(/^live_/, ''));
                                     changeView('live');
                                 }}
                                 onGoLive={() => {
+                                    setSelectedScheduledStream(null);
+                                    setSelectedLiveHostUid(null);
+                                    changeView('live');
+                                }}
+                                onStartScheduledLive={(event) => {
+                                    setSelectedScheduledStream(event);
                                     setSelectedLiveHostUid(null);
                                     changeView('live');
                                 }}
@@ -1454,7 +1575,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 blockedUids={blockedUidsSet}
                                 activeLiveUids={activeLiveUidsSet}
                                 onWatchLive={(hostUid) => {
+                                    setSelectedScheduledStream(null);
                                     setSelectedLiveHostUid(hostUid.replace(/^live_/, ''));
+                                    changeView('live');
+                                }}
+                                onStartScheduledLive={(event) => {
+                                    setSelectedScheduledStream(event);
+                                    setSelectedLiveHostUid(null);
                                     changeView('live');
                                 }}
                                 onOpenVideos={() => changeView('videos')}
@@ -1511,6 +1638,36 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         {currentView === 'spaces' && <SpacesView currentUser={currentUser} />}
                         {currentView === 'wallet' && <WalletView currentUser={currentUser} />}
                         {currentView === 'leaderboard' && <LeaderboardView />}
+                        {currentView === 'profile' && currentUser && (
+                            <ProfileView
+                                user={currentUser as any}
+                                posts={myPosts}
+                                currentUser={currentUser}
+                                isCurrentUser={true}
+                                friendStatus="friends"
+                                onFriendAction={() => {}}
+                                onMessage={() => changeView('messages')}
+                                onReact={handleReact}
+                                onComment={(post) => setSelectedPostForComments(post)}
+                                onSavePost={handleSavePost}
+                                onDeletePost={handleDeletePost}
+                                userReactions={userReactions}
+                                savedPostIds={savedPostIds}
+                                onStartCall={() => {}}
+                                onUpdateProfile={handleUpdateProfile}
+                                onOpenSettings={() => changeView('settings')}
+                                onWatchLive={(hostUid) => {
+                                    setSelectedScheduledStream(null);
+                                    setSelectedLiveHostUid(hostUid.replace(/^live_/, ''));
+                                    changeView('live');
+                                }}
+                                onStartScheduledLive={(event) => {
+                                    setSelectedScheduledStream(event);
+                                    setSelectedLiveHostUid(null);
+                                    changeView('live');
+                                }}
+                            />
+                        )}
                         {currentView === 'settings' && (
                             <SettingsView 
                                 user={currentUser!} 
@@ -1521,6 +1678,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 blockedUsers={blockedUsers}
                                 onUnblockUser={handleUnblockUser}
                                 onGoToWallet={() => changeView('wallet')}
+                                onViewProfile={() => changeView('profile')}
                             />
                         )}
                         {currentView === 'admin' && (currentUser?.name?.trim().toLowerCase() === 'lonkind' || currentUser?.handle?.toLowerCase() === 'lonkind' || currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind' || (currentUser as any)?.isAdmin) && <AdminDashboardView />}
@@ -1529,10 +1687,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 hostUid={(selectedLiveHostUid || currentUser?.uid || '').replace(/^live_/, '')}
                                 userId={currentUser?.uid || ''}
                                 userName={currentUser?.name || 'User'}
+                                userHandle={currentUser?.handle || ''}
                                 userAvatar={currentUser?.avatarUrl || ''}
                                 isHost={!selectedLiveHostUid || selectedLiveHostUid.replace(/^live_/, '') === currentUser?.uid}
+                                scheduledStream={selectedScheduledStream}
                                 onLeave={() => {
                                     setSelectedLiveHostUid(null);
+                                    setSelectedScheduledStream(null);
                                     changeView('home');
                                 }}
                                 userCoins={currentUser?.coins || 0}
@@ -1663,62 +1824,50 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 </aside>
             </div>
 
-            {/* Mobile Native Bottom App Bar (Custom Lonkind Sleek Layout) */}
+            {/* Minimalist 5-Item Mobile Bottom Navigation Bar (Spacious, Balanced, Uncluttered) */}
             {!isMobileFullscreenFeature && (
-                <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border/60 pb-[env(safe-area-inset-bottom)]">
-                    <div className="flex items-center justify-between px-2 h-14 overflow-x-auto no-scrollbar gap-1">
-                        <MobileNavItem icon={Home} active={currentView === 'home'} onClick={() => changeView('home')} title="Home" />
-                        <MobileNavItem icon={Compass} active={currentView === 'explore'} onClick={() => changeView('explore')} title="Explore" />
-                        <MobileNavItem 
-                            icon={Radio} 
-                            active={currentView === 'live'} 
-                            onClick={() => { setSelectedLiveHostUid(null); changeView('live'); }} 
-                            title="Go Live" 
-                            badge={activeLiveCount > 0 ? (
-                                <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                                </span>
-                            ) : undefined}
+                <nav
+                    aria-label="Primary mobile navigation"
+                    className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border/60 shadow-[0_-8px_30px_rgba(0,0,0,0.25)] pb-[env(safe-area-inset-bottom)]"
+                >
+                    <div className="grid grid-cols-5 items-center max-w-md mx-auto px-2 h-16">
+                        <MobileNavItem
+                            icon={Home}
+                            label="Home"
+                            active={currentView === 'home'}
+                            onClick={() => changeView('home')}
                         />
-                        <MobileNavItem icon={Video} active={currentView === 'videos'} onClick={() => changeView('videos')} title="Videos" />
-                        
-                        <div className="relative -mt-4 mx-1 shrink-0">
-                            <button onClick={() => changeView('messages')} className="h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-500/40 flex items-center justify-center transform hover:scale-105 active:scale-95 transition-all border-4 border-background" title="Messages">
-                                <MessageSquare className="h-5 w-5" />
-                            </button>
-                        </div>
-                        
-                        <MobileNavItem icon={Users} active={currentView === 'friends'} onClick={() => changeView('friends')} title="Friends & Requests" />
-                        <MobileNavItem icon={Bookmark} active={currentView === 'saved'} onClick={() => changeView('saved')} title="Saved" />
-                        <MobileNavItem icon={Wallet} active={currentView === 'wallet'} onClick={() => changeView('wallet')} title="Wallet" />
-                        
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button className="h-10 w-10 flex flex-col items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors relative shrink-0" title="More">
-                                    <Menu className="h-5 w-5" />
-                                    {unreadNotifications > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-indigo-500" />}
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 mb-2 rounded-2xl border-slate-700/50 bg-slate-900/95 backdrop-blur-xl">
-                                <DropdownMenuLabel className="text-xs text-slate-400">Lonkind Features</DropdownMenuLabel>
-                                <DropdownMenuSeparator className="bg-slate-800" />
-                                <DropdownMenuItem onClick={() => {
-                                    const input = document.getElementById('omni-search-input');
-                                    if (input) { input.focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-                                }} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Search className="mr-2 h-4 w-4" /> Search</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('personal-ai')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><BrainCircuit className="mr-2 h-4 w-4 text-indigo-400" /> Lonki Personal AI</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('ai-command-center')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Wand2 className="mr-2 h-4 w-4 text-purple-400" /> AI Space</DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-slate-800" />
-                                <DropdownMenuItem onClick={() => changeView('leaderboard')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Trophy className="mr-2 h-4 w-4 text-amber-400" /> Leaderboard</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => changeView('settings')} className="cursor-pointer py-3 rounded-xl hover:bg-slate-800"><Cog className="mr-2 h-4 w-4 text-indigo-400" /> Settings</DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-slate-800" />
-                                <DropdownMenuItem onClick={() => window.open('/privacy', '_blank')} className="cursor-pointer py-2.5 rounded-xl hover:bg-slate-800 text-xs text-slate-400"><FileText className="mr-2 h-3.5 w-3.5" /> Privacy Policy</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => window.open('/terms', '_blank')} className="cursor-pointer py-2.5 rounded-xl hover:bg-slate-800 text-xs text-slate-400"><FileText className="mr-2 h-3.5 w-3.5" /> Terms of Service</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <MobileNavItem
+                            icon={Compass}
+                            label="Explore"
+                            active={currentView === 'explore'}
+                            onClick={() => changeView('explore')}
+                        />
+                        <MobileNavItem
+                            icon={MessageSquare}
+                            label="Messages"
+                            active={currentView === 'messages'}
+                            onClick={() => changeView('messages')}
+                        />
+                        <MobileNavItem
+                            icon={User}
+                            label="Profile"
+                            active={currentView === 'profile'}
+                            onClick={() => changeView('profile')}
+                        />
+                        <MobileNavItem
+                            icon={Cog}
+                            label="Settings"
+                            active={currentView === 'settings'}
+                            href="/settings"
+                            badge={
+                                friendRequests.length > 0 ? (
+                                    <span className="absolute -top-0.5 -right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-background" />
+                                ) : undefined
+                            }
+                        />
                     </div>
-                </div>
+                </nav>
             )}
 
             {/* Micro-Overlay Global Drawer Shell for Post Discussions Comments sheet thread views */}

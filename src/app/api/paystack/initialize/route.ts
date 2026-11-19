@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://impactful-ideas.web.app';
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
+
+function resolveCanonicalOrigin(req: NextRequest): string {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return req.nextUrl.origin;
+  }
+  return APP_URL.replace(/\/$/, '');
+}
 
 /**
  * Supported Global Currency Rates (Price per coin in local currency)
@@ -32,25 +40,26 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { email, userId, amount, amountNaira, coinsToCredit, currency = 'NGN' } = body;
-    const finalAmount = amount || amountNaira;
+    const { email, userId, amount, amountNaira, coins, coinsToCredit: rawCoins, currency = 'NGN' } = body;
+    const finalAmount = Number(amount || amountNaira || 0);
+    const coinsToCredit = Number(rawCoins || coins || 0);
 
     // Validate incoming parameters
-    if (!email || !userId || !finalAmount || !coinsToCredit) {
-      return NextResponse.json({ error: 'Missing core tracking entries: email, userId, amount, coinsToCredit' }, { status: 400 });
+    if (!email || !userId || finalAmount <= 0 || coinsToCredit <= 0) {
+      return NextResponse.json({ error: 'Missing core tracking entries: email, userId, amount, coins' }, { status: 400 });
     }
 
     const cleanCurrency = currency.toUpperCase();
     const rate = CURRENCY_RATE_PER_COIN[cleanCurrency] || CURRENCY_RATE_PER_COIN['NGN'];
     
-    // Safety check: ensure user is paying a reasonable minimum amount per coin for the selected currency
-    const expectedMinAmount = (coinsToCredit * rate) * 0.7; // Allow up to 30% volume bundle discount
-    if (finalAmount < expectedMinAmount) {
-      console.warn(`[Paystack Init] Tamper detected for user ${userId}. Expected min ${cleanCurrency} ${expectedMinAmount}, got ${finalAmount}`);
+    // Allow bundle discount (up to 28%) + 20% first-time buyer bonus (floor = 0.55)
+    const expectedMinAmount = Number((coinsToCredit * rate * 0.55).toFixed(2));
+    if (finalAmount + 0.01 < expectedMinAmount) {
+      console.warn(`[Paystack Init] Price check failed for user ${userId}. Expected min ${cleanCurrency} ${expectedMinAmount}, got ${finalAmount}`);
       return NextResponse.json({ error: 'Pricing mismatch detected. Transaction blocked.' }, { status: 400 });
     }
 
-    const origin = req.headers.get('origin') || req.nextUrl.origin || APP_URL;
+    const origin = resolveCanonicalOrigin(req);
 
     /**
      * 2. Construct the Paystack Transaction Invoice

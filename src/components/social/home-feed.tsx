@@ -21,6 +21,7 @@ import { Badge } from '../ui/badge';
 import Link from 'next/link';
 import ngeohash from 'ngeohash';
 import { compressImage } from '@/lib/image-compression';
+import UpcomingLivesBanner, { type ScheduledStreamDoc } from './upcoming-lives-banner';
 
 interface NewPostMedia {
     file: File;
@@ -44,6 +45,7 @@ interface HomeFeedProps {
     onClearHashtag?: () => void;
     onWatchLive?: (hostUid: string) => void;
     onGoLive?: () => void;
+    onStartScheduledLive?: (event: ScheduledStreamDoc) => void;
 }
 
 const getUserLocation = (): Promise<GeolocationPosition> => {
@@ -69,7 +71,8 @@ export default function HomeFeed({
     activeHashtag,
     onClearHashtag,
     onWatchLive,
-    onGoLive
+    onGoLive,
+    onStartScheduledLive
 }: HomeFeedProps) {
     const [followingPosts, setFollowingPosts] = useState<Post[]>([]);
     const [forYouPosts, setForYouPosts] = useState<Post[]>([]);
@@ -468,6 +471,14 @@ export default function HomeFeed({
                     <p className="text-xs text-slate-400 italic">No one is currently streaming live. Tap "Start Live" to go live on Lonkind!</p>
                 )}
             </div>
+
+            {/* Upcoming Scheduled Lives Horizontal Row */}
+            <UpcomingLivesBanner
+                currentUser={currentUser}
+                onWatchLive={onWatchLive}
+                onStartScheduledLive={onStartScheduledLive}
+                className="mb-5"
+            />
 
             <CreatePostCard
                 currentUser={currentUser}

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
-import {
-  buildIdempotencyKey,
-  commitDoubleEntryJournalInTx,
-  DoubleEntryLeg,
-} from '@/lib/ledger';
+import { settleCoinPurchaseWithFirstTimeBonus } from '@/lib/first-purchase-bonus';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
@@ -64,9 +59,9 @@ export async function POST(req: NextRequest) {
 
     const numCoins = Number(coinAmount);
     const rate = CURRENCY_RATE_PER_COIN[currency] || CURRENCY_RATE_PER_COIN['NGN'];
-    const expectedMinAmount = numCoins * rate * 0.7;
+    const expectedMinAmount = Number((numCoins * rate * 0.55).toFixed(2));
 
-    if (amountPaid < expectedMinAmount) {
+    if (amountPaid + 0.01 < expectedMinAmount) {
       console.error(
         `[Paystack Verify] Fraud/tamper detected for user ${userId}. Paid ${currency} ${amountPaid}, expected minimum ${expectedMinAmount} for ${numCoins} coins.`
       );
@@ -76,89 +71,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = adminDb;
-    const txRef = db.collection('transactions').doc(reference);
-    const userRef = db.collection('users').doc(userId);
-    const idempotencyKey = buildIdempotencyKey('coin_purchase_paystack', reference);
-    const idempotencyRef = db.collection('ledger_idempotency').doc(idempotencyKey);
-    const amountNaira = currency === 'NGN' ? amountPaid : (amountPaid / (rate || 1)) * 10;
-
-    // ACID Transaction with Double-Entry Ledger (all reads inside transaction)
-    const txResult = await db.runTransaction(async (transaction) => {
-      const [idemSnap, existingTxSnap, userSnap] = await Promise.all([
-        transaction.get(idempotencyRef),
-        transaction.get(txRef),
-        transaction.get(userRef),
-      ]);
-
-      if (idemSnap.exists || (existingTxSnap.exists && existingTxSnap.data()?.status === 'success')) {
-        return { alreadyProcessed: true };
-      }
-
-      const coinsBefore = Number(userSnap.data()?.coins || 0);
-      const coinsAfter = coinsBefore + numCoins;
-
-      const legs: DoubleEntryLeg[] = [
-        {
-          accountId: 'EXTERNAL_GATEWAY_PAYSTACK',
-          accountKind: 'EXTERNAL_GATEWAY',
-          asset: 'COINS',
-          direction: 'DEBIT',
-          amount: numCoins,
-          balanceBefore: numCoins,
-          balanceAfter: 0,
-        },
-        {
-          accountId: userId,
-          accountKind: 'USER',
-          asset: 'COINS',
-          direction: 'CREDIT',
-          amount: numCoins,
-          balanceBefore: coinsBefore,
-          balanceAfter: coinsAfter,
-        },
-      ];
-
-      const { journalId } = commitDoubleEntryJournalInTx(db, transaction, {
-        journalType: 'COIN_PURCHASE',
-        idempotencyKey,
-        reference,
-        actorUid: userId,
-        description: `Paystack verified coin purchase (${numCoins} L) ref=${reference}`,
-        legs,
-        metadata: { gateway: 'paystack', reference, amountPaid, currency, numCoins },
-      });
-
-      transaction.set(
-        txRef,
-        {
-          id: reference,
-          journalId,
-          userId,
-          paystackReference: reference,
-          amount: amountPaid,
-          amountNaira,
-          currency,
-          coinsAdded: numCoins,
-          coinsBefore,
-          coinsAfter,
-          status: 'success',
-          type: 'coin_purchase',
-          time: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      transaction.set(
-        userRef,
-        {
-          coins: coinsAfter,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return { alreadyProcessed: false, journalId };
+    const txResult = await settleCoinPurchaseWithFirstTimeBonus(adminDb, {
+      gateway: 'paystack',
+      providerTransactionId: String(verifyData.data.id || reference),
+      reference,
+      userId,
+      baseCoins: numCoins,
+      amountPaid,
+      currency,
+      purpose: 'coin_purchase',
+      source: 'paystack_verify',
     });
 
     if (txResult.alreadyProcessed) {
@@ -166,15 +88,22 @@ export async function POST(req: NextRequest) {
         success: true,
         message: 'Already processed',
         alreadyProcessed: true,
-        coinsAdded: numCoins,
+        coinsAdded: txResult.totalCoinsCredited,
+        baseCoins: txResult.baseCoins,
+        bonusCoins: txResult.bonusCoins,
       });
     }
 
     return NextResponse.json({
       success: true,
       journalId: txResult.journalId,
-      message: `Successfully credited ${numCoins} coins to your account!`,
-      coinsAdded: numCoins,
+      message:
+        txResult.bonusCoins > 0
+          ? `Successfully credited ${txResult.baseCoins.toLocaleString()} coins + ${txResult.bonusCoins.toLocaleString()} First-Time Bonus coins!`
+          : `Successfully credited ${txResult.totalCoinsCredited.toLocaleString()} coins to your account!`,
+      coinsAdded: txResult.totalCoinsCredited,
+      baseCoins: txResult.baseCoins,
+      bonusCoins: txResult.bonusCoins,
     });
   } catch (error: any) {
     console.error('Paystack verify error:', error);

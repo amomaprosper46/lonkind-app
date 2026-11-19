@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getLiveRoomId } from '@/lib/zego';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, doc, setDoc, updateDoc, deleteDoc, getDocs, increment } from 'firebase/firestore';
-import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers, Trophy, Target, Pin, PinOff, Crown, RefreshCw, Volume2, VolumeX, Share2 } from 'lucide-react';
+import { Send, MessageSquare, Gift, X, Sparkles, Eye, Power, Loader2, Heart, Video, VideoOff, Mic, MicOff, Radio, Flame, Music, Gamepad2, Check, Layers, Trophy, Target, Pin, PinOff, Crown, RefreshCw, Volume2, VolumeX, Share2, BarChart3, Users, UserPlus, Scissors, ShieldCheck, ShieldAlert } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,36 @@ import KingLionGift from './gifts/KingLionGift';
 import GoldenLionSvgGift, { GoldenLionSvgPreview } from './gifts/GoldenLionSvgGift';
 import RoyalCrownSvgGift, { RoyalCrownSvgPreview } from './gifts/RoyalCrownSvgGift';
 import UniverseGift from './gifts/UniverseGift';
+import Phoenix3DGift from './gifts/Phoenix3DGift';
+import PreLiveStudio, { type PreLiveStudioConfig } from './pre-live-studio';
+import type { ScheduledStreamDoc } from './upcoming-lives-banner';
+import {
+  CreateLivePollModal,
+  LivePollOverlay,
+  FloatingHeartsController,
+} from './live-interactive-overlays';
+import {
+  ComboGiftBannerOverlay,
+  ComboGiftDrawer,
+  LiveStreamGoalBar,
+  EditStreamGoalModal,
+} from './live-monetization-overlays';
+import {
+  useMultiGuestSystem,
+  MultiGuestSplitGridOverlay,
+  HostGuestManagementDrawer,
+} from './multi-guest-stage';
+import {
+  useRollingLiveClipBuffer,
+  PublishClipModal,
+  type CapturedClipPayload,
+} from './live-clip-recorder';
+import {
+  useLiveModerationSystem,
+  ModShieldBadge,
+  ChatMessageModerationModal,
+  type ModTargetMessage,
+} from './live-moderation-system';
 import GiftTakeoverEngine, { GiftTakeoverEvent } from './gifts/GiftTakeoverEngine';
 import SvgaLottieVectorCard from './gifts/SvgaLottieVectorCard';
 import { useGiftQueueManager } from '@/lib/gift-queue-manager';
@@ -41,6 +71,7 @@ interface LiveMessage {
   giftName?: string;
   vipLevel?: number;
   vipBadge?: string;
+  deleted?: boolean;
   createdAtMs?: number;
   timestamp: any;
 }
@@ -207,14 +238,24 @@ export const GIFT_CATALOG: Array<{
     videoUrl: '',
   },
   {
-    id: 'lion',
-    name: 'Golden Lion',
-    icon: '🦁',
-    price: 20000,
-    color: 'from-amber-500 via-orange-600 to-yellow-500',
+    id: 'yacht',
+    name: 'Luxury Yacht',
+    icon: '🛥️',
+    price: 30000,
+    color: 'from-cyan-400 via-blue-500 to-indigo-600',
     isSuper: true,
     videoUrl: '',
-    badgeTag: 'TOP TIER',
+    badgeTag: 'VIP YACHT',
+  },
+  {
+    id: 'phoenix',
+    name: 'Fire Phoenix',
+    icon: '🦅',
+    price: 40000,
+    color: 'from-orange-500 via-red-600 to-amber-400',
+    isSuper: true,
+    videoUrl: '',
+    badgeTag: 'MYTHIC',
   },
 ];
 
@@ -222,6 +263,7 @@ interface LiveStreamViewProps {
   hostUid: string;
   userId: string;
   userName: string;
+  userHandle?: string;
   userAvatar?: string;
   isHost: boolean;
   onLeave: () => void;
@@ -229,6 +271,7 @@ interface LiveStreamViewProps {
   onGoToWallet?: () => void;
   isGuest?: boolean;
   onRequireAuth?: () => void;
+  scheduledStream?: ScheduledStreamDoc | null;
 }
 
 export function playLonkindSoundEffect(type: 'applause' | 'cheer' | 'airhorn' | 'fanfare' | 'bell' | 'dragon_roar') {
@@ -366,6 +409,7 @@ function LiveStreamViewInner({
   hostUid,
   userId,
   userName,
+  userHandle,
   userAvatar,
   isHost,
   onLeave,
@@ -373,6 +417,7 @@ function LiveStreamViewInner({
   onGoToWallet,
   isGuest = false,
   onRequireAuth,
+  scheduledStream = null,
 }: LiveStreamViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -382,8 +427,8 @@ function LiveStreamViewInner({
 
   const handleShareLiveStream = async () => {
     const cleanHostId = (hostUid || validUserId).replace(/^live_/, '');
-    const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://impactful-ideas.web.app'}/?live=${cleanHostId}`;
-    const shareTitle = `🔴 Watch ${isHost ? validUserName : (streamHostInfo?.name || 'Live Stream')} LIVE on Lonkind!`;
+    const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://lonkind.com'}/live/${cleanHostId}`;
+    const shareTitle = `🔴 LIVE: ${streamTitle || (isHost ? validUserName : (streamHostInfo?.name || 'Live Stream'))} on Lonkind!`;
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
@@ -431,6 +476,27 @@ function LiveStreamViewInner({
   const [streamMode, setStreamMode] = useState<'video' | 'audio'>('video');
   const [isCameraEnabled, setIsCameraEnabled] = useState(true);
   const [isMicEnabled, setIsMicEnabled] = useState(true);
+  const [streamVisibility, setStreamVisibility] = useState<'public' | 'followers'>('public');
+  const [allowChat, setAllowChat] = useState(true);
+  const [allowGifts, setAllowGifts] = useState(true);
+  const [allowCoHostRequests, setAllowCoHostRequests] = useState(true);
+  const [streamThumbnailUrl, setStreamThumbnailUrl] = useState<string>('');
+  const [isCreatePollModalOpen, setIsCreatePollModalOpen] = useState(false);
+  const [isComboGiftDrawerOpen, setIsComboGiftDrawerOpen] = useState(false);
+  const [isEditGoalModalOpen, setIsEditGoalModalOpen] = useState(false);
+  const [isMultiGuestDrawerOpen, setIsMultiGuestDrawerOpen] = useState(false);
+
+  // Multi-Guest / Co-Host Live Boxes System (Up to 3 Active Co-Hosts + Host = 4-Way Dynamic Grid)
+  const multiGuest = useMultiGuestSystem({
+    streamId: roomId,
+    hostUid: hostUid.replace(/^live_/, ''),
+    currentUserId: validUserId,
+    currentUsername: validUserName,
+    currentAvatar: userAvatar,
+    isHost,
+    isGuestViewer: isGuest,
+    allowCoHostRequests,
+  });
 
   // High-Impact Gifting Moments State
   const [giftCombo, setGiftCombo] = useState<{ giftId: string; count: number }>({ giftId: '', count: 1 });
@@ -549,6 +615,59 @@ function LiveStreamViewInner({
   const [hasRemoteStream, setHasRemoteStream] = useState<boolean>(false);
   const [hasCoHostStream, setHasCoHostStream] = useState<boolean>(false);
   const [isRemoteAudioMuted, setIsRemoteAudioMuted] = useState<boolean>(false);
+
+  // Rolling 30-Second Live Highlight Clip Buffer (Host local stream or Viewer incoming stream)
+  const [activeBroadcastStream, setActiveBroadcastStream] = useState<MediaStream | null>(null);
+  const [capturedClip, setCapturedClip] = useState<CapturedClipPayload | null>(null);
+  const {
+    isBuffering: isClipBuffering,
+    bufferedSeconds: clipBufferedSeconds,
+    isCapturing: isCapturingClip,
+    captureLast30Seconds,
+    clearBuffer: clearClipBuffer,
+  } = useRollingLiveClipBuffer(
+    activeBroadcastStream,
+    Boolean(activeBroadcastStream) && (!isHost || hasStartedLive)
+  );
+
+  const handleTapClipThat = async () => {
+    if (isGuest) {
+      toast({
+        title: '✂️ Sign Up to Clip Highlights',
+        description: 'Sign in to capture and post 30-second live highlights on Lonkind!',
+      });
+      onRequireAuth?.();
+      return;
+    }
+    const result = await captureLast30Seconds();
+    if (result) {
+      if (capturedClip?.url) URL.revokeObjectURL(capturedClip.url);
+      setCapturedClip(result);
+    }
+  };
+
+  // Trusted Moderator Role, Restricted Users (Mute/Ban) & Blocked Words Auto-Filter
+  const [selectedModMessage, setSelectedModMessage] = useState<ModTargetMessage | null>(null);
+  const [privateFilterNotice, setPrivateFilterNotice] = useState<string | null>(null);
+  const {
+    moderatorsMap,
+    restrictedUsers,
+    isCurrentUserMod,
+    canModerate,
+    myRestriction,
+    toggleModerator,
+    deleteChatMessage,
+    muteUser10Mins,
+    banUserFromStream,
+    unrestrictUser,
+    checkMessageBlockedWord,
+  } = useLiveModerationSystem({
+    roomId,
+    hostUid: (hostUid || validUserId).replace(/^live_/, ''),
+    currentUserId: validUserId,
+    currentUserName: validUserName,
+    isHost,
+  });
 
   // Lonkind 1v1 PK Battle State + 2X Final Minute Booster + Penalty Spin Wheel
   const [pkBattleScore, setPkBattleScore] = useState<{ host1Score: number; host2Score: number; active: boolean }>({
@@ -820,6 +939,11 @@ function LiveStreamViewInner({
         streamTitle: streamTitle || `${validUserName}'s Live Stream`,
         category: streamCategory,
         streamMode: streamMode,
+        visibility: streamVisibility,
+        allowChat,
+        allowGifts,
+        allowCoHostRequests,
+        thumbnailUrl: streamThumbnailUrl || userAvatar || '',
         viewerCount: 1,
         sessionStartedAtMs: freshSessionMs,
         pinnedComment: null,
@@ -1206,18 +1330,40 @@ function LiveStreamViewInner({
     },
   });
 
+  const handlePinChatMessage = async (msg: LiveMessage) => {
+    if (!roomId || !isHost) return;
+    const pinnedObj = {
+      id: msg.id,
+      text: msg.text,
+      senderName: msg.senderName || 'Viewer',
+      senderAvatar: msg.senderAvatar || '',
+      senderId: msg.senderId || '',
+      pinnedAt: serverTimestamp(),
+    };
+    await Promise.all([
+      setDoc(doc(db, 'streams', roomId), { pinnedMessage: pinnedObj, updatedAt: serverTimestamp() }, { merge: true }).catch(console.error),
+      updateDoc(doc(db, 'live_streams', roomId), { pinnedComment: pinnedObj }).catch(console.error),
+    ]);
+    toast({
+      title: '📌 Comment Pinned to Q&A!',
+      description: `Pinned ${msg.senderName}'s message for all viewers.`,
+    });
+  };
+
   const handleSavePinnedNotice = async () => {
     if (!roomId || !isHost) return;
     const text = pinInputText.trim();
     if (!text) return;
-    const roomRef = doc(db, 'live_streams', roomId);
-    await updateDoc(roomRef, {
-      pinnedComment: {
-        text,
-        senderName: validUserName,
-        pinnedAt: serverTimestamp(),
-      },
-    }).catch(console.error);
+    const pinnedObj = {
+      text,
+      senderName: validUserName,
+      senderAvatar: userAvatar || '',
+      pinnedAt: serverTimestamp(),
+    };
+    await Promise.all([
+      setDoc(doc(db, 'streams', roomId), { pinnedMessage: pinnedObj, updatedAt: serverTimestamp() }, { merge: true }).catch(console.error),
+      updateDoc(doc(db, 'live_streams', roomId), { pinnedComment: pinnedObj }).catch(console.error),
+    ]);
     setIsPinModalOpen(false);
     setPinInputText('');
     toast({
@@ -1228,13 +1374,13 @@ function LiveStreamViewInner({
 
   const handleUnpinNotice = async () => {
     if (!roomId || !isHost) return;
-    const roomRef = doc(db, 'live_streams', roomId);
-    await updateDoc(roomRef, {
-      pinnedComment: null,
-    }).catch(console.error);
+    await Promise.all([
+      setDoc(doc(db, 'streams', roomId), { pinnedMessage: null, updatedAt: serverTimestamp() }, { merge: true }).catch(console.error),
+      updateDoc(doc(db, 'live_streams', roomId), { pinnedComment: null }).catch(console.error),
+    ]);
     toast({
-      title: 'Notice Unpinned',
-      description: 'The pinned announcement was removed.',
+      title: 'Comment Unpinned',
+      description: 'The pinned message was removed.',
     });
   };
 
@@ -1390,6 +1536,7 @@ function LiveStreamViewInner({
       });
 
       localStreamRef.current = stream;
+      setActiveBroadcastStream(stream);
       hasJoinedRoomRef.current = true;
       setIsConnecting(false);
 
@@ -1549,6 +1696,7 @@ function LiveStreamViewInner({
         }
 
         setHasRemoteStream(true);
+        setActiveBroadcastStream(incomingStream);
         setIsConnecting(false);
         hasJoinedRoomRef.current = true;
 
@@ -1643,6 +1791,8 @@ function LiveStreamViewInner({
     return () => {
       isCancelled = true;
       if (unsubSignaling) unsubSignaling();
+      clearClipBuffer();
+      setActiveBroadcastStream(null);
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -1713,6 +1863,7 @@ function LiveStreamViewInner({
 
       snapshot.docs.forEach((docSnap) => {
         const data = docSnap.data() as LiveMessage;
+        if (data.deleted) return;
         if (isFromCurrentSession(data)) {
           msgs.push({ ...data, id: docSnap.id });
         }
@@ -1815,25 +1966,64 @@ function LiveStreamViewInner({
       return;
     }
     if (!inputText.trim() || isSending) return;
-    setIsSending(true);
+
+    // 1. Check active Mute / Ban restriction for this viewer
+    if (myRestriction) {
+      const desc =
+        myRestriction.type === 'BAN'
+          ? 'You have been banned from chatting in this live stream.'
+          : `You are muted in this chat (${Math.floor(myRestriction.remainingSec / 60)}m ${
+              myRestriction.remainingSec % 60
+            }s remaining).`;
+      setPrivateFilterNotice(desc);
+      toast({ variant: 'destructive', title: 'Chat Restricted', description: desc });
+      return;
+    }
+
     const messageContent = inputText.trim();
+
+    // 2. Check Creator's Blocked Words list BEFORE writing to Firestore
+    const matchedBlockedWord = checkMessageBlockedWord(messageContent);
+    if (matchedBlockedWord) {
+      setInputText('');
+      const notice = 'Your message contains a word restricted by the host and was not posted.';
+      setPrivateFilterNotice(notice);
+      window.setTimeout(() => {
+        setPrivateFilterNotice((prev) => (prev === notice ? null : prev));
+      }, 6000);
+      return;
+    }
+
+    setPrivateFilterNotice(null);
+    setIsSending(true);
     setInputText('');
 
     try {
       const chatRef = collection(db, 'live_streams', roomId, 'chat');
-      await addDoc(chatRef, {
+      const newChatDocRef = doc(chatRef);
+      const messagePayload = {
         senderId: validUserId,
         senderName: validUserName,
         senderAvatar: userAvatar || '',
         text: messageContent,
         type: 'text',
+        deleted: false,
         vipLevel: userVipTier.level,
         vipBadge: userVipTier.badge,
         createdAtMs: Date.now(),
         timestamp: serverTimestamp(),
-      });
-    } catch (err) {
+      };
+      await Promise.all([
+        setDoc(newChatDocRef, messagePayload),
+        setDoc(doc(db, 'streams', roomId, 'messages', newChatDocRef.id), messagePayload).catch(() => {}),
+      ]);
+    } catch (err: any) {
       console.error('Failed to send live message:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Message not sent',
+        description: 'You may be temporarily restricted from chatting in this stream.',
+      });
     } finally {
       setIsSending(false);
     }
@@ -1912,6 +2102,12 @@ function LiveStreamViewInner({
 
   const handleEndStream = async () => {
     try {
+      clearClipBuffer();
+      setActiveBroadcastStream(null);
+      if (capturedClip?.url) {
+        URL.revokeObjectURL(capturedClip.url);
+        setCapturedClip(null);
+      }
       resetGiftQueue();
       setMessages([]);
       setVipBanner(null);
@@ -1956,6 +2152,17 @@ function LiveStreamViewInner({
             },
             { merge: true }
           ).catch(() => {});
+          if (scheduledStream?.id) {
+            await setDoc(
+              doc(db, 'scheduled_streams', scheduledStream.id),
+              {
+                status: 'ENDED',
+                endedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            ).catch(() => {});
+          }
           await updateDoc(doc(db, 'users', validUserId), { isLive: false, liveRoomId: null }).catch(() => {});
         }
       }
@@ -1969,339 +2176,46 @@ function LiveStreamViewInner({
   const hostDisplayName = isHost ? validUserName : (streamHostInfo?.name || validUserName);
   const hostDisplayAvatar = isHost ? userAvatar : (streamHostInfo?.avatar || userAvatar);
 
-  // Pre-Live Creator Studio (User Choice before going on air)
+  // Pre-Live Creator Studio (Sleek Dark-Mode Split-Screen Studio with Live Preview, Audio Visualizer & 3-2-1 Countdown)
   if (isHost && !hasStartedLive) {
-    const titlePresets = [
-      'Chilling & Chatting ☕',
-      'Late Night Vibes 🌙',
-      'Q&A & Community Talk 🎙️',
-      'Gaming Marathon 🎮',
-      'Music Jam Session 🎸',
-    ];
-
-    const categories = [
-      { id: 'chat', label: 'Chat', icon: MessageSquare },
-      { id: 'music', label: 'Music', icon: Music },
-      { id: 'gaming', label: 'Gaming', icon: Gamepad2 },
-      { id: 'creative', label: 'Creative', icon: Sparkles },
-      { id: 'lifestyle', label: 'Lifestyle', icon: Heart },
-    ];
-
     return (
-      <div className="fixed inset-0 z-50 bg-gradient-to-b from-slate-950 via-slate-900 to-black text-white flex flex-col justify-between overflow-y-auto select-none">
-        {/* Top Header */}
-        <div className="flex items-center justify-between p-4 md:px-8 border-b border-white/10 shrink-0 bg-slate-950/80 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <Radio className="h-5 w-5 text-white animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base md:text-lg font-black text-white">Live Studio</h1>
-                <Badge className="bg-indigo-600 text-white text-[10px] font-extrabold uppercase px-2 py-0.5">
-                  Creator Mode
-                </Badge>
-              </div>
-              <p className="text-xs text-slate-400">Configure your broadcast before going on air</p>
-            </div>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onLeave}
-            className="text-slate-400 hover:text-white hover:bg-white/10 rounded-full text-xs font-bold"
-          >
-            <X className="h-4 w-4 mr-1" />
-            Cancel
-          </Button>
-        </div>
-
-        {/* Studio Setup Body */}
-        <div className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          {/* Left Column: Live Preview Card */}
-          <div className="bg-slate-900/80 border border-white/15 rounded-3xl p-5 shadow-2xl flex flex-col items-center justify-between min-h-[380px] relative overflow-hidden">
-            {/* Ambient Background Glow */}
-            <div className="absolute -top-24 -left-24 w-60 h-60 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -right-24 w-60 h-60 bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Preview Tag */}
-            <div className="w-full flex items-center justify-between z-10 mb-4">
-              <Badge className="bg-slate-800 text-slate-300 border border-white/10 text-[11px] font-semibold px-3 py-1">
-                Preview Mode
-              </Badge>
-              <Badge className={`font-extrabold text-[11px] px-3 py-1 ${streamMode === 'video' ? 'bg-indigo-600 text-white' : 'bg-purple-600 text-white'}`}>
-                {streamMode === 'video' ? '🎥 Video Live' : '🎙️ Audio Room'}
-              </Badge>
-            </div>
-
-            {/* Avatar & Visual Stage Preview */}
-            <div className="my-auto flex flex-col items-center text-center z-10 py-6">
-              <div className="relative mb-4">
-                {streamMode === 'audio' && (
-                  <div className="absolute inset-0 rounded-full bg-purple-500/30 animate-ping" />
-                )}
-                <Avatar className="h-28 w-28 border-4 border-indigo-500/50 shadow-2xl">
-                  <AvatarImage src={userAvatar} alt={validUserName} />
-                  <AvatarFallback className="bg-indigo-600 text-white text-3xl font-black">
-                    {validUserName.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center text-white shadow">
-                  <Check className="h-4 w-4" />
-                </div>
-              </div>
-
-              <h3 className="text-base font-bold text-white mb-1 truncate max-w-[280px]">
-                {streamTitle || `${validUserName}'s Live`}
-              </h3>
-              <p className="text-xs text-slate-400 capitalize">
-                Category: <span className="text-indigo-400 font-semibold">{streamCategory}</span>
-              </p>
-            </div>
-
-            {/* Hardware Quick Toggles */}
-            <div className="w-full z-10 pt-4 border-t border-white/10 flex items-center justify-around">
-              {streamMode === 'video' && (
-                <button
-                  type="button"
-                  onClick={() => setIsCameraEnabled(!isCameraEnabled)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                    isCameraEnabled
-                      ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
-                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                  }`}
-                >
-                  {isCameraEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-                  <span>{isCameraEnabled ? 'Camera On' : 'Camera Off'}</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setIsMicEnabled(!isMicEnabled)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  isMicEnabled
-                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
-                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                }`}
-              >
-                {isMicEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                <span>{isMicEnabled ? 'Mic On' : 'Mic Muted'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Right Column: Choices & Configuration */}
-          <div className="space-y-6">
-            {/* 1. Broadcast Mode Selector */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5 text-indigo-400" />
-                <span>Select Broadcast Mode</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStreamMode('video')}
-                  className={`p-3.5 rounded-2xl border text-left transition-all ${
-                    streamMode === 'video'
-                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
-                      : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Video className={`h-4 w-4 ${streamMode === 'video' ? 'text-indigo-400' : 'text-slate-400'}`} />
-                    <span className="font-bold text-xs">Video Live</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-snug">
-                    Camera broadcast with AR filters, PK battles, and video co-hosting.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setStreamMode('audio')}
-                  className={`p-3.5 rounded-2xl border text-left transition-all ${
-                    streamMode === 'audio'
-                      ? 'bg-purple-600/20 border-purple-500 text-white shadow-lg shadow-purple-500/10'
-                      : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Radio className={`h-4 w-4 ${streamMode === 'audio' ? 'text-purple-400' : 'text-slate-400'}`} />
-                    <span className="font-bold text-xs">Audio Voice Room</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-snug">
-                    Clubhouse-style voice room. Low bandwidth, camera off, audio-first stage.
-                  </p>
-                </button>
-              </div>
-            </div>
-
-            {/* 2. Stream Title Input & Suggestions */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                <span>Stream Title</span>
-              </label>
-              <Input
-                type="text"
-                value={streamTitle}
-                onChange={(e) => setStreamTitle(e.target.value)}
-                maxLength={60}
-                placeholder="Give your stream a catchy title..."
-                className="bg-slate-900/90 border-white/15 text-white placeholder:text-slate-500 rounded-xl h-11 text-sm focus:border-indigo-500"
-              />
-              {/* Quick suggestion chips */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {titlePresets.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setStreamTitle(preset)}
-                    className="text-[11px] font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white px-2.5 py-1 rounded-full transition-all"
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 3. Category Selector */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Category
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((cat) => {
-                  const Icon = cat.icon;
-                  const isSelected = streamCategory === cat.id;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setStreamCategory(cat.id as any)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                        isSelected
-                          ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent shadow-md'
-                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span>{cat.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 4. Creator Stream Goal (Optional) */}
-            <div className="space-y-3 pt-3 border-t border-white/10">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Target className="h-3.5 w-3.5 text-rose-400" />
-                  <span>Stream Coin Goal</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setGoalEnabled(!goalEnabled)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
-                    goalEnabled
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
-                      : 'bg-white/5 text-slate-400 border border-white/10'
-                  }`}
-                >
-                  {goalEnabled ? 'Enabled ✓' : 'Disabled'}
-                </button>
-              </div>
-
-              {goalEnabled && (
-                <div className="space-y-3 p-3.5 rounded-2xl bg-slate-900/90 border border-white/10 shadow-inner">
-                  <div>
-                    <span className="text-[11px] text-slate-400 font-medium block mb-1">Goal Objective</span>
-                    <Input
-                      type="text"
-                      value={goalTitle}
-                      onChange={(e) => setGoalTitle(e.target.value)}
-                      maxLength={40}
-                      placeholder="e.g. Song Cover 🎸, Subathon 🎯"
-                      className="bg-slate-950 border-white/15 text-white text-xs h-10 rounded-xl focus:border-rose-500"
-                    />
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {['Song Cover 🎸', 'Dance Celebration 💃', 'Community Milestone 🎯', 'Q&A Special 🎙️', 'PC Setup Fund 💻'].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setGoalTitle(preset)}
-                          className="text-[10px] font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white px-2.5 py-1 rounded-full transition-all"
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] text-slate-400 font-medium">Coin Target</span>
-                      <span className="text-[11px] font-mono font-extrabold text-amber-400">{goalTarget.toLocaleString()} L</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[500, 1000, 2500, 5000, 10000, 25000].map((amount) => (
-                        <button
-                          key={amount}
-                          type="button"
-                          onClick={() => setGoalTarget(amount)}
-                          className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border transition-all ${
-                            goalTarget === amount
-                              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black border-amber-400 shadow-md font-extrabold'
-                              : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
-                          }`}
-                        >
-                          {amount.toLocaleString()} L
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Go Live Action Bar */}
-        <div className="p-4 md:px-8 border-t border-white/10 shrink-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-between max-w-4xl w-full mx-auto">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Radio className="h-4 w-4 text-rose-500 animate-pulse" />
-            <span>Ready to reach viewers across Lonkind</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={onLeave}
-              className="border-white/15 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-bold rounded-xl h-11 px-5"
-            >
-              Cancel
-            </Button>
-
-            <Button
-              onClick={() => {
-                setHasStartedLive(true);
-                toast({
-                  title: '🔴 Going Live!',
-                  description: `Starting ${streamMode === 'video' ? 'Video Live' : 'Audio Voice Room'}...`,
-                });
-              }}
-              className="bg-gradient-to-r from-rose-600 via-pink-600 to-indigo-600 hover:opacity-95 text-white font-extrabold text-sm rounded-xl h-11 px-7 shadow-xl shadow-rose-600/30 flex items-center gap-2 transform hover:scale-[1.02] active:scale-95 transition-all"
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-white animate-ping" />
-              <span>Go Live Now 🔴</span>
-            </Button>
-          </div>
-        </div>
-      </div>
+      <PreLiveStudio
+        roomId={roomId}
+        hostUid={validUserId}
+        hostName={validUserName}
+        hostHandle={userHandle}
+        hostAvatar={userAvatar}
+        initialTitle={scheduledStream?.title || streamTitle}
+        initialCategory={(scheduledStream?.category as any) || streamCategory}
+        initialMode={streamMode}
+        initialCameraEnabled={isCameraEnabled}
+        initialMicEnabled={isMicEnabled}
+        initialGoalEnabled={goalEnabled}
+        initialGoalTitle={goalTitle}
+        initialGoalTarget={goalTarget}
+        activeScheduledStream={scheduledStream}
+        onCancel={onLeave}
+        onGoLiveReady={(config: PreLiveStudioConfig) => {
+          setStreamTitle(config.streamTitle);
+          setStreamCategory(config.streamCategory);
+          setStreamMode(config.streamMode);
+          setIsCameraEnabled(config.isCameraEnabled);
+          setIsMicEnabled(config.isMicEnabled);
+          setStreamVisibility(config.visibility);
+          setAllowChat(config.allowChat);
+          setAllowGifts(config.allowGifts);
+          setAllowCoHostRequests(config.allowCoHostRequests);
+          if (config.thumbnailUrl) setStreamThumbnailUrl(config.thumbnailUrl);
+          setGoalEnabled(config.goalEnabled);
+          setGoalTitle(config.goalTitle);
+          setGoalTarget(config.goalTarget);
+          setHasStartedLive(true);
+          toast({
+            title: '🔴 You Are Live on Lonkind!',
+            description: `Broadcasting "${config.streamTitle}" (${config.visibility === 'public' ? 'Public' : 'Followers Only'})`,
+          });
+        }}
+      />
     );
   }
 
@@ -2564,6 +2478,31 @@ function LiveStreamViewInner({
             <span>{viewerCount}</span>
             <span className="hidden sm:inline">{viewerCount === 1 ? 'viewer' : 'viewers'}</span>
           </div>
+
+          {/* ✂️ One-Tap "Clip That" (Last 30s Rolling Buffer) Button */}
+          <button
+            type="button"
+            onClick={handleTapClipThat}
+            disabled={isCapturingClip || (!isClipBuffering && !isGuest)}
+            title={
+              isClipBuffering
+                ? `Clip the last ${Math.max(1, clipBufferedSeconds)}s of this broadcast`
+                : 'Buffering live video for 30s highlights...'
+            }
+            className="flex items-center gap-1 bg-fuchsia-600/90 hover:bg-fuchsia-500 disabled:opacity-50 backdrop-blur-md border border-fuchsia-400/40 text-white text-[10px] sm:text-xs font-extrabold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full shadow-xl transition-all active:scale-95 shrink-0"
+          >
+            {isCapturingClip ? (
+              <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin shrink-0" />
+            ) : (
+              <Scissors className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+            )}
+            <span className="hidden sm:inline">Clip</span>
+            {isClipBuffering && clipBufferedSeconds > 0 && (
+              <span className="text-[9px] font-mono bg-black/35 px-1 rounded-full">
+                {clipBufferedSeconds}s
+              </span>
+            )}
+          </button>
 
           {/* 🔗 1-Tap Share Live Stream Link Button */}
           <button
@@ -2847,11 +2786,12 @@ function LiveStreamViewInner({
       {/* 🦁👑 SINGLE-STAGE QUEUED FULLSCREEN GIFT RENDERER (Never stacks 50 heavy animations on top of each other) */}
       <div data-live-gift-stage="active" className="hidden" aria-hidden="true" />
       {queuedActiveGift?.giftId === 'lion' && (
-        <GoldenLionSvgGift
+        <KingLionGift
           key={queuedActiveGift.queueId}
           senderName={queuedActiveGift.displaySenderLabel}
           senderAvatar={queuedActiveGift.senderAvatar}
           combo={queuedActiveGift.combo}
+          cloudflareVideoIdOrUrl={queuedActiveGift.videoUrl}
           onComplete={completeActiveGift}
         />
       )}
@@ -2875,10 +2815,21 @@ function LiveStreamViewInner({
         />
       )}
 
+      {queuedActiveGift?.giftId === 'phoenix' && (
+        <Phoenix3DGift
+          key={queuedActiveGift.queueId}
+          senderName={queuedActiveGift.displaySenderLabel}
+          senderAvatar={queuedActiveGift.senderAvatar}
+          combo={queuedActiveGift.combo}
+          onComplete={completeActiveGift}
+        />
+      )}
+
       {queuedActiveGift &&
         queuedActiveGift.giftId !== 'lion' &&
         queuedActiveGift.giftId !== 'crown' &&
-        queuedActiveGift.giftId !== 'universe' && (
+        queuedActiveGift.giftId !== 'universe' &&
+        queuedActiveGift.giftId !== 'phoenix' && (
           <GiftTakeoverEngine
             event={{
               id: queuedActiveGift.queueId,
@@ -2897,7 +2848,7 @@ function LiveStreamViewInner({
 
       {/* Direct Manual Override Overlays (from Custom Asset Injector) */}
       {activeKingLionGift && !queuedActiveGift && (
-        <GoldenLionSvgGift
+        <KingLionGift
           senderName={activeKingLionGift.senderName}
           senderAvatar={activeKingLionGift.senderAvatar}
           combo={activeKingLionGift.combo}
@@ -2918,6 +2869,100 @@ function LiveStreamViewInner({
         <GiftTakeoverEngine
           event={customTakeoverEvent}
           onComplete={() => setCustomTakeoverEvent(null)}
+        />
+      )}
+
+      {/* Dynamic Multi-Guest Split-Screen Grid (1 Fullscreen, 2 50/50 Split, 3-4 2x2 Grid) */}
+      <MultiGuestSplitGridOverlay
+        activeGuests={multiGuest.activeGuests}
+        currentUserId={validUserId}
+        hostName={hostDisplayName}
+        hostAvatar={hostDisplayAvatar}
+        myGuestStream={multiGuest.myGuestStream}
+        remoteGuestStreams={multiGuest.remoteGuestStreams}
+        isMeActiveOnStage={multiGuest.isMeActiveOnStage}
+        isMutedByHost={multiGuest.isMutedByHost}
+        guestMicOn={multiGuest.guestMicOn}
+        setGuestMicOn={multiGuest.setGuestMicOn}
+        guestCamOn={multiGuest.guestCamOn}
+        setGuestCamOn={multiGuest.setGuestCamOn}
+        isSpeakingLocal={multiGuest.isSpeakingLocal}
+        onLeaveStage={multiGuest.leaveStageCleanly}
+      />
+
+      {/* Host Multi-Guest Management Drawer */}
+      {isHost && (
+        <HostGuestManagementDrawer
+          isOpen={isMultiGuestDrawerOpen}
+          onClose={() => setIsMultiGuestDrawerOpen(false)}
+          activeGuests={multiGuest.activeGuests}
+          pendingRequests={multiGuest.pendingRequests}
+          onAccept={multiGuest.handleHostAcceptGuest}
+          onDecline={multiGuest.handleHostDeclineGuest}
+          onToggleMute={multiGuest.handleHostToggleMuteGuest}
+          onRemove={multiGuest.handleHostRemoveGuest}
+        />
+      )}
+
+      {/* Floating Real-Time Live Stream Goal Progress Bar (Top Corner) */}
+      <LiveStreamGoalBar
+        streamId={roomId}
+        isHost={isHost}
+        onEditGoalClick={() => setIsEditGoalModalOpen(true)}
+      />
+
+      {/* Floating Real-Time Animated Combo Gift Banner Overlay */}
+      <ComboGiftBannerOverlay
+        streamId={roomId}
+        onHighValueGiftReceived={(g) => {
+          const matched = GIFT_CATALOG.find((c) => c.id === g.giftId || c.name === g.giftName);
+          if (matched?.isSuper) {
+            triggerGiftingMoment(matched, g.senderName, g.senderAvatar, g.comboCount, true);
+          }
+        }}
+      />
+
+      {/* Dark-Mode Glassmorphic Combo Virtual Gifts Drawer */}
+      <ComboGiftDrawer
+        isOpen={isComboGiftDrawerOpen}
+        onClose={() => setIsComboGiftDrawerOpen(false)}
+        streamId={roomId}
+        hostUid={hostUid}
+        userCoins={userCoins}
+        isGuest={isGuest}
+        onRequireAuth={onRequireAuth}
+        onBalanceUpdated={(newCoins) => setUserCoins(newCoins)}
+      />
+
+      {/* Host Edit / Create Live Stream Goal Modal */}
+      {isHost && (
+        <EditStreamGoalModal
+          isOpen={isEditGoalModalOpen}
+          onClose={() => setIsEditGoalModalOpen(false)}
+          streamId={roomId}
+          hostUid={validUserId}
+        />
+      )}
+
+      {/* Floating Real-Time 30s Live Poll Overlay (Visible to All Viewers & Host) */}
+      <LivePollOverlay
+        streamId={roomId}
+        currentUserId={validUserId}
+        isHost={isHost}
+        isGuest={isGuest}
+        onRequireAuth={onRequireAuth}
+      />
+
+      {/* Floating Hearts & Reactions Button + Throttled Firestore likesCount */}
+      <FloatingHeartsController streamId={roomId} />
+
+      {/* Host Create 30-Second Poll Modal */}
+      {isHost && (
+        <CreateLivePollModal
+          isOpen={isCreatePollModalOpen}
+          onClose={() => setIsCreatePollModalOpen(false)}
+          streamId={roomId}
+          hostUid={validUserId}
         />
       )}
 
@@ -2997,22 +3042,25 @@ function LiveStreamViewInner({
           </div>
         )}
 
-        {/* 📌 Pinned Announcement Sticky Notice */}
+        {/* 📌 Glassmorphic Pinned Comment / Q&A Overlay Banner */}
         {pinnedComment && (
-          <div className="mb-2 p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-indigo-500/20 to-purple-500/20 border border-amber-400/40 text-xs text-white shrink-0 shadow-lg">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1 text-[10px] font-black text-amber-300 uppercase tracking-wider">
-                <Pin className="h-3 w-3 text-amber-400" />
-                <span>Host Notice</span>
+          <div className="mb-2 p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-indigo-500/20 to-purple-500/20 backdrop-blur-md border border-amber-400/45 text-xs text-white shrink-0 shadow-lg">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-300 uppercase tracking-wider min-w-0">
+                <Pin className="h-3 w-3 text-amber-400 shrink-0" />
+                <span className="truncate">
+                  Pinned Q&amp;A • {pinnedComment.senderName || 'Host'}
+                </span>
               </div>
               {isHost && (
                 <button
                   type="button"
                   onClick={handleUnpinNotice}
-                  title="Unpin Announcement"
-                  className="text-slate-400 hover:text-rose-400 p-0.5 transition-colors"
+                  title="Unpin Comment"
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-300 hover:text-rose-200 bg-rose-500/15 hover:bg-rose-500/25 px-2 py-0.5 rounded-full border border-rose-400/30 transition-colors shrink-0"
                 >
-                  <PinOff className="h-3 w-3" />
+                  <PinOff className="h-2.5 w-2.5" />
+                  Unpin
                 </button>
               )}
             </div>
@@ -3031,41 +3079,103 @@ function LiveStreamViewInner({
           ) : (
             messages.map((msg) => {
               const isVipMsg = (msg.vipLevel || 0) >= 3;
+              const cleanHost = (hostUid || validUserId).replace(/^live_/, '');
+              const isMsgFromHost = msg.senderId === cleanHost;
+              const isMsgFromMod = Boolean(moderatorsMap[msg.senderId]);
+              const canTapToModerate = canModerate && msg.type !== 'gift' && (!isMsgFromHost || isHost);
+
               return (
                 <div
                   key={msg.id}
-                  className={`flex items-start gap-2 text-xs ${
+                  onClick={() => {
+                    if (canTapToModerate) {
+                      setSelectedModMessage({
+                        id: msg.id,
+                        senderId: msg.senderId,
+                        senderName: msg.senderName,
+                        senderAvatar: msg.senderAvatar,
+                        text: msg.text,
+                        type: msg.type,
+                      });
+                    }
+                  }}
+                  className={`group flex items-start justify-between gap-2 text-xs ${
+                    canTapToModerate ? 'cursor-pointer' : ''
+                  } ${
                     isVipMsg
                       ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-purple-500/20 border border-amber-400/50 rounded-xl p-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                      : ''
+                      : 'hover:bg-white/5 rounded-lg px-1 py-0.5 transition-colors'
                   }`}
                 >
-                  <Avatar className={`h-6 w-6 shrink-0 mt-0.5 ${isVipMsg ? 'border-2 border-amber-400' : 'border border-white/10'}`}>
-                    <AvatarImage src={msg.senderAvatar} alt={msg.senderName} />
-                    <AvatarFallback className="bg-indigo-600 text-white text-[10px]">
-                      {msg.senderName ? msg.senderName.charAt(0) : 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {msg.vipBadge && (
-                        <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase shadow">
-                          {msg.vipBadge}
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <Avatar className={`h-6 w-6 shrink-0 mt-0.5 ${isVipMsg ? 'border-2 border-amber-400' : isMsgFromMod ? 'border-2 border-emerald-400' : 'border border-white/10'}`}>
+                      <AvatarImage src={msg.senderAvatar} alt={msg.senderName} />
+                      <AvatarFallback className="bg-indigo-600 text-white text-[10px]">
+                        {msg.senderName ? msg.senderName.charAt(0) : 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isMsgFromHost && (
+                          <span className="bg-rose-600 text-white text-[8px] font-black px-1.5 py-[1px] rounded-full uppercase shadow">
+                            HOST
+                          </span>
+                        )}
+                        {isMsgFromMod && <ModShieldBadge compact />}
+                        {msg.vipBadge && (
+                          <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase shadow">
+                            {msg.vipBadge}
+                          </span>
+                        )}
+                        <span className={`font-bold truncate text-[11px] ${isMsgFromMod ? 'text-emerald-300' : isVipMsg ? 'text-amber-300' : 'text-indigo-300'}`}>
+                          {msg.senderName}
+                        </span>
+                      </div>
+                      {msg.type === 'gift' ? (
+                        <span className="inline-flex items-center gap-1 text-amber-200 font-bold bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/40 text-[11px] mt-0.5">
+                          <Sparkles className="h-3 w-3 text-amber-400" />
+                          {msg.text}
+                        </span>
+                      ) : (
+                        <span className={`${isVipMsg ? 'text-amber-50 font-semibold' : 'text-slate-100'} break-words leading-relaxed`}>
+                          {msg.text}
                         </span>
                       )}
-                      <span className={`font-bold truncate text-[11px] ${isVipMsg ? 'text-amber-300' : 'text-indigo-300'}`}>
-                        {msg.senderName}
-                      </span>
                     </div>
-                    {msg.type === 'gift' ? (
-                      <span className="inline-flex items-center gap-1 text-amber-200 font-bold bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/40 text-[11px] mt-0.5">
-                        <Sparkles className="h-3 w-3 text-amber-400" />
-                        {msg.text}
-                      </span>
-                    ) : (
-                      <span className={`${isVipMsg ? 'text-amber-50 font-semibold' : 'text-slate-100'} break-words leading-relaxed`}>
-                        {msg.text}
-                      </span>
+                  </div>
+                  <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+                    {canTapToModerate && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedModMessage({
+                            id: msg.id,
+                            senderId: msg.senderId,
+                            senderName: msg.senderName,
+                            senderAvatar: msg.senderAvatar,
+                            text: msg.text,
+                            type: msg.type,
+                          });
+                        }}
+                        title="Moderation actions (Delete / Mute / Ban / Make Mod)"
+                        className="opacity-70 group-hover:opacity-100 text-emerald-300/80 hover:text-emerald-300 hover:bg-emerald-500/20 p-1 rounded-lg transition-all"
+                      >
+                        <ShieldCheck className="h-3 w-3" />
+                      </button>
+                    )}
+                    {isHost && msg.type !== 'gift' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePinChatMessage(msg);
+                        }}
+                        title="Pin this message to Q&A"
+                        className="opacity-70 group-hover:opacity-100 text-amber-300/80 hover:text-amber-300 hover:bg-amber-500/20 p-1 rounded-lg transition-all"
+                      >
+                        <Pin className="h-3 w-3" />
+                      </button>
                     )}
                   </div>
                 </div>
@@ -3075,10 +3185,46 @@ function LiveStreamViewInner({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Message Input Box */}
-        <div className="flex items-center gap-2 pt-2 border-t border-white/10 shrink-0 mt-2">
+        {/* Private Sender-Only Blocked Word Notice or Active Mute/Ban Banner */}
+        {(privateFilterNotice || myRestriction) && (
+          <div className="mt-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/35 text-[11px] font-semibold text-amber-200 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <ShieldAlert className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">
+                {myRestriction
+                  ? myRestriction.type === 'BAN'
+                    ? 'You are banned from chatting in this stream.'
+                    : `Muted in chat • ${Math.floor(myRestriction.remainingSec / 60)}m ${
+                        myRestriction.remainingSec % 60
+                      }s left`
+                  : privateFilterNotice}
+              </span>
+            </div>
+            {!myRestriction && privateFilterNotice && (
+              <button
+                type="button"
+                onClick={() => setPrivateFilterNotice(null)}
+                className="text-amber-300/80 hover:text-white shrink-0"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Active MOD Indicator Pill for Appointed Moderators */}
+        {isCurrentUserMod && !isHost && (
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-emerald-300 font-semibold shrink-0">
+            <ModShieldBadge compact />
+            <span>You are moderating this chat — tap any message to moderate</span>
+          </div>
+        )}
+
+        {/* Message Input Box + Viewer Combo Gift Button */}
+        <div className="flex items-center gap-1.5 pt-2 border-t border-white/10 shrink-0 mt-2">
           <Input
             value={inputText}
+            disabled={Boolean(myRestriction)}
             onChange={(e) => setInputText(e.target.value)}
             onFocus={() => {
               if (isGuest) {
@@ -3090,9 +3236,36 @@ function LiveStreamViewInner({
               }
             }}
             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-            placeholder={isGuest ? 'Tap to join free & chat live...' : 'Type a message...'}
-            className="h-9 text-xs bg-white/10 border-white/10 text-white placeholder:text-slate-400 rounded-xl focus-visible:ring-indigo-500"
+            placeholder={
+              myRestriction
+                ? myRestriction.type === 'BAN'
+                  ? 'Chat disabled (banned from stream)'
+                  : 'You are temporarily muted...'
+                : isGuest
+                ? 'Tap to join free & chat live...'
+                : 'Type a message...'
+            }
+            className="h-9 text-xs bg-white/10 border-white/10 text-white placeholder:text-slate-400 rounded-xl focus-visible:ring-indigo-500 disabled:opacity-50"
           />
+          <Button
+            type="button"
+            size="icon"
+            title="Send Combo Virtual Gift"
+            onClick={() => {
+              if (isGuest) {
+                toast({
+                  title: '🎁 Sign Up to Send Gifts',
+                  description: 'Create your account to send virtual gifts!',
+                });
+                onRequireAuth?.();
+                return;
+              }
+              setIsComboGiftDrawerOpen(true);
+            }}
+            className="h-9 w-9 shrink-0 bg-gradient-to-tr from-amber-500 to-pink-600 hover:opacity-90 text-white rounded-xl shadow-md"
+          >
+            <Gift className="h-4 w-4" />
+          </Button>
           <Button
             size="icon"
             onClick={handleSendMessage}
@@ -3148,7 +3321,74 @@ function LiveStreamViewInner({
                   </button>
                 </>
               )}
+
+              {isHost && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatePollModalOpen(true)}
+                    title="Create 30-Second Live Poll"
+                    className="h-9 px-3 rounded-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/40 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <BarChart3 className="h-4 w-4 text-indigo-300" />
+                    <span className="hidden sm:inline">Poll</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsEditGoalModalOpen(true)}
+                    title="Set or Edit Live Stream Goal"
+                    className="h-9 px-3 rounded-full bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <Target className="h-4 w-4 text-amber-300" />
+                    <span className="hidden sm:inline">Goal</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsMultiGuestDrawerOpen(true)}
+                    title="Manage Multi-Guest Co-Hosts"
+                    className="relative h-9 px-3 rounded-full bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-400/40 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <Users className="h-4 w-4 text-emerald-300" />
+                    <span className="hidden sm:inline">Guests</span>
+                    {multiGuest.pendingRequests.length > 0 && (
+                      <span className="px-1.5 py-0 rounded-full bg-rose-500 text-white text-[10px] font-black shadow animate-pulse">
+                        {multiGuest.pendingRequests.length}
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
             </>
+          )}
+
+          {/* Viewer "Request to Join" Co-Host Button (when enabled by host) */}
+          {!isHost && multiGuest.isStreamAllowingGuests && !multiGuest.isMeActiveOnStage && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isGuest) {
+                  toast({
+                    title: '🙋 Sign Up to Join Stage',
+                    description: 'Create your Lonkind account to co-host live!',
+                  });
+                  onRequireAuth?.();
+                  return;
+                }
+                multiGuest.handleViewerRequestJoin();
+              }}
+              className={`h-9 px-3.5 rounded-full text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 ${
+                multiGuest.myRequestStatus === 'PENDING'
+                  ? 'bg-amber-500/25 border-amber-400/50 text-amber-200'
+                  : 'bg-emerald-600/30 hover:bg-emerald-600/50 border-emerald-400/40 text-emerald-200'
+              }`}
+            >
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {multiGuest.myRequestStatus === 'PENDING' ? 'Requested ✓' : 'Request to Join'}
+              </span>
+            </button>
           )}
 
           <button
@@ -3295,9 +3535,7 @@ function LiveStreamViewInner({
                         </span>
                       )}
                       <div className="w-16 h-16 mb-1.5 flex items-center justify-center rounded-xl overflow-hidden bg-slate-950 border border-amber-400/50 shadow-md group-hover:scale-110 transition-transform relative">
-                        {gift.id === 'lion' ? (
-                          <GoldenLionSvgPreview className="w-14 h-14" />
-                        ) : gift.id === 'crown' ? (
+                        {gift.id === 'crown' ? (
                           <RoyalCrownSvgPreview className="w-14 h-14" />
                         ) : gift.previewGifUrl || gift.image3d ? (
                           <img
@@ -3872,6 +4110,64 @@ function LiveStreamViewInner({
           </div>
         </div>
       )}
+
+      {/* 🛡️ Trusted Moderator & Chat Safety Action Modal */}
+      <ChatMessageModerationModal
+        targetMessage={selectedModMessage}
+        onClose={() => setSelectedModMessage(null)}
+        isHost={isHost}
+        hostUid={(hostUid || validUserId).replace(/^live_/, '')}
+        isTargetMod={Boolean(selectedModMessage && moderatorsMap[selectedModMessage.senderId])}
+        targetRestriction={
+          selectedModMessage ? restrictedUsers[selectedModMessage.senderId] || null : null
+        }
+        onToggleMod={async () => {
+          if (!selectedModMessage) return;
+          await toggleModerator({
+            userId: selectedModMessage.senderId,
+            username: selectedModMessage.senderName,
+            avatarUrl: selectedModMessage.senderAvatar,
+          });
+        }}
+        onDeleteMessage={async () => {
+          if (!selectedModMessage) return;
+          await deleteChatMessage(selectedModMessage.id);
+        }}
+        onMute10Mins={async () => {
+          if (!selectedModMessage) return;
+          await muteUser10Mins({
+            userId: selectedModMessage.senderId,
+            username: selectedModMessage.senderName,
+            avatarUrl: selectedModMessage.senderAvatar,
+          });
+        }}
+        onBanFromStream={async () => {
+          if (!selectedModMessage) return;
+          await banUserFromStream({
+            userId: selectedModMessage.senderId,
+            username: selectedModMessage.senderName,
+            avatarUrl: selectedModMessage.senderAvatar,
+          });
+        }}
+        onUnrestrict={async () => {
+          if (!selectedModMessage) return;
+          await unrestrictUser(selectedModMessage.senderId, selectedModMessage.senderName);
+        }}
+      />
+
+      {/* ✂️ Non-Blocking "Publish Highlight Clip" Quick Preview Modal */}
+      <PublishClipModal
+        clip={capturedClip}
+        onClose={() => setCapturedClip(null)}
+        sourceStreamId={roomId}
+        streamTitle={streamTitle}
+        hostId={(hostUid || validUserId).replace(/^live_/, '')}
+        hostName={hostDisplayName}
+        hostHandle={isHost ? userHandle : undefined}
+        hostAvatar={hostDisplayAvatar}
+        clippedByUid={validUserId}
+        clippedByName={validUserName}
+      />
 
     </div>
   );

@@ -80,6 +80,7 @@ const payoutFormSchema = z.object({
 
 export default function WalletView({ currentUser }: WalletViewProps) {
     const [selectedCountry, setSelectedCountry] = useState<string>('NG');
+    const [paymentGateway, setPaymentGateway] = useState<'flutterwave' | 'paystack'>('flutterwave');
     const currentGeo = SUPPORTED_COUNTRIES.find(c => c.country === selectedCountry) || SUPPORTED_COUNTRIES[0];
 
     const [isPurchasing, setIsPurchasing] = useState<number | null>(null);
@@ -89,7 +90,9 @@ export default function WalletView({ currentUser }: WalletViewProps) {
     const [payoutTxs, setPayoutTxs] = useState<PayoutTransaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [banks, setBanks] = useState<{name: string, code: string}[]>([]);
+    const [isLoadingBanks, setIsLoadingBanks] = useState(false);
     const [isResolving, setIsResolving] = useState(false);
+    const [allowManualAccountName, setAllowManualAccountName] = useState(false);
 
     const form = useForm<z.infer<typeof payoutFormSchema>>({
         resolver: zodResolver(payoutFormSchema),
@@ -98,12 +101,18 @@ export default function WalletView({ currentUser }: WalletViewProps) {
 
     useEffect(() => {
         setBanks([]);
+        setIsLoadingBanks(true);
+        setAllowManualAccountName(selectedCountry !== 'NG');
+        form.setValue('bankCode', '');
+        form.setValue('accountName', '');
         fetch(`/api/flutterwave/payout?country=${selectedCountry}`)
             .then(res => res.json())
             .then(data => {
-                if (data.banks) setBanks(data.banks);
-            }).catch(console.error);
-    }, [selectedCountry]);
+                if (Array.isArray(data.banks)) setBanks(data.banks);
+            })
+            .catch(console.error)
+            .finally(() => setIsLoadingBanks(false));
+    }, [selectedCountry, form]);
 
     useEffect(() => {
         const txRef = collection(db, 'transactions');
@@ -158,12 +167,21 @@ export default function WalletView({ currentUser }: WalletViewProps) {
             const params = new URLSearchParams(window.location.search);
             const payment = params.get('payment');
             const coins = params.get('coins');
-            const ref = params.get('reference') || params.get('trxref');
+            const bonus = params.get('bonus');
+            const ref = params.get('reference') || params.get('trxref') || params.get('tx_ref');
+            const transactionId = params.get('transaction_id');
             
             if (payment === 'success') {
+                const totalNum = coins ? Number(coins) : 0;
+                const bonusNum = bonus ? Number(bonus) : 0;
                 toast({
                     title: '🎉 Payment Successful!',
-                    description: coins ? `Successfully credited ${coins} coins to your balance!` : 'Your payment has been verified and coins added.',
+                    description:
+                        bonusNum > 0 && totalNum > bonusNum
+                            ? `Credited ${(totalNum - bonusNum).toLocaleString()} Coins + ${bonusNum.toLocaleString()} First-Time Bonus Coins (${totalNum.toLocaleString()} total)!`
+                            : totalNum > 0
+                            ? `Successfully credited ${totalNum.toLocaleString()} coins to your balance!`
+                            : 'Your payment has been verified and coins added.',
                 });
                 window.history.replaceState({}, document.title, window.location.pathname);
             } else if (payment === 'failed' || payment === 'error') {
@@ -174,11 +192,15 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                     variant: 'destructive',
                 });
                 window.history.replaceState({}, document.title, window.location.pathname);
-            } else if (ref && !payment) {
-                fetch('/api/flutterwave/verify', {
+            } else if ((ref || transactionId) && !payment) {
+                const verifyEndpoint =
+                    ref && !ref.startsWith('flw_tx_') && !transactionId
+                        ? '/api/paystack/verify'
+                        : '/api/flutterwave/verify';
+                fetch(verifyEndpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ reference: ref }),
+                    body: JSON.stringify({ reference: ref, transaction_id: transactionId }),
                 })
                 .then(res => res.json())
                 .then(data => {
@@ -201,41 +223,74 @@ export default function WalletView({ currentUser }: WalletViewProps) {
         }
     }, []);
 
+    // UI display eligibility only — final bonus eligibility & math are ALWAYS validated server-side
+    const hasCompletedSuccessfulPurchase =
+        currentUser.hasMadeFirstPurchase === true ||
+        purchaseTxs.some((tx) => tx.status === 'success');
+    const isEligibleFirstTimeBuyer = !hasCompletedSuccessfulPurchase;
+
     const handlePurchase = async (coinAmount: number) => {
         setIsPurchasing(coinAmount);
         try {
-            const isFirstTimeBuyer = purchaseTxs.length === 0;
-            const coinsToCredit = isFirstTimeBuyer ? Math.round(coinAmount * 1.2) : coinAmount;
+            const safeBaseCoins = Math.floor(coinAmount);
 
-            let priceLocal = Number((coinAmount * currentGeo.coinRate).toFixed(2));
-            const pkg = coinPackages.find(p => p.coins === coinAmount);
+            let priceLocal = Number((safeBaseCoins * currentGeo.coinRate).toFixed(2));
+            const pkg = coinPackages.find(p => p.coins === safeBaseCoins);
             if (pkg) priceLocal = Number((pkg.priceMult * currentGeo.coinRate).toFixed(2));
 
-            const res = await fetch('/api/flutterwave/initialize', {
+            // IMPORTANT: Send ONLY baseCoins to backend. The 20% First-Time Purchase Bonus
+            // is strictly validated and calculated server-side when payment is confirmed.
+            const payload = {
+                email: currentUser.email || auth.currentUser?.email || 'member@lonkind.com',
+                amount: priceLocal,
+                coins: safeBaseCoins,
+                coinsToCredit: safeBaseCoins,
+                currency: currentGeo.currency,
+                userId: currentUser.uid,
+            };
+
+            const primaryEndpoint =
+                paymentGateway === 'paystack'
+                    ? '/api/paystack/initialize'
+                    : '/api/flutterwave/initialize';
+            const fallbackEndpoint =
+                paymentGateway === 'paystack'
+                    ? '/api/flutterwave/initialize'
+                    : '/api/paystack/initialize';
+
+            let res = await fetch(primaryEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: currentUser.email || 'user@example.com',
-                    amount: priceLocal,
-                    coinsToCredit: coinsToCredit,
-                    currency: currentGeo.currency,
-                    userId: currentUser.uid,
-                })
+                body: JSON.stringify(payload),
             });
+            let data = await res.json().catch(() => ({}));
 
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to initialize payment with Flutterwave');
+            // Automatic seamless failover to secondary gateway if primary fails (e.g. key/region issue)
+            if (!res.ok || !data.authorizationUrl) {
+                const fbRes = await fetch(fallbackEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const fbData = await fbRes.json().catch(() => ({}));
+                if (fbRes.ok && fbData.authorizationUrl) {
+                    res = fbRes;
+                    data = fbData;
+                } else {
+                    throw new Error(data.error || fbData.error || 'Failed to initialize checkout with payment gateway.');
+                }
+            }
 
             if (data.authorizationUrl) {
                 window.location.href = data.authorizationUrl;
             } else {
-                throw new Error("No authorization URL returned from Flutterwave gateway");
+                throw new Error('No checkout URL returned from payment gateway.');
             }
         } catch (error: any) {
             console.error("Purchase error:", error);
             toast({
                 title: 'Checkout Error',
-                description: error.message || 'There was an error initiating the Flutterwave checkout.',
+                description: error.message || 'There was an error initiating checkout.',
                 variant: 'destructive',
             });
             setIsPurchasing(null);
@@ -247,28 +302,51 @@ export default function WalletView({ currentUser }: WalletViewProps) {
 
     useEffect(() => {
         if (watchAccountNumber?.length >= 6 && watchBankCode) {
+            if (selectedCountry !== 'NG') {
+                setAllowManualAccountName(true);
+                return;
+            }
+            if (watchAccountNumber.length !== 10) return;
+
             setIsResolving(true);
-            fetch(`/api/flutterwave/resolve-account?account_number=${watchAccountNumber}&bank_code=${watchBankCode}&country=${selectedCountry}`)
+            fetch(`/api/flutterwave/resolve-account?account_number=${encodeURIComponent(watchAccountNumber)}&bank_code=${encodeURIComponent(watchBankCode)}&country=${selectedCountry}`)
                 .then(res => res.json())
                 .then(data => {
                     setIsResolving(false);
-                    if (data.verified) {
+                    if (data.verified && data.accountName) {
+                        setAllowManualAccountName(false);
                         form.setValue('accountName', data.accountName, { shouldValidate: true });
                         form.clearErrors('accountNumber');
+                    } else if (data.manualEntryAllowed) {
+                        setAllowManualAccountName(true);
+                        form.clearErrors('accountNumber');
                     } else {
-                        form.setError('accountNumber', { type: 'manual', message: data.error || 'Account could not be verified' });
-                        form.setValue('accountName', '');
+                        setAllowManualAccountName(true);
+                        form.setError('accountNumber', { type: 'manual', message: data.error || 'Account could not be auto-verified' });
                     }
                 })
                 .catch(() => {
                     setIsResolving(false);
-                    form.setError('accountNumber', { type: 'manual', message: 'Network error verifying account' });
-                    form.setValue('accountName', '');
+                    setAllowManualAccountName(true);
                 });
         }
     }, [watchAccountNumber, watchBankCode, selectedCountry, form]);
     
     const onSubmitPayout = async (values: z.infer<typeof payoutFormSchema>) => {
+        const availableDiamonds = Number(currentUser.diamonds || 0);
+        if (values.diamondAmount > availableDiamonds) {
+            form.setError('diamondAmount', {
+                type: 'manual',
+                message: `Insufficient balance. You have ${availableDiamonds.toLocaleString()} diamonds available.`,
+            });
+            toast({
+                variant: 'destructive',
+                title: 'Insufficient Diamond Balance',
+                description: `You have ${availableDiamonds.toLocaleString()} diamonds, but requested ${values.diamondAmount.toLocaleString()}.`,
+            });
+            return;
+        }
+
         setIsPurchasing(-1);
         try {
             // Wait for auth to initialize if it hasn't already
@@ -284,7 +362,12 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                 throw new Error("Your session could not be verified. Please reload the page or sign in again.");
             }
 
-            const res = await fetch('/api/flutterwave/payout', {
+            const payoutEndpoint =
+                paymentGateway === 'paystack'
+                    ? '/api/paystack/payout'
+                    : '/api/flutterwave/payout';
+
+            const res = await fetch(payoutEndpoint, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -377,14 +460,42 @@ export default function WalletView({ currentUser }: WalletViewProps) {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-primary" /> Purchase Coins ({currentGeo.currency})
-                            </CardTitle>
-                            <CardDescription>Select a package or enter a custom amount to checkout globally via Flutterwave.</CardDescription>
-                            {purchaseTxs.length === 0 && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Sparkles className="h-5 w-5 text-primary" /> Purchase Coins ({currentGeo.currency})
+                                    </CardTitle>
+                                    <CardDescription>Select a package or enter a custom amount to checkout securely.</CardDescription>
+                                </div>
+                                <div className="inline-flex items-center rounded-xl bg-muted/70 p-1 border self-start">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentGateway('flutterwave')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                            paymentGateway === 'flutterwave'
+                                                ? 'bg-primary text-primary-foreground shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                    >
+                                        Flutterwave
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentGateway('paystack')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                            paymentGateway === 'paystack'
+                                                ? 'bg-primary text-primary-foreground shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                    >
+                                        Paystack
+                                    </button>
+                                </div>
+                            </div>
+                            {isEligibleFirstTimeBuyer && (
                                 <div className="mt-2 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/10 border border-amber-500/40 flex items-center gap-2 text-xs text-amber-200">
                                     <span className="text-base">🎁</span>
-                                    <span><strong>First Purchase Offer:</strong> You will receive <strong>+20% Extra Bonus Coins</strong> on your first purchase!</span>
+                                    <span><strong>20% First Purchase Bonus:</strong> Eligible for <strong>+20% Extra Bonus Coins</strong> automatically credited upon checkout confirmation!</span>
                                 </div>
                             )}
                         </CardHeader>
@@ -392,8 +503,8 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                                 {coinPackages.map(pkg => {
                                     const priceLocal = Number((pkg.priceMult * currentGeo.coinRate).toFixed(2));
-                                    const isFirstTime = purchaseTxs.length === 0;
-                                    const totalCoins = isFirstTime ? Math.round(pkg.coins * 1.2) : pkg.coins;
+                                    const bonusCoins = isEligibleFirstTimeBuyer ? Math.floor(pkg.coins * 0.20) : 0;
+                                    const totalCoins = pkg.coins + bonusCoins;
                                     return (
                                         <Button
                                             key={pkg.coins}
@@ -402,9 +513,9 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                             onClick={() => handlePurchase(pkg.coins)}
                                             disabled={isPurchasing !== null}
                                         >
-                                            {isFirstTime && (
+                                            {isEligibleFirstTimeBuyer && (
                                                 <span className="absolute top-1 right-1 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
-                                                    +20% 1ST BUY
+                                                    20% First Purchase Bonus
                                                 </span>
                                             )}
                                             {isPurchasing === pkg.coins ? <Loader2 className="h-6 w-6 animate-spin" /> : (
@@ -414,8 +525,10 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                         <span className="text-xl font-bold">{totalCoins.toLocaleString()}</span>
                                                     </div>
                                                     <p className="text-sm font-semibold">{currentGeo.symbol}{priceLocal.toLocaleString()}</p>
-                                                    {isFirstTime ? (
-                                                        <p className="text-[10px] text-amber-400 font-bold">Includes 20% bonus ({pkg.coins} + {totalCoins - pkg.coins})</p>
+                                                    {isEligibleFirstTimeBuyer && bonusCoins > 0 ? (
+                                                        <p className="text-[10px] text-amber-400 font-bold">
+                                                            {pkg.coins.toLocaleString()} Coins + {bonusCoins.toLocaleString()} Bonus
+                                                        </p>
                                                     ) : (
                                                         pkg.bonus && <p className="text-xs text-primary font-bold">{pkg.bonus}</p>
                                                     )}
@@ -443,11 +556,15 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                 disabled={isPurchasing !== null}
                                             />
                                         </div>
-                                        {purchaseTxs.length === 0 && customCoinAmount && parseInt(customCoinAmount) > 0 && (
-                                            <span className="text-[11px] text-amber-400 font-bold block pt-1">
-                                                🎁 +20% 1st Buy Bonus: You will receive {Math.round(parseInt(customCoinAmount) * 1.2).toLocaleString()} coins!
-                                            </span>
-                                        )}
+                                        {isEligibleFirstTimeBuyer && customCoinAmount && parseInt(customCoinAmount) > 0 && (() => {
+                                            const baseCustom = Math.floor(parseInt(customCoinAmount));
+                                            const bonusCustom = Math.floor(baseCustom * 0.20);
+                                            return bonusCustom > 0 ? (
+                                                <span className="text-[11px] text-amber-400 font-bold block pt-1">
+                                                    🎁 20% First Purchase Bonus: {baseCustom.toLocaleString()} Coins + {bonusCustom.toLocaleString()} Bonus ({(baseCustom + bonusCustom).toLocaleString()} total)!
+                                                </span>
+                                            ) : null;
+                                        })()}
                                     </div>
                                     <Button 
                                         onClick={() => {
@@ -541,17 +658,17 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                 <FormField control={form.control} name="bankCode" render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel className="text-xs">Select {currentGeo.name} Bank / Provider</FormLabel>
-                                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
                                                             <FormControl>
                                                                 <SelectTrigger>
-                                                                    <SelectValue placeholder={`Select bank in ${currentGeo.name}`} />
+                                                                    <SelectValue placeholder={isLoadingBanks ? 'Loading providers...' : `Select bank in ${currentGeo.name}`} />
                                                                 </SelectTrigger>
                                                             </FormControl>
                                                             <SelectContent className="max-h-[250px]">
                                                                 {banks.length > 0 ? banks.map(b => (
                                                                     <SelectItem key={b.code} value={b.code}>{b.name}</SelectItem>
                                                                 )) : (
-                                                                    <SelectItem value="loading" disabled>Loading providers...</SelectItem>
+                                                                    <SelectItem value="loading" disabled>{isLoadingBanks ? 'Loading providers...' : 'No banks available'}</SelectItem>
                                                                 )}
                                                             </SelectContent>
                                                         </Select>
@@ -572,9 +689,20 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                                 )} />
                                                 <FormField control={form.control} name="accountName" render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel className="text-xs">Verified Account Holder</FormLabel>
+                                                        <FormLabel className="text-xs">
+                                                            {allowManualAccountName ? 'Account Holder Name' : 'Verified Account Holder'}
+                                                        </FormLabel>
                                                         <FormControl>
-                                                            <Input readOnly placeholder="Verified holder name appears here" className="bg-muted font-semibold text-primary" {...field} />
+                                                            <Input
+                                                                readOnly={!allowManualAccountName}
+                                                                placeholder={
+                                                                    allowManualAccountName
+                                                                        ? 'Enter full account holder name'
+                                                                        : 'Verified holder name appears automatically'
+                                                                }
+                                                                className={!allowManualAccountName ? 'bg-muted font-semibold text-primary' : 'font-semibold'}
+                                                                {...field}
+                                                            />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>

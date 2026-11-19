@@ -1,91 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
 
-const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY!;
+const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
 
-function getPublicOrigin(req: NextRequest): string {
-  const forwardedHost = req.headers.get('x-forwarded-host');
-  const host = forwardedHost || req.headers.get('host');
-  const proto = req.headers.get('x-forwarded-proto') || 'https';
-
-  if (host && !host.includes('0.0.0.0')) {
-    return `${proto}://${host}`;
+function resolveCanonicalOrigin(req: NextRequest): string {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return req.nextUrl.origin;
   }
-
-  const origin = req.nextUrl.origin;
-  if (origin && !origin.includes('0.0.0.0')) {
-    return origin;
-  }
-
-  return APP_URL;
+  // In production on Firebase Hosting / Cloud Run SSR, always use canonical NEXT_PUBLIC_APP_URL
+  // so callbacks never point to internal *.a.run.app or 0.0.0.0 containers
+  return APP_URL.replace(/\/$/, '');
 }
 
-/**
- * Supported Global Currency Rates (Price per coin in local currency)
- * 1 Coin = ~₦20 NGN | ~$0.02 USD | ~0.30 GHS | ~3.00 KES | ~£0.016 GBP | ~€0.018 EUR
- */
 const CURRENCY_RATE_PER_COIN: Record<string, number> = {
-  'NGN': 10,
-  'USD': 0.01,
-  'GHS': 0.15,
-  'KES': 1.50,
-  'GBP': 0.008,
-  'EUR': 0.009,
-  'ZAR': 0.18,
+  NGN: 10,
+  USD: 0.01,
+  GHS: 0.15,
+  KES: 1.5,
+  GBP: 0.008,
+  EUR: 0.009,
+  ZAR: 0.18,
 };
 
 /**
- * POST: Secure Global Initialization Checkout Engine for Flutterwave v3
+ * POST /api/flutterwave/initialize
+ * Initializes a Flutterwave v3 Standard Checkout session for purchasing Lonkind Coins.
  */
 export async function POST(req: NextRequest) {
   try {
     if (!FLW_SECRET_KEY || FLW_SECRET_KEY.includes('xxxxxxx')) {
       return NextResponse.json(
-        { error: 'Flutterwave payment engine currently offline. FLW_SECRET_KEY missing.' },
+        { error: 'Flutterwave payment gateway is not configured (FLW_SECRET_KEY missing).' },
         { status: 503 }
       );
     }
 
     const body = await req.json();
-    const { email, userId, amount, coinsToCredit, currency = 'NGN' } = body;
+    const {
+      email,
+      userId,
+      amount,
+      coins,
+      coinsToCredit: rawCoinsToCredit,
+      currency = 'NGN',
+    } = body;
 
-    // Validate incoming parameters
-    if (!email || !userId || !amount || !coinsToCredit) {
-      return NextResponse.json({ error: 'Missing required checkout entries: email, userId, amount, coinsToCredit' }, { status: 400 });
+    const coinsToCredit = Number(rawCoinsToCredit || coins || 0);
+    const numericAmount = Number(amount || 0);
+    const customerEmail = String(email || '').trim() || 'member@lonkind.com';
+
+    if (!userId || numericAmount <= 0 || coinsToCredit <= 0) {
+      return NextResponse.json(
+        { error: 'Missing required checkout fields: userId, amount, coins.' },
+        { status: 400 }
+      );
     }
 
-    const cleanCurrency = currency.toUpperCase();
-    const rate = CURRENCY_RATE_PER_COIN[cleanCurrency] || CURRENCY_RATE_PER_COIN['NGN'];
-    
-    // Safety check: ensure user is paying a reasonable minimum amount per coin for the selected currency
-    const expectedMinAmount = (coinsToCredit * rate) * 0.7; // Allow up to 30% volume bundle discount
-    if (amount < expectedMinAmount) {
-      console.warn(`[Flutterwave Init] Tamper detected for user ${userId}. Expected min ${cleanCurrency} ${expectedMinAmount}, got ${amount}`);
-      return NextResponse.json({ error: 'Pricing validation failed for selected currency. Transaction blocked.' }, { status: 400 });
+    const cleanCurrency = String(currency || 'NGN').toUpperCase();
+    const rate = CURRENCY_RATE_PER_COIN[cleanCurrency] || CURRENCY_RATE_PER_COIN.NGN;
+
+    // Allow bundle discount (up to 28% on 25k bundle) + 20% first-time buyer bonus (floor = 0.55)
+    const expectedMinAmount = Number((coinsToCredit * rate * 0.55).toFixed(2));
+    if (numericAmount + 0.01 < expectedMinAmount) {
+      console.warn(
+        `[Flutterwave Init] Price check failed for user ${userId}: paid ${cleanCurrency} ${numericAmount}, min expected ${expectedMinAmount} for ${coinsToCredit} coins`
+      );
+      return NextResponse.json(
+        { error: 'Pricing validation failed for selected package and currency.' },
+        { status: 400 }
+      );
     }
 
-    const origin = getPublicOrigin(req);
+    const origin = resolveCanonicalOrigin(req);
     const txRef = `flw_tx_${userId}_${Date.now()}`;
 
     const flwPayload = {
       tx_ref: txRef,
-      amount: Number(amount),
+      amount: numericAmount,
       currency: cleanCurrency,
       redirect_url: `${origin}/api/flutterwave/callback`,
       meta: {
         userId,
         coinAmount: String(coinsToCredit),
+        coins: String(coinsToCredit),
         purpose: 'coin_purchase',
         currency: cleanCurrency,
       },
       customer: {
-        email,
-        name: email.split('@')[0],
+        email: customerEmail,
+        name: customerEmail.split('@')[0] || 'Lonkind Member',
       },
       customizations: {
         title: 'Lonkind Coins',
-        description: `Purchase ${coinsToCredit} Coins (${cleanCurrency})`,
-        logo: 'https://impactful-ideas.web.app/icon.png',
+        description: `Purchase ${coinsToCredit.toLocaleString()} Lonkind Coins (${cleanCurrency})`,
+        logo: `${APP_URL.replace(/\/$/, '')}/icon-192x192.png`,
       },
     };
 
@@ -101,19 +112,44 @@ export async function POST(req: NextRequest) {
     const data = await response.json();
 
     if (data.status !== 'success' || !data.data?.link) {
-      console.error('[Flutterwave Rejection Details]:', data);
-      return NextResponse.json({ error: data.message || 'Payment initiation rejected by Flutterwave gateway.' }, { status: 400 });
+      console.error('[Flutterwave Init Error]:', data);
+      return NextResponse.json(
+        { error: data.message || 'Payment initiation rejected by Flutterwave.' },
+        { status: 400 }
+      );
     }
 
-    // Return authorizationUrl so frontend works seamlessly
+    // Pre-log pending transaction in Firestore for audit & fallback verification
+    try {
+      await adminDb.collection('transactions').doc(txRef).set(
+        {
+          id: txRef,
+          userId,
+          flutterwaveReference: txRef,
+          amount: numericAmount,
+          currency: cleanCurrency,
+          coinsAdded: coinsToCredit,
+          status: 'pending',
+          type: 'coin_purchase',
+          gateway: 'flutterwave',
+          time: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (dbErr) {
+      console.warn('[Flutterwave Init] Could not pre-log pending tx:', dbErr);
+    }
+
     return NextResponse.json({
       authorizationUrl: data.data.link,
       reference: txRef,
       status: 'success',
     });
-
   } catch (error: any) {
-    console.error('Critical Flutterwave initial checkout error:', error);
-    return NextResponse.json({ error: 'An unexpected checkout failure occurred.' }, { status: 500 });
+    console.error('[Flutterwave Init Exception]:', error);
+    return NextResponse.json(
+      { error: error?.message || 'An unexpected checkout initialization error occurred.' },
+      { status: 500 }
+    );
   }
 }

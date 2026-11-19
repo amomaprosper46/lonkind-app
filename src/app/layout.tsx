@@ -9,10 +9,77 @@ import { NotificationPermission } from '@/components/NotificationPermission';
 import PwaInstaller from '@/components/pwa-installer';
 import '@/ai/genkit';
 
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
+
 export const metadata: Metadata = {
-  title: 'Lonkind',
-  description: 'Connect with friends and family, anytime, anywhere.',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Lonkind — Go Live, Connect & Share Moments',
+    template: '%s | Lonkind',
+  },
+  description:
+    'Lonkind is the global live-streaming and creator community platform. Watch interactive live broadcasts, co-host with creators, send 3D virtual gifts, and share live clips.',
+  keywords: [
+    'Lonkind',
+    'live streaming',
+    'creator community',
+    'watch live',
+    'co-host live',
+    'virtual gifts',
+    'live clips',
+    'social video platform',
+  ],
+  authors: [{ name: 'Lonkind', url: SITE_URL }],
+  creator: 'Lonkind',
+  publisher: 'Lonkind',
+  alternates: {
+    canonical: '/',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
   manifest: '/manifest.json',
+  icons: {
+    icon: '/logo.png',
+    apple: '/icon-192x192.png',
+  },
+  openGraph: {
+    title: 'Lonkind — Go Live, Connect & Share Moments',
+    description:
+      'Watch interactive live streams, join multi-guest broadcasts, send 3D virtual gifts, and connect with creators worldwide on Lonkind.',
+    url: SITE_URL,
+    siteName: 'Lonkind',
+    images: [
+      {
+        url: '/og-banner.png',
+        width: 1200,
+        height: 630,
+        alt: 'Lonkind — Global Live Streaming & Creator Community',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@lonkind',
+    creator: '@lonkind',
+    title: 'Lonkind — Go Live, Connect & Share Moments',
+    description:
+      'Watch interactive live streams, join multi-guest broadcasts, send 3D virtual gifts, and connect with creators worldwide on Lonkind.',
+    images: ['/og-banner.png'],
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+  },
 };
 
 export default function RootLayout({

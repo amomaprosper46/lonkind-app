@@ -353,11 +353,34 @@ export default function GiftTakeoverEngine({ event, onComplete }: GiftTakeoverEn
       const ctx = new AC();
       audioCtxRef.current = ctx;
       const master = ctx.createGain();
-      master.gain.value = 0.26;
+      master.gain.value = 0.65;
       master.connect(ctx.destination);
 
+      const playNoiseBurst = (startTime: number, duration: number, filterFreq: number, peakGain: number, type: BiquadFilterType = 'bandpass') => {
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, Math.floor(sr * duration), sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.7);
+        }
+        const src = ctx.createBufferSource();
+        const flt = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        src.buffer = buf;
+        flt.type = type;
+        flt.frequency.setValueAtTime(filterFreq, startTime);
+        g.gain.setValueAtTime(0.0001, startTime);
+        g.gain.linearRampToValueAtTime(peakGain, startTime + Math.min(0.06, duration * 0.2));
+        g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        src.connect(flt);
+        flt.connect(g);
+        g.connect(master);
+        src.start(startTime);
+        src.stop(startTime + duration + 0.02);
+      };
+
       if (normalizedType === 'neon_supercar') {
-        // V12 Twin-Turbo Sub-Bass Harmonic Layer + Gear Shifts
+        // V12 Twin-Turbo Sub-Bass Harmonic Layer + Gear Shifts + Exhaust Crackle
         const engineOsc = ctx.createOscillator();
         const subOsc = ctx.createOscillator();
         const engineGain = ctx.createGain();
@@ -371,56 +394,169 @@ export default function GiftTakeoverEngine({ event, onComplete }: GiftTakeoverEn
         engineOsc.frequency.setValueAtTime(150, now + 1.15);
         engineOsc.frequency.exponentialRampToValueAtTime(340, now + 2.6);
         engineOsc.frequency.setValueAtTime(210, now + 2.65);
-        engineOsc.frequency.exponentialRampToValueAtTime(480, now + 4.8);
-        engineOsc.frequency.exponentialRampToValueAtTime(90, now + 7.8);
+        engineOsc.frequency.exponentialRampToValueAtTime(520, now + 4.8);
+        engineOsc.frequency.exponentialRampToValueAtTime(90, now + 6.3);
 
         subOsc.frequency.setValueAtTime(32, now);
         subOsc.frequency.exponentialRampToValueAtTime(160, now + 4.8);
-        subOsc.frequency.exponentialRampToValueAtTime(45, now + 7.8);
+        subOsc.frequency.exponentialRampToValueAtTime(45, now + 6.3);
 
         engineGain.gain.setValueAtTime(0.01, now);
-        engineGain.gain.linearRampToValueAtTime(0.35, now + 0.4);
-        engineGain.gain.setValueAtTime(0.32, now + 5.2);
-        engineGain.gain.exponentialRampToValueAtTime(0.001, now + 8.0);
+        engineGain.gain.linearRampToValueAtTime(0.42, now + 0.35);
+        engineGain.gain.setValueAtTime(0.38, now + 4.8);
+        engineGain.gain.exponentialRampToValueAtTime(0.001, now + 6.4);
 
         engineOsc.connect(engineGain);
         subOsc.connect(engineGain);
         engineGain.connect(master);
         engineOsc.start(now);
         subOsc.start(now);
-        engineOsc.stop(now + 8.1);
-        subOsc.stop(now + 8.1);
+        engineOsc.stop(now + 6.5);
+        subOsc.stop(now + 6.5);
+        // Nitro blow-off whoosh
+        playNoiseBurst(now + 1.15, 0.35, 1800, 0.25, 'highpass');
+        playNoiseBurst(now + 2.65, 0.4, 2100, 0.3, 'highpass');
       } else if (normalizedType === 'luxury_yacht') {
         const now = ctx.currentTime;
-        [65.41, 82.41, 98.0].forEach((freq) => {
-          const horn = ctx.createOscillator();
-          const hGain = ctx.createGain();
-          horn.type = 'sawtooth';
-          horn.frequency.setValueAtTime(freq, now + 0.2);
-          hGain.gain.setValueAtTime(0.001, now + 0.2);
-          hGain.gain.linearRampToValueAtTime(0.14, now + 0.6);
-          hGain.gain.setValueAtTime(0.14, now + 2.4);
-          hGain.gain.exponentialRampToValueAtTime(0.001, now + 3.4);
-          horn.connect(hGain);
-          hGain.connect(master);
-          horn.start(now + 0.2);
-          horn.stop(now + 3.5);
+        // 1. Deep Sovereign Cruise-Ship Multi-Chime Brass Horn Blast (2 blasts: 0.1s and 2.1s)
+        [0.1, 2.1].forEach((blastDelay, bIdx) => {
+          const blastLen = bIdx === 0 ? 1.45 : 1.85;
+          [55.0, 82.41, 110.0, 138.59, 164.81].forEach((freq, fIdx) => {
+            const horn = ctx.createOscillator();
+            const flt = ctx.createBiquadFilter();
+            const hGain = ctx.createGain();
+            horn.type = fIdx % 2 === 0 ? 'sawtooth' : 'triangle';
+            horn.frequency.setValueAtTime(freq, now + blastDelay);
+            flt.type = 'lowpass';
+            flt.frequency.setValueAtTime(520, now + blastDelay);
+            const peak = fIdx === 0 ? 0.28 : 0.16;
+            hGain.gain.setValueAtTime(0.001, now + blastDelay);
+            hGain.gain.linearRampToValueAtTime(peak, now + blastDelay + 0.18);
+            hGain.gain.setValueAtTime(peak, now + blastDelay + blastLen - 0.35);
+            hGain.gain.exponentialRampToValueAtTime(0.0001, now + blastDelay + blastLen);
+            horn.connect(flt);
+            flt.connect(hGain);
+            hGain.connect(master);
+            horn.start(now + blastDelay);
+            horn.stop(now + blastDelay + blastLen + 0.05);
+          });
+        });
+
+        // 2. Ocean Wave Wash & Twin V16 Marine Turbine Hum
+        playNoiseBurst(now + 0.05, 5.8, 340, 0.22, 'lowpass');
+
+        // 3. Synchronized Aerial Firework Whistles + Sky Mortar Booms + Sparkle Crackles
+        [0.75, 1.65, 2.6, 3.55, 4.45, 5.25].forEach((fwTime, idx) => {
+          // Rising firework whistle
+          const whistle = ctx.createOscillator();
+          const wGain = ctx.createGain();
+          whistle.type = 'sine';
+          whistle.frequency.setValueAtTime(580 + idx * 45, now + fwTime);
+          whistle.frequency.exponentialRampToValueAtTime(1950 + idx * 80, now + fwTime + 0.32);
+          wGain.gain.setValueAtTime(0.001, now + fwTime);
+          wGain.gain.linearRampToValueAtTime(0.11, now + fwTime + 0.1);
+          wGain.gain.exponentialRampToValueAtTime(0.0001, now + fwTime + 0.34);
+          whistle.connect(wGain);
+          wGain.connect(master);
+          whistle.start(now + fwTime);
+          whistle.stop(now + fwTime + 0.35);
+
+          // Deep cannon mortar explosion thump + high sparkle crackle
+          const boomTime = now + fwTime + 0.33;
+          const boomOsc = ctx.createOscillator();
+          const bGain = ctx.createGain();
+          boomOsc.type = 'sine';
+          boomOsc.frequency.setValueAtTime(135, boomTime);
+          boomOsc.frequency.exponentialRampToValueAtTime(28, boomTime + 0.55);
+          bGain.gain.setValueAtTime(0.001, boomTime);
+          bGain.gain.linearRampToValueAtTime(0.45, boomTime + 0.02);
+          bGain.gain.exponentialRampToValueAtTime(0.0001, boomTime + 0.58);
+          boomOsc.connect(bGain);
+          bGain.connect(master);
+          boomOsc.start(boomTime);
+          boomOsc.stop(boomTime + 0.6);
+
+          playNoiseBurst(boomTime, 0.55, 2400, 0.32, 'bandpass');
+        });
+
+        // 4. Royal Gold Celebration Chime Arpeggio at Peak
+        [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((note, nIdx) => {
+          const bell = ctx.createOscillator();
+          const bGain = ctx.createGain();
+          const tStart = now + 1.4 + nIdx * 0.11;
+          bell.type = 'triangle';
+          bell.frequency.setValueAtTime(note, tStart);
+          bGain.gain.setValueAtTime(0.001, tStart);
+          bGain.gain.linearRampToValueAtTime(0.16, tStart + 0.02);
+          bGain.gain.exponentialRampToValueAtTime(0.0001, tStart + 0.9);
+          bell.connect(bGain);
+          bGain.connect(master);
+          bell.start(tStart);
+          bell.stop(tStart + 0.95);
+        });
+      } else if (event.giftId === 'phoenix') {
+        // Mythic Fire Phoenix High-Pitched Eagle Screech + Solar Firestorm Woosh + Triumphal Chord
+        const now = ctx.currentTime;
+        // Solar Firestorm Ignition Woosh
+        playNoiseBurst(now + 0.05, 1.8, 950, 0.42, 'bandpass');
+        playNoiseBurst(now + 1.6, 2.8, 1600, 0.38, 'bandpass');
+
+        // Resonant Mythic Phoenix Cry (Harmonic FM glide)
+        [0.25, 2.1].forEach((cryTime, cIdx) => {
+          const cry = ctx.createOscillator();
+          const cryHarm = ctx.createOscillator();
+          const cGain = ctx.createGain();
+          cry.type = 'sawtooth';
+          cryHarm.type = 'triangle';
+          const baseFreq = cIdx === 0 ? 880 : 1046.5;
+          cry.frequency.setValueAtTime(baseFreq, now + cryTime);
+          cry.frequency.exponentialRampToValueAtTime(baseFreq * 1.55, now + cryTime + 0.35);
+          cry.frequency.exponentialRampToValueAtTime(baseFreq * 0.82, now + cryTime + 1.25);
+          cryHarm.frequency.setValueAtTime(baseFreq * 1.5, now + cryTime);
+          cryHarm.frequency.exponentialRampToValueAtTime(baseFreq * 2.2, now + cryTime + 0.35);
+          cryHarm.frequency.exponentialRampToValueAtTime(baseFreq * 1.2, now + cryTime + 1.25);
+          cGain.gain.setValueAtTime(0.001, now + cryTime);
+          cGain.gain.linearRampToValueAtTime(0.24, now + cryTime + 0.08);
+          cGain.gain.exponentialRampToValueAtTime(0.0001, now + cryTime + 1.3);
+          cry.connect(cGain);
+          cryHarm.connect(cGain);
+          cGain.connect(master);
+          cry.start(now + cryTime);
+          cryHarm.start(now + cryTime);
+          cry.stop(now + cryTime + 1.35);
+          cryHarm.stop(now + cryTime + 1.35);
+        });
+
+        // Sub-Bass Solar Shockwave Drop + Golden Chord
+        [65.41, 130.81, 196.0, 261.63, 329.63, 392.0].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = idx < 2 ? 'sawtooth' : 'triangle';
+          osc.frequency.setValueAtTime(freq, now + 0.8);
+          g.gain.setValueAtTime(0.001, now + 0.8);
+          g.gain.linearRampToValueAtTime(idx === 0 ? 0.38 : 0.16, now + 1.0);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 4.5);
+          osc.connect(g);
+          g.connect(master);
+          osc.start(now + 0.8);
+          osc.stop(now + 4.6);
         });
       } else {
-        // Sub-Bass Chest Rumble to reinforce the real recorded roar/launch
+        // Sub-Bass Chest Rumble + Royal Brass Impact to reinforce Dragon/Rocket/Crown
         const now = ctx.currentTime;
         const roar = ctx.createOscillator();
         const rGain = ctx.createGain();
         roar.type = 'sawtooth';
-        roar.frequency.setValueAtTime(95, now + 0.5);
+        roar.frequency.setValueAtTime(95, now + 0.15);
         roar.frequency.exponentialRampToValueAtTime(32, now + 3.2);
-        rGain.gain.setValueAtTime(0.001, now + 0.5);
-        rGain.gain.linearRampToValueAtTime(0.38, now + 0.9);
+        rGain.gain.setValueAtTime(0.001, now + 0.15);
+        rGain.gain.linearRampToValueAtTime(0.45, now + 0.5);
         rGain.gain.exponentialRampToValueAtTime(0.001, now + 3.5);
         roar.connect(rGain);
         rGain.connect(master);
-        roar.start(now + 0.5);
+        roar.start(now + 0.15);
         roar.stop(now + 3.6);
+        playNoiseBurst(now + 0.2, 2.2, 650, 0.32, 'lowpass');
       }
 
       return () => {
@@ -708,146 +844,231 @@ export default function GiftTakeoverEngine({ event, onComplete }: GiftTakeoverEn
         ctx.restore();
 
         // Sweeping Helipad Searchlight Beams from Yacht into Night Sky
-        const yachtProgress = Math.min(1, elapsed / 7.5);
-        const yachtX = w * 0.82 - yachtProgress * (w * 0.64);
-        const yachtBob = Math.sin(elapsed * 2.6) * 7;
-        const yachtY = waterLineY - 12 + yachtBob;
+        const yachtProgress = Math.min(1, elapsed / 6.0);
+        // Smooth ease-out to center stage so the Sovereign Superyacht commands the screen
+        const easeOut = 1 - Math.pow(1 - Math.min(1, elapsed / 2.2), 3);
+        const yachtX = w * 0.92 - easeOut * (w * 0.42) - Math.max(0, elapsed - 2.2) * (w * 0.045);
+        const yachtBob = Math.sin(elapsed * 2.8) * 6;
+        const yachtPitch = Math.sin(elapsed * 2.1) * 0.022;
+        const yachtY = waterLineY - 16 + yachtBob;
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        [-0.35, 0.28].forEach((beamOffset, idx) => {
-          const angle = -Math.PI / 2 + Math.sin(elapsed * 1.8 + idx * 2) * 0.42 + beamOffset;
-          const beamLen = h * 0.65;
+        [-0.38, 0.0, 0.36].forEach((beamOffset, idx) => {
+          const angle = -Math.PI / 2 + Math.sin(elapsed * 2.1 + idx * 1.7) * 0.45 + beamOffset;
+          const beamLen = h * 0.72;
           const bx = yachtX + Math.cos(angle) * beamLen;
           const by = yachtY + Math.sin(angle) * beamLen;
-          const bGrad = ctx.createLinearGradient(yachtX, yachtY - 40, bx, by);
-          bGrad.addColorStop(0, 'rgba(253, 224, 71, 0.48)');
-          bGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.18)');
+          const bGrad = ctx.createLinearGradient(yachtX, yachtY - 45, bx, by);
+          bGrad.addColorStop(0, 'rgba(253, 224, 71, 0.55)');
+          bGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.22)');
           bGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
           ctx.fillStyle = bGrad;
           ctx.beginPath();
-          ctx.moveTo(yachtX - 8, yachtY - 40);
-          ctx.lineTo(yachtX + 8, yachtY - 40);
-          ctx.lineTo(bx + 70, by);
-          ctx.lineTo(bx - 70, by);
+          ctx.moveTo(yachtX - 10, yachtY - 45);
+          ctx.lineTo(yachtX + 10, yachtY - 45);
+          ctx.lineTo(bx + 85, by);
+          ctx.lineTo(bx - 85, by);
           ctx.closePath();
           ctx.fill();
         });
         ctx.restore();
 
-        // Back Ocean Wave Layer
+        // Back Ocean Wave Layer with Golden Moonlight Shimmer
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(0, h);
-        for (let x = 0; x <= w; x += 20) {
-          const wy = waterLineY + Math.sin(x * 0.012 + elapsed * 2.2) * 14;
+        for (let x = 0; x <= w; x += 18) {
+          const wy = waterLineY + Math.sin(x * 0.012 + elapsed * 2.4) * 14;
           ctx.lineTo(x, wy);
         }
         ctx.lineTo(w, h);
         ctx.closePath();
         const oceanGrad = ctx.createLinearGradient(0, waterLineY, 0, h);
-        oceanGrad.addColorStop(0, 'rgba(14, 116, 144, 0.72)');
-        oceanGrad.addColorStop(0.4, 'rgba(15, 23, 42, 0.88)');
-        oceanGrad.addColorStop(1, 'rgba(2, 6, 23, 0.96)');
+        oceanGrad.addColorStop(0, 'rgba(6, 182, 212, 0.78)');
+        oceanGrad.addColorStop(0.35, 'rgba(15, 23, 42, 0.92)');
+        oceanGrad.addColorStop(1, 'rgba(2, 6, 23, 0.98)');
         ctx.fillStyle = oceanGrad;
         ctx.fill();
         ctx.restore();
 
-        // Render Illuminated 3D Royal Mega-Yacht
+        // Render Illuminated 3D Royal Sovereign Mega-Yacht
         ctx.save();
         ctx.translate(yachtX, yachtY);
-        const yachtScale = Math.min(1.15, Math.max(0.72, w / 900));
+        ctx.rotate(yachtPitch);
+        const yachtScale = Math.min(1.25, Math.max(0.78, w / 820));
         ctx.scale(yachtScale, yachtScale);
 
-        // Underwater Bioluminescent Turquoise & Gold Hull Reflection
-        const hullGlow = ctx.createRadialGradient(0, 28, 10, 0, 28, 280);
-        hullGlow.addColorStop(0, 'rgba(34, 211, 238, 0.75)');
-        hullGlow.addColorStop(0.45, 'rgba(250, 204, 21, 0.45)');
+        // Underwater Bioluminescent Turquoise & 24K Gold Hull Reflection Pool
+        const hullGlow = ctx.createRadialGradient(0, 32, 12, 0, 32, 340);
+        hullGlow.addColorStop(0, 'rgba(34, 211, 238, 0.88)');
+        hullGlow.addColorStop(0.45, 'rgba(250, 204, 21, 0.55)');
         hullGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = hullGlow;
         ctx.beginPath();
-        ctx.ellipse(0, 28, 270, 48, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 32, 320, 56, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Mega-Yacht Lower Hull (Sleek Pearl White & Metallic Gold Trim)
+        // White-Water Bow Wake Spray & Stern Jet Foam Trail
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let sp = 0; sp < 18; sp++) {
+          const prog = ((elapsed * 2.8 + sp * 0.11) % 1);
+          const sx = -245 - prog * 55 + sp * 3;
+          const sy = 18 - Math.sin(prog * Math.PI) * (18 + (sp % 5) * 4);
+          ctx.beginPath();
+          ctx.arc(sx, sy, (1 - prog) * 5.5 + 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(186, 230, 253, ${(1 - prog) * 0.85})`;
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Mega-Yacht Lower Hull (3D Shaded Pearl White, Obsidian Chine & 24K Metallic Gold Trim)
         ctx.beginPath();
-        ctx.moveTo(-240, -18); // Sharp Bow
-        ctx.lineTo(210, -18); // Stern
-        ctx.lineTo(185, 24); // Waterline Stern
-        ctx.lineTo(-195, 24); // Waterline Bow
+        ctx.moveTo(-275, -24); // Raked Razor Superyacht Bow
+        ctx.quadraticCurveTo(-240, -26, -180, -24);
+        ctx.lineTo(235, -22); // Transom Stern
+        ctx.lineTo(205, 26); // Waterline Beach Club Stern
+        ctx.lineTo(-215, 26); // Waterline Bulbous Bow
         ctx.closePath();
-        const hullGrad = ctx.createLinearGradient(-240, -18, 210, 24);
-        hullGrad.addColorStop(0, '#f8fafc');
-        hullGrad.addColorStop(0.5, '#e2e8f0');
-        hullGrad.addColorStop(1, '#94a3b8');
+        const hullGrad = ctx.createLinearGradient(-275, -26, 235, 28);
+        hullGrad.addColorStop(0, '#ffffff');
+        hullGrad.addColorStop(0.42, '#f1f5f9');
+        hullGrad.addColorStop(0.78, '#cbd5e1');
+        hullGrad.addColorStop(1, '#64748b');
         ctx.fillStyle = hullGrad;
         ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 22;
+        ctx.shadowBlur = 28;
         ctx.fill();
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 3;
         ctx.strokeStyle = '#fbbf24';
         ctx.stroke();
 
+        // 24K Gold Accent Stripe & Illuminated Stern Infinity Pool
+        ctx.beginPath();
+        ctx.moveTo(-252, -4);
+        ctx.lineTo(215, -4);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+
+        // Glowing Turquoise Aft Infinity Pool on Stern Beach Club
+        ctx.fillStyle = '#22d3ee';
+        ctx.shadowColor = '#06b6d4';
+        ctx.shadowBlur = 18;
+        ctx.fillRect(168, -18, 52, 8);
+
         // Golden Underwater Porthole LEDs along Hull
-        for (let px = -150; px <= 150; px += 25) {
+        for (let px = -175; px <= 155; px += 22) {
           ctx.beginPath();
-          ctx.arc(px, 4, 3.2, 0, Math.PI * 2);
+          ctx.arc(px, 8, 3.6, 0, Math.PI * 2);
           ctx.fillStyle = '#fef08a';
           ctx.shadowColor = '#f59e0b';
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = 12;
           ctx.fill();
         }
 
-        // Deck 1: Main Royal Promenade Deck
+        // Bow Helipad Deck + Hovering Golden VIP Helicopter with Spinning Rotor
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(-165, -18);
-        ctx.lineTo(-130, -52);
-        ctx.lineTo(185, -52);
-        ctx.lineTo(198, -18);
+        ctx.ellipse(-205, -25, 36, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        const heliHoverY = -44 + Math.sin(elapsed * 5.5) * 3.5;
+        ctx.save();
+        ctx.translate(-205, heliHoverY);
+        // Helicopter Fuselage
+        ctx.fillStyle = '#fbbf24';
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 18, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Tail Boom
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(14, -1);
+        ctx.lineTo(34, -5);
+        ctx.stroke();
+        // High-Speed Spinning Main Rotor Blur
+        const rotorWidth = 34 * Math.abs(Math.cos(elapsed * 38)) + 8;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-rotorWidth, -10);
+        ctx.lineTo(rotorWidth, -10);
+        ctx.stroke();
+        ctx.restore();
+
+        // Deck 1: Main Royal Promenade Superstructure (Swept Aerodynamic Glass)
+        ctx.beginPath();
+        ctx.moveTo(-165, -24);
+        ctx.lineTo(-122, -60);
+        ctx.lineTo(192, -60);
+        ctx.lineTo(212, -24);
+        ctx.closePath();
+        const deck1Grad = ctx.createLinearGradient(0, -60, 0, -24);
+        deck1Grad.addColorStop(0, '#1e293b');
+        deck1Grad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = deck1Grad;
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
+
+        // Deck 2: VIP Owner's Sky Lounge Deck
+        ctx.beginPath();
+        ctx.moveTo(-92, -60);
+        ctx.lineTo(-55, -94);
+        ctx.lineTo(152, -94);
+        ctx.lineTo(175, -60);
         ctx.closePath();
         ctx.fillStyle = '#0f172a';
         ctx.fill();
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2.4;
         ctx.stroke();
 
-        // Deck 2: VIP Sky Lounge Deck
+        // Deck 3: Sovereign Captain's Bridge & Twin Satellite Domes
         ctx.beginPath();
-        ctx.moveTo(-95, -52);
-        ctx.lineTo(-65, -82);
-        ctx.lineTo(145, -82);
-        ctx.lineTo(165, -52);
+        ctx.moveTo(-22, -94);
+        ctx.lineTo(4, -122);
+        ctx.lineTo(96, -122);
+        ctx.lineTo(116, -94);
         ctx.closePath();
         ctx.fillStyle = '#1e293b';
         ctx.fill();
-        ctx.strokeStyle = '#fbbf24';
+        ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Deck 3: Captain's Bridge & Satellite Radar Tower
-        ctx.beginPath();
-        ctx.moveTo(-25, -82);
-        ctx.lineTo(-5, -108);
-        ctx.lineTo(85, -108);
-        ctx.lineTo(105, -82);
-        ctx.closePath();
-        ctx.fillStyle = '#0f172a';
-        ctx.fill();
-        ctx.strokeStyle = '#38bdf8';
-        ctx.stroke();
-
-        // Radar Mast & Dome
-        ctx.beginPath();
-        ctx.arc(38, -124, 10, 0, Math.PI * 2);
+        // Twin White Satellite Radar Domes + Golden Crown Emblem on Mast
         ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(36, -136, 9, 0, Math.PI * 2);
+        ctx.arc(68, -133, 7, 0, Math.PI * 2);
         ctx.fill();
 
-        // Glowing Golden Panoramic Windows across Decks
+        // Glowing Golden Panoramic Floor-to-Ceiling Windows across All 3 Decks
         ctx.fillStyle = '#fde047';
         ctx.shadowColor = '#f59e0b';
-        ctx.shadowBlur = 15;
-        ctx.fillRect(-115, -42, 270, 8);
-        ctx.fillRect(-50, -72, 175, 7);
+        ctx.shadowBlur = 18;
+        ctx.fillRect(-110, -48, 280, 9);
+        ctx.fillRect(-42, -82, 180, 8);
+        ctx.fillRect(10, -112, 78, 6);
+
+        // "LONKIND ROYAL" Neon Gold Nameplate on Hull Side
+        ctx.font = '900 11px sans-serif';
+        ctx.fillStyle = '#fef08a';
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 10;
+        ctx.fillText('👑 LONKIND SOVEREIGN', -68, -9);
 
         ctx.restore();
 
@@ -884,7 +1105,122 @@ export default function GiftTakeoverEngine({ event, onComplete }: GiftTakeoverEn
       }
 
       // =======================================================================
-      // 3. MAJESTIC LION / DRAGON / ROCKET / CROWN / DIAMOND SOLAR SHOCKWAVES
+      // 3. CELESTIAL FIRE PHOENIX — MOLTEN GOLD & SOLAR WINGS TAKEOVER
+      // =======================================================================
+      else if (event.giftId === 'phoenix') {
+        const wingFlap = Math.sin(elapsed * 7.2);
+        const riseOffset = Math.max(-25, 110 - elapsed * 42);
+        const px = cx;
+        const py = cy - 15 + riseOffset + Math.sin(elapsed * 3.4) * 10;
+
+        // 3A. Expanding Solar Firestorm Shockwaves & Sunburst Corona
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const coronaGrad = ctx.createRadialGradient(px, py, 10, px, py, Math.min(w, h) * 0.52);
+        coronaGrad.addColorStop(0, 'rgba(254, 240, 138, 0.75)');
+        coronaGrad.addColorStop(0.35, 'rgba(249, 115, 22, 0.42)');
+        coronaGrad.addColorStop(0.7, 'rgba(220, 38, 38, 0.18)');
+        coronaGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = coronaGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.min(w, h) * 0.52, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (let r = 0; r < 3; r++) {
+          const ringP = ((elapsed * 0.78 + r * 0.33) % 1);
+          const rad = ringP * Math.max(w, h) * 0.58;
+          ctx.beginPath();
+          ctx.arc(px, py, rad, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(251, 146, 60, ${(1 - ringP) * 0.65})`;
+          ctx.lineWidth = (1 - ringP) * 9 + 1.5;
+          ctx.stroke();
+        }
+
+        // 3B. Articulated Multi-Feather Molten Gold & Crimson Solar Wings
+        const scale = Math.min(w / 520, 1.15);
+        ctx.translate(px, py);
+        ctx.scale(scale, scale);
+
+        for (const side of [-1, 1]) {
+          ctx.save();
+          ctx.scale(side, 1);
+          const flapAngle = wingFlap * 0.28;
+          ctx.rotate(flapAngle);
+
+          // 7 Layered Primary Solar Pinion Feathers per Wing
+          for (let f = 0; f < 7; f++) {
+            const featherLen = 225 - f * 18;
+            const spread = -0.38 + f * 0.14;
+            ctx.save();
+            ctx.rotate(spread);
+            const fGrad = ctx.createLinearGradient(0, 0, featherLen, -35);
+            fGrad.addColorStop(0, '#fef08a');
+            fGrad.addColorStop(0.45, '#f59e0b');
+            fGrad.addColorStop(0.8, '#ea580c');
+            fGrad.addColorStop(1, 'rgba(220, 38, 38, 0.05)');
+            ctx.fillStyle = fGrad;
+            ctx.shadowColor = '#f97316';
+            ctx.shadowBlur = 22;
+
+            ctx.beginPath();
+            ctx.moveTo(12, 0);
+            ctx.quadraticCurveTo(featherLen * 0.55, -42, featherLen, -14);
+            ctx.quadraticCurveTo(featherLen * 0.6, 18, 12, 14);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+
+        // 3C. Flowing Golden Tail Plumes (3 Ribbon Streams)
+        for (let t = -1; t <= 1; t++) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(t * 14, 32);
+          const sway = Math.sin(elapsed * 6 + t) * 28;
+          ctx.bezierCurveTo(t * 45 + sway, 95, t * 25 - sway, 155, t * 38 + sway * 1.3, 220);
+          ctx.strokeStyle = t === 0 ? '#fef08a' : '#f97316';
+          ctx.lineWidth = t === 0 ? 9 : 6;
+          ctx.shadowColor = '#ea580c';
+          ctx.shadowBlur = 18;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 3D. Sovereign Phoenix Body, Sculpted Crest & Radiant Solar Core
+        const bodyGrad = ctx.createLinearGradient(0, -78, 0, 55);
+        bodyGrad.addColorStop(0, '#ffffff');
+        bodyGrad.addColorStop(0.35, '#fde047');
+        bodyGrad.addColorStop(0.8, '#f97316');
+        bodyGrad.addColorStop(1, '#dc2626');
+        ctx.fillStyle = bodyGrad;
+        ctx.shadowColor = '#fde047';
+        ctx.shadowBlur = 28;
+
+        ctx.beginPath();
+        ctx.moveTo(0, -82); // Crown beak apex
+        ctx.quadraticCurveTo(28, -35, 22, 18);
+        ctx.quadraticCurveTo(0, 56, -22, 18);
+        ctx.quadraticCurveTo(-28, -35, 0, -82);
+        ctx.closePath();
+        ctx.fill();
+
+        // 3 Crown Head Plumes
+        for (let c = -1; c <= 1; c++) {
+          ctx.beginPath();
+          ctx.moveTo(c * 5, -75);
+          ctx.quadraticCurveTo(c * 18, -102, c * 24, -118 - (c === 0 ? 10 : 0));
+          ctx.strokeStyle = '#fef08a';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      // =======================================================================
+      // 4. MAJESTIC LION / DRAGON / ROCKET / CROWN / DIAMOND SOLAR SHOCKWAVES
       // =======================================================================
       else {
         ctx.save();
@@ -906,7 +1242,7 @@ export default function GiftTakeoverEngine({ event, onComplete }: GiftTakeoverEn
 
     rafId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(rafId);
-  }, [normalizedType]);
+  }, [normalizedType, event.giftId]);
 
   // Select active Lottie animation JSON if provided
   const activeLottieData = customLottieJson || event.lottieData || null;

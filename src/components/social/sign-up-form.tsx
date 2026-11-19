@@ -14,8 +14,10 @@ import {
 } from '@/components/ui/form';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Mail, CheckCircle2, Calendar, ShieldCheck } from 'lucide-react';
+import { Loader2, Mail, CheckCircle2, Calendar, ShieldCheck, Lock, Globe, MessageSquare, AtSign, KeyRound, Sliders } from 'lucide-react';
 import React, { useState } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithCustomToken, RecaptchaVerifier } from 'firebase/auth';
@@ -24,6 +26,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { countries } from '@/lib/countries';
 import { SixDigitOtpInput } from './six-digit-otp-input';
+import { AppPermissionsManager } from './app-permissions-manager';
+import {
+  CONSENT_VERSION,
+  DEFAULT_USER_SETTINGS,
+  type AudienceOption,
+  type LegalConsentRecord,
+} from '@/lib/settings-schema';
+import {
+  MAX_FULL_NAME_LEN,
+  realFullNameSchema,
+  validateRealFullName,
+} from '@/lib/real-name-validation';
 
 declare global {
   interface Window {
@@ -31,16 +45,30 @@ declare global {
   }
 }
 
+const legalConsentFields = {
+  consentTermsPrivacy: z.boolean().refine((v) => v === true, {
+    message: 'You must agree to the Terms of Service & Privacy Policy.',
+  }),
+  consentAge: z.boolean().refine((v) => v === true, {
+    message: 'You must confirm you meet the minimum age requirement.',
+  }),
+  consentRealNameGuidelines: z.boolean().refine((v) => v === true, {
+    message: 'You must agree to the Real-Name & Community Guidelines.',
+  }),
+};
+
 const emailFormSchema = z.object({
-  name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
+  name: realFullNameSchema,
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(8, { message: 'Password must be at least 8 characters.' }),
+  ...legalConsentFields,
 });
 
 const phoneFormSchema = z.object({
-  name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
+  name: realFullNameSchema,
   countryCode: z.string().min(1, 'Please select a country.'),
   phone: z.string().min(5, { message: 'Please enter a valid phone number.' }),
+  ...legalConsentFields,
 });
 
 const codeFormSchema = z.object({
@@ -77,7 +105,18 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
   const [isWaitingForEmail, setIsWaitingForEmail] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [showAgeStep, setShowAgeStep] = useState(false);
-  const [phoneAuthData, setPhoneAuthData] = useState<{ name: string; phone: string } | null>(null);
+  const [onboardingLayer, setOnboardingLayer] = useState<1 | 2 | 3>(1);
+  const [phoneAuthData, setPhoneAuthData] = useState<{
+    name: string;
+    phone: string;
+    legalConsent: LegalConsentRecord;
+  } | null>(null);
+
+  // Layer 2: Account Privacy & Security Permissions state
+  const [privateAccount, setPrivateAccount] = useState(false);
+  const [whoCanMessage, setWhoCanMessage] = useState<AudienceOption>('everyone');
+  const [whoCanTag, setWhoCanTag] = useState<AudienceOption>('everyone');
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   // Age verification state (Facebook style)
   const [birthMonth, setBirthMonth] = useState('01');
@@ -115,12 +154,28 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   const emailForm = useForm<z.infer<typeof emailFormSchema>>({
     resolver: zodResolver(emailFormSchema),
-    defaultValues: { name: '', email: '', password: '' },
+    mode: 'onChange',
+    defaultValues: {
+      name: '',
+      email: '',
+      password: '',
+      consentTermsPrivacy: false,
+      consentAge: false,
+      consentRealNameGuidelines: false,
+    },
   });
 
   const phoneForm = useForm<z.infer<typeof phoneFormSchema>>({
     resolver: zodResolver(phoneFormSchema),
-    defaultValues: { name: '', countryCode: '+234', phone: '' },
+    mode: 'onChange',
+    defaultValues: {
+      name: '',
+      countryCode: '+234',
+      phone: '',
+      consentTermsPrivacy: false,
+      consentAge: false,
+      consentRealNameGuidelines: false,
+    },
   });
 
   const codeForm = useForm<z.infer<typeof codeFormSchema>>({
@@ -128,43 +183,81 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
     defaultValues: { code: '' },
   });
 
+  const validateNameOnServer = async (rawName: string): Promise<string> => {
+    const localCheck = validateRealFullName(rawName);
+    if (!localCheck.valid) {
+      throw new Error(localCheck.error);
+    }
+
+    const res = await fetch('/api/auth/validate-name', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: rawName }),
+    });
+
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.valid || !payload?.formattedName) {
+      throw new Error(payload?.error || localCheck.error || 'Please enter a valid first and last name.');
+    }
+
+    return payload.formattedName as string;
+  };
+
   const createEmailAccount = async (data: z.infer<typeof emailFormSchema>) => {
     setIsLoading(true);
     try {
+      const isLonkindAdminAccount =
+        data.email.trim().toLowerCase() === 'admin@lonkind.com';
+
+      const formattedName = isLonkindAdminAccount
+        ? 'Lonkind'
+        : await validateNameOnServer(data.name);
+
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const user = userCredential.user;
 
-      await updateProfile(user, { displayName: data.name }).catch(() => {});
+      await updateProfile(user, { displayName: formattedName }).catch(() => {});
 
       // Ensure initial Firestore user document exists
       const userDocRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userDocRef);
-      const isLonkindAdminAccount =
-        data.name.trim().toLowerCase() === 'lonkind' ||
-        data.email.trim().toLowerCase() === 'admin@lonkind.com';
 
       if (!userSnap.exists()) {
+        const legalConsent: LegalConsentRecord = {
+          consentVersion: CONSENT_VERSION,
+          agreedAt: new Date().toISOString(),
+          termsAndPrivacyAccepted: true,
+          ageVerified: true,
+          realNameAndGuidelinesAccepted: true,
+        };
         const baseHandle = isLonkindAdminAccount
           ? 'lonkind'
-          : (data.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
-        await setDoc(userDocRef, {
+          : (formattedName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
+        const initialUserPayload: Record<string, any> = {
           uid: user.uid,
-          name: isLonkindAdminAccount ? 'Lonkind' : data.name.trim(),
+          name: formattedName,
           handle: baseHandle,
           email: data.email,
           avatarUrl: isLonkindAdminAccount
             ? 'https://impactful-ideas.web.app/logo.png'
             : `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.uid)}`,
-          isProfessional: isLonkindAdminAccount,
-          isAdmin: isLonkindAdminAccount,
           bio: isLonkindAdminAccount ? 'Official Lonkind Account.' : 'Hey there! I am using Lonkind.',
           followersCount: 0,
           followingCount: 0,
-          balance: 0,
           coins: 0,
           diamonds: 0,
+          settings: DEFAULT_USER_SETTINGS,
+          legalConsent,
+          onboardingLayerCompleted: 1,
           createdAt: new Date().toISOString(),
-        });
+        };
+
+        if (isLonkindAdminAccount) {
+          initialUserPayload.isProfessional = true;
+          initialUserPayload.isAdmin = true;
+        }
+
+        await setDoc(userDocRef, initialUserPayload);
       }
 
       if (isLonkindAdminAccount) {
@@ -238,9 +331,18 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       rawDigits = rawDigits.slice(1);
     }
     const fullPhoneNumber = data.countryCode + rawDigits;
-    setPhoneAuthData({ name: data.name, phone: fullPhoneNumber });
 
     try {
+      const formattedName = await validateNameOnServer(data.name);
+      const legalConsent: LegalConsentRecord = {
+        consentVersion: CONSENT_VERSION,
+        agreedAt: new Date().toISOString(),
+        termsAndPrivacyAccepted: data.consentTermsPrivacy,
+        ageVerified: data.consentAge,
+        realNameAndGuidelinesAccepted: data.consentRealNameGuidelines,
+      };
+      setPhoneAuthData({ name: formattedName, phone: fullPhoneNumber, legalConsent });
+
       const res = await fetch('/api/sendchamp/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -293,6 +395,9 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
         body: JSON.stringify({
           phoneNumber: phoneAuthData.phone,
           code: data.code,
+          name: phoneAuthData.name,
+          isSignup: true,
+          legalConsent: phoneAuthData.legalConsent,
         }),
       });
 
@@ -314,8 +419,8 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
       const userCredential = await signInWithCustomToken(auth, resData.customToken);
       const user = userCredential.user;
 
-      if (user && phoneAuthData.name) {
-        await updateProfile(user, { displayName: phoneAuthData.name }).catch(() => {});
+      if (user && (resData.formattedName || phoneAuthData.name)) {
+        await updateProfile(user, { displayName: resData.formattedName || phoneAuthData.name }).catch(() => {});
       }
 
       toast({ title: '🎉 Phone Verified!', description: 'Please complete your date of birth.' });
@@ -381,8 +486,12 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
           }, { merge: true });
         });
 
-        toast({ title: '🎉 Profile Complete!', description: 'Welcome to Lonkind!' });
-        onSignUp();
+        toast({
+          title: '✅ Layer 1 Complete!',
+          description: 'Now configure your Account Privacy & Security (Layer 2).',
+        });
+        setShowAgeStep(false);
+        setOnboardingLayer(2);
       } else {
         toast({ variant: 'destructive', title: 'Error', description: 'User session not found.' });
       }
@@ -393,11 +502,252 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
     }
   };
 
+  // Layer 2: Save Account Privacy & Security Permissions -> Unlock Layer 3
+  const handleLayer2Save = async () => {
+    setIsLoading(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('User session not found.');
+      }
+
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await setDoc(
+        userDocRef,
+        {
+          privateAccount,
+          followerPrivacy: privateAccount ? 'private' : 'public',
+          whoCanMessage,
+          whoCanTag,
+          twoFactorEnabled,
+          onboardingLayerCompleted: 2,
+          settings: {
+            ...DEFAULT_USER_SETTINGS,
+            privacy: {
+              ...DEFAULT_USER_SETTINGS.privacy,
+              privateAccount,
+              hideFollowersList: privateAccount,
+              whoCanMessage,
+              whoCanTag,
+              twoFactorEnabled,
+            },
+          },
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      toast({
+        title: '🔒 Layer 2 Saved!',
+        description: 'Review your contextual App Permissions (Layer 3) to finish.',
+      });
+      setOnboardingLayer(3);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not save privacy settings',
+        description: err?.message || 'Please try again.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Layer 3: Complete Layered Onboarding
+  const handleLayer3Complete = async () => {
+    setIsLoading(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          onboardingLayerCompleted: 3,
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+      toast({ title: '🎉 Welcome to Lonkind!', description: 'Your layered permissions and wallet are ready.' });
+      onSignUp();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const emailConsentComplete =
+    emailForm.watch('consentTermsPrivacy') &&
+    emailForm.watch('consentAge') &&
+    emailForm.watch('consentRealNameGuidelines');
+
+  const phoneConsentComplete =
+    phoneForm.watch('consentTermsPrivacy') &&
+    phoneForm.watch('consentAge') &&
+    phoneForm.watch('consentRealNameGuidelines');
+
   return (
     <>
       <div id="recaptcha-container"></div>
 
-      {showAgeStep ? (
+      {/* Sequential 3-Layer Permission Gateway Progress Indicator */}
+      <div className="mb-4 rounded-xl border border-border/70 bg-muted/30 p-2.5">
+        <div className="grid grid-cols-3 gap-1.5 text-center">
+          {[
+            { layer: 1 as const, label: '1. Legal & Account' },
+            { layer: 2 as const, label: '2. Privacy & 2FA' },
+            { layer: 3 as const, label: '3. App Permissions' },
+          ].map((step) => {
+            const isActive = onboardingLayer === step.layer;
+            const isDone = onboardingLayer > step.layer;
+            return (
+              <div
+                key={step.layer}
+                className={`rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                  isDone
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : isActive
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'bg-background/60 text-muted-foreground'
+                }`}
+              >
+                {isDone ? '✓ ' : ''}
+                {step.label}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {onboardingLayer === 3 ? (
+        // LAYER 3: Contextual Device & Feature Permissions Manager
+        <div className="space-y-4 py-1">
+          <div className="text-center">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/15 text-violet-500">
+              <Sliders className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold">App Permissions Manager</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Layer 3 of 3 — Enable contextual permissions only when you need them.
+            </p>
+          </div>
+          <AppPermissionsManager
+            uid={auth.currentUser?.uid}
+            mode="onboarding"
+            onComplete={handleLayer3Complete}
+            isCompleting={isLoading}
+          />
+        </div>
+      ) : onboardingLayer === 2 ? (
+        // LAYER 2: Account Privacy & Security Permissions (Post-Signup Setup)
+        <div className="space-y-4 py-1">
+          <div className="text-center">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold">Account Privacy &amp; Security</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Layer 2 of 3 — Choose who can see, message, and tag you before unlocking device permissions.
+            </p>
+          </div>
+
+          <div className="space-y-3 text-left">
+            {/* Public vs Private Account */}
+            <div className="rounded-xl border border-border/70 p-3 space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Default Account Privacy
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPrivateAccount(false)}
+                  className={`rounded-lg border p-2.5 text-left transition-all ${
+                    !privateAccount
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                      : 'border-border hover:bg-muted/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs">
+                    <Globe className="h-3.5 w-3.5 text-primary" /> Public Account
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Anyone on Lonkind can follow and watch your public posts.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrivateAccount(true)}
+                  className={`rounded-lg border p-2.5 text-left transition-all ${
+                    privateAccount
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                      : 'border-border hover:bg-muted/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs">
+                    <Lock className="h-3.5 w-3.5 text-emerald-500" /> Private Account
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Only approved followers can see your posts &amp; follower list.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Who Can Message & Tag */}
+            <div className="rounded-xl border border-border/70 p-3 space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" /> Who Can Message You
+                </Label>
+                <Select value={whoCanMessage} onValueChange={(v) => setWhoCanMessage(v as AudienceOption)}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="everyone">Everyone on Lonkind</SelectItem>
+                    <SelectItem value="followers">Followers Only</SelectItem>
+                    <SelectItem value="nobody">Nobody (Messages Disabled)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <AtSign className="h-3.5 w-3.5 text-muted-foreground" /> Who Can Tag You
+                </Label>
+                <Select value={whoCanTag} onValueChange={(v) => setWhoCanTag(v as AudienceOption)}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="everyone">Everyone</SelectItem>
+                    <SelectItem value="followers">Followers Only</SelectItem>
+                    <SelectItem value="nobody">Nobody (No Tagging)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Optional 2FA */}
+            <div className="rounded-xl border border-border/70 p-3 flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <KeyRound className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold">Two-Factor Authentication (Optional)</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Add an extra verification layer to protect your account &amp; coin wallet.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={twoFactorEnabled}
+                onCheckedChange={setTwoFactorEnabled}
+                aria-label="Enable Two-Factor Authentication"
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleLayer2Save} className="w-full h-11 font-semibold" disabled={isLoading}>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save Privacy &amp; Unlock Layer 3
+          </Button>
+        </div>
+      ) : showAgeStep ? (
         // Facebook-Style Age Verification Screen
         <div className="flex flex-col space-y-6 py-4 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -473,7 +823,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
           <Button onClick={handleAgeSubmit} className="w-full h-12 text-base font-semibold" disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-            Complete Sign Up & Continue
+            Continue to Layer 2: Privacy &amp; Security
           </Button>
         </div>
       ) : isWaitingForEmail ? (
@@ -517,15 +867,29 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                 <FormField
                   control={emailForm.control}
                   name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Your Name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const preview = field.value?.trim() ? validateRealFullName(field.value) : null;
+                    return (
+                      <FormItem>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., John Doe"
+                            autoComplete="name"
+                            maxLength={MAX_FULL_NAME_LEN}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                        {preview?.valid && preview.formattedName !== field.value.trim() && (
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                            <span>Will be saved as &ldquo;{preview.formattedName}&rdquo;</span>
+                          </p>
+                        )}
+                      </FormItem>
+                    );
+                  }}
                 />
                 <FormField
                   control={emailForm.control}
@@ -553,9 +917,90 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full" disabled={isLoading}>
+
+                {/* LAYER 1: Mandatory Legal & Safety Consent Gate */}
+                <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Layer 1 — Required Agreements
+                  </p>
+                  <FormField
+                    control={emailForm.control}
+                    name="consentTermsPrivacy"
+                    render={({ field }) => (
+                      <FormItem className="space-y-1">
+                        <div className="flex items-start gap-2.5">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(v) => field.onChange(Boolean(v))}
+                              className="mt-0.5"
+                            />
+                          </FormControl>
+                          <label className="text-xs leading-snug text-foreground cursor-pointer">
+                            I agree to the{' '}
+                            <a href="/terms" target="_blank" className="underline text-primary">
+                              Terms of Service
+                            </a>{' '}
+                            and{' '}
+                            <a href="/privacy" target="_blank" className="underline text-primary">
+                              Privacy Policy
+                            </a>
+                            .
+                          </label>
+                        </div>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailForm.control}
+                    name="consentAge"
+                    render={({ field }) => (
+                      <FormItem className="space-y-1">
+                        <div className="flex items-start gap-2.5">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(v) => field.onChange(Boolean(v))}
+                              className="mt-0.5"
+                            />
+                          </FormControl>
+                          <label className="text-xs leading-snug text-foreground cursor-pointer">
+                            Age Verification: I confirm I meet the minimum required age (13+, or 18+
+                            for creator monetization &amp; live gifting).
+                          </label>
+                        </div>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailForm.control}
+                    name="consentRealNameGuidelines"
+                    render={({ field }) => (
+                      <FormItem className="space-y-1">
+                        <div className="flex items-start gap-2.5">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(v) => field.onChange(Boolean(v))}
+                              className="mt-0.5"
+                            />
+                          </FormControl>
+                          <label className="text-xs leading-snug text-foreground cursor-pointer">
+                            I confirm I am registering with my real full name and agree to follow
+                            Lonkind&apos;s Community Guidelines.
+                          </label>
+                        </div>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <Button type="submit" className="w-full" disabled={isLoading || !emailConsentComplete}>
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Account
+                  Create Account &amp; Unlock Layer 2
                 </Button>
               </form>
             </Form>
@@ -597,15 +1042,29 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                   <FormField
                     control={phoneForm.control}
                     name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Your Name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const preview = field.value?.trim() ? validateRealFullName(field.value) : null;
+                      return (
+                        <FormItem>
+                          <FormLabel>Full Name</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., John Doe"
+                              autoComplete="name"
+                              maxLength={MAX_FULL_NAME_LEN}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                          {preview?.valid && preview.formattedName !== field.value.trim() && (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                              <span>Will be saved as &ldquo;{preview.formattedName}&rdquo;</span>
+                            </p>
+                          )}
+                        </FormItem>
+                      );
+                    }}
                   />
                   <div className="space-y-2">
                     <Label>Phone Number</Label>
@@ -645,9 +1104,89 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                     </p>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  {/* LAYER 1: Mandatory Legal & Safety Consent Gate */}
+                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Layer 1 — Required Agreements
+                    </p>
+                    <FormField
+                      control={phoneForm.control}
+                      name="consentTermsPrivacy"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <div className="flex items-start gap-2.5">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={(v) => field.onChange(Boolean(v))}
+                                className="mt-0.5"
+                              />
+                            </FormControl>
+                            <label className="text-xs leading-snug text-foreground cursor-pointer">
+                              I agree to the{' '}
+                              <a href="/terms" target="_blank" className="underline text-primary">
+                                Terms of Service
+                              </a>{' '}
+                              and{' '}
+                              <a href="/privacy" target="_blank" className="underline text-primary">
+                                Privacy Policy
+                              </a>
+                              .
+                            </label>
+                          </div>
+                          <FormMessage className="text-[11px]" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={phoneForm.control}
+                      name="consentAge"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <div className="flex items-start gap-2.5">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={(v) => field.onChange(Boolean(v))}
+                                className="mt-0.5"
+                              />
+                            </FormControl>
+                            <label className="text-xs leading-snug text-foreground cursor-pointer">
+                              Age Verification: I confirm I meet the minimum required age (13+, or 18+
+                              for creator monetization &amp; live gifting).
+                            </label>
+                          </div>
+                          <FormMessage className="text-[11px]" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={phoneForm.control}
+                      name="consentRealNameGuidelines"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <div className="flex items-start gap-2.5">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={(v) => field.onChange(Boolean(v))}
+                                className="mt-0.5"
+                              />
+                            </FormControl>
+                            <label className="text-xs leading-snug text-foreground cursor-pointer">
+                              I confirm I am registering with my real full name and agree to follow
+                              Lonkind&apos;s Community Guidelines.
+                            </label>
+                          </div>
+                          <FormMessage className="text-[11px]" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={isLoading || !phoneConsentComplete}>
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Send SMS Code
+                    Send SMS Code &amp; Continue
                   </Button>
                 </form>
               </Form>

@@ -55,18 +55,18 @@ interface GalaxyItem {
 }
 
 const PHASES: [string, number, number][] = [
-  ['DARKNESS', 0, 1.8],
-  ['SINGULARITY', 1.8, 4.6],
-  ['BIRTH', 4.6, 8],
-  ['GALAXIES', 8, 11],
-  ['VOYAGE', 11, 16.3],
-  ['BLACK HOLE', 16.3, 20.4],
-  ['GRAVITY', 20.4, 23.3],
-  ['SILENCE', 23.3, 23.75],
-  ['EXPLOSION', 23.75, 26.7],
-  ['INFINITY', 26.7, 31],
-  ['SIGNATURE', 31, 33.4],
-  ['COLLAPSE', 33.4, 37.5],
+  ['DARKNESS', 0, 0.45],
+  ['SINGULARITY', 0.45, 1.15],
+  ['BIRTH', 1.15, 2.0],
+  ['GALAXIES', 2.0, 2.8],
+  ['VOYAGE', 2.8, 4.1],
+  ['BLACK HOLE', 4.1, 5.1],
+  ['GRAVITY', 5.1, 5.8],
+  ['SILENCE', 5.8, 5.95],
+  ['EXPLOSION', 5.95, 6.9],
+  ['INFINITY', 6.9, 7.9],
+  ['SIGNATURE', 7.9, 8.6],
+  ['COLLAPSE', 8.6, 9.5],
 ];
 
 const PHASE_CAPTIONS: Record<string, { caption: string; description: string }> = {
@@ -124,7 +124,8 @@ const PHASE_CAPTIONS: Record<string, { caption: string; description: string }> =
   },
 };
 
-const DURATION = 37.5;
+const DURATION = 9.5;
+const TIME_SCALE = 37.5 / 9.5; // Scales all 12 visual scenes into a punchy 9.5-second cinema takeover
 const DENSITIES: Record<QualityTier, number> = { low: 260, medium: 650, high: 1200 };
 const TAU = Math.PI * 2;
 
@@ -203,7 +204,7 @@ export default function UniverseGift({
       if (!AC) return;
       const audio = new AC();
       const master = audio.createGain();
-      master.gain.value = soundEnabledRef.current ? 0.42 : 0;
+      master.gain.value = soundEnabledRef.current ? 0.82 : 0;
       master.connect(audio.destination);
       audioCtxRef.current = audio;
       masterGainRef.current = master;
@@ -295,50 +296,78 @@ export default function UniverseGift({
       ensureAudio();
       switch (name) {
         case 'DARKNESS':
-          tone(43, 2.2, 'sine', 0.12, 0.78);
-          noise(1.7, 0.045, 105);
+          // Deep Hans-Zimmer cosmic sub-bass awaken
+          tone(48, 0.8, 'sawtooth', 0.28, 0.65);
+          tone(96, 0.7, 'sine', 0.18, 0.8);
+          noise(0.6, 0.12, 220);
           break;
         case 'SINGULARITY':
-          tone(56, 2.6, 'sine', 0.15, 1.7);
-          tone(180, 1.9, 'sine', 0.035, 2.3);
+          // Rising gravitational frequency sweep + harmonic tension
+          tone(55, 0.9, 'sawtooth', 0.32, 2.2);
+          tone(110, 0.85, 'triangle', 0.24, 2.6);
+          tone(220, 0.8, 'sine', 0.15, 3.0);
           break;
         case 'BIRTH':
-          noise(2.9, 0.21, 1250);
-          tone(55, 2.5, 'sawtooth', 0.11, 0.54);
-          tone(440, 1.9, 'sine', 0.055, 2.1);
+          // Big Bang initial brass-chord impact + shockwave roar
+          noise(1.1, 0.42, 2400);
+          tone(65.41, 1.1, 'sawtooth', 0.36, 0.5);
+          tone(130.81, 1.0, 'sawtooth', 0.24, 1.0);
+          tone(196.0, 1.0, 'triangle', 0.2, 1.02);
+          tone(523.25, 0.9, 'sine', 0.16, 1.5);
           break;
         case 'GALAXIES':
-          tone(330, 2.8, 'sine', 0.035, 1.5);
-          tone(660, 2.3, 'sine', 0.02, 1.3);
+          // Celestial choir shimmer chord (C Major 9th)
+          tone(261.63, 1.1, 'sine', 0.16, 1.02);
+          tone(329.63, 1.1, 'sine', 0.14, 1.01);
+          tone(392.0, 1.1, 'triangle', 0.14, 1.0);
+          tone(587.33, 1.0, 'sine', 0.12, 1.2);
           break;
         case 'VOYAGE':
-          noise(4.8, 0.09, 500);
-          tone(82, 4, 'sine', 0.08, 1.3);
+          // Hyper-warp Doppler engine pass-by
+          noise(1.3, 0.28, 1200);
+          tone(73.42, 1.3, 'sawtooth', 0.28, 1.6);
+          tone(146.83, 1.2, 'triangle', 0.18, 1.8);
           break;
         case 'BLACK HOLE':
-          tone(67, 4, 'sawtooth', 0.09, 0.61);
-          noise(3.5, 0.065, 180);
+          // Supermassive event horizon brazen horn + sub-bass groan
+          tone(55.0, 1.2, 'sawtooth', 0.38, 0.55);
+          tone(82.41, 1.1, 'sawtooth', 0.26, 0.6);
+          noise(1.1, 0.22, 420);
           break;
         case 'GRAVITY':
-          tone(58, 2.85, 'sawtooth', 0.16, 0.5);
-          tone(110, 2.75, 'sine', 0.08, 0.65);
+          // Intense inward relativistic riser before the 0.15s absolute silence
+          tone(60, 0.75, 'sawtooth', 0.42, 3.2);
+          tone(120, 0.72, 'sawtooth', 0.28, 3.8);
+          tone(240, 0.7, 'sine', 0.22, 4.2);
           break;
         case 'EXPLOSION':
-          tone(79, 2.2, 'sine', 0.31, 0.35);
-          noise(2.4, 0.3, 1800);
-          tone(830, 1.4, 'sine', 0.045, 1.7);
+          // MASSIVE IMAX SUPERNOVA BASS DROP + ROYAL FANFARE CHORD
+          tone(98.0, 1.4, 'sawtooth', 0.55, 0.28);
+          tone(49.0, 1.5, 'sine', 0.55, 0.45);
+          noise(1.3, 0.52, 3200);
+          // Triumphal Royal Brass Fanfare (C4 - G4 - C5 - E5)
+          tone(261.63, 1.2, 'sawtooth', 0.22, 1.0, 0.08);
+          tone(392.0, 1.2, 'sawtooth', 0.22, 1.0, 0.14);
+          tone(523.25, 1.2, 'triangle', 0.25, 1.0, 0.2);
+          tone(659.25, 1.2, 'sine', 0.22, 1.02, 0.26);
           break;
         case 'INFINITY':
-          noise(3.6, 0.03, 1400);
-          tone(392, 3.5, 'sine', 0.045, 0.85);
-          tone(784, 2.7, 'sine', 0.018, 1.12);
+          // Sparkling diamond starlight arpeggio
+          noise(1.1, 0.12, 2200);
+          tone(523.25, 1.0, 'sine', 0.16, 1.0);
+          tone(659.25, 1.0, 'sine', 0.14, 1.0, 0.12);
+          tone(783.99, 1.0, 'sine', 0.14, 1.0, 0.24);
+          tone(1046.5, 1.0, 'sine', 0.16, 1.02, 0.36);
           break;
         case 'SIGNATURE':
-          tone(523, 2.1, 'sine', 0.035, 0.76);
+          // Lonkind Royal Signature Chime
+          tone(587.33, 0.9, 'triangle', 0.18, 1.0);
+          tone(880.0, 0.9, 'sine', 0.2, 1.0, 0.1);
           break;
         case 'COLLAPSE':
-          tone(92, 3.6, 'sine', 0.17, 0.28);
-          tone(41, 2.6, 'sine', 0.1, 0.58, 1);
+          // Final deep cinema outro boom
+          tone(82.41, 1.0, 'sine', 0.36, 0.32);
+          tone(41.2, 1.0, 'sawtooth', 0.28, 0.5);
           break;
       }
     },
@@ -727,18 +756,19 @@ export default function UniverseGift({
       ctx.restore();
     }
 
-    function draw(t: number) {
+    function draw(rawElapsed: number) {
       if (!ctx) return;
       fill('#010309');
       const cx = w / 2;
       const cy = h * 0.46;
-      const active = PHASES.find((p) => t >= p[1] && t < p[2]);
+      const active = PHASES.find((p) => rawElapsed >= p[1] && rawElapsed < p[2]);
       const name = active ? active[0] : 'IDLE';
       if (name !== phaseRef.current) {
         phaseRef.current = name;
         setPhaseValue(name);
         audioPhase(name);
       }
+      const t = rawElapsed * TIME_SCALE;
 
       if (t < 1.8) {
         starfield(t, smooth((t - 0.15) / 1.5) * 0.12);

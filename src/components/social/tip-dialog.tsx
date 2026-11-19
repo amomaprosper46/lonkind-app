@@ -35,10 +35,9 @@ export const baseTipOptions = [
 
 export const premiumTipOptions = [
     { coins: 5000, diamonds: 5000, label: 'Sports Car', emoji: '🏎️', isPremium: true },
-    { coins: 10000, diamonds: 10000, label: 'Lion', emoji: '🦁', isPremium: true },
-    { coins: 50000, diamonds: 50000, label: 'Yacht', emoji: '🛥️', isPremium: true },
-    { coins: 100000, diamonds: 100000, label: 'Private Jet', emoji: '✈️', isPremium: true },
-    { coins: 500000, diamonds: 500000, label: 'Universe', emoji: '🌌', isPremium: true },
+    { coins: 30000, diamonds: 30000, label: 'Luxury Yacht', emoji: '🛥️', isPremium: true },
+    { coins: 40000, diamonds: 40000, label: 'Fire Phoenix', emoji: '🦅', isPremium: true },
+    { coins: 50000, diamonds: 50000, label: 'Universe', emoji: '🌌', isPremium: true },
 ];
 
 export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient, mode = 'post', spaceId, postId, isCauseDonation }: TipDialogProps) {
@@ -97,9 +96,8 @@ export default function TipDialog({ isOpen, onOpenChange, currentUser, recipient
             });
             onOpenChange(false);
 
-            // Standard gifts (Rose, Coffee, Diamond, Heart, Crown, etc.) do NOT play fullscreen animations;
-            // only Top-Tier Lion triggers a stage event.
-            if ((tip.label === 'Lion' || tip.label === 'Majestic Lion') && typeof window !== 'undefined') {
+            // Only Top-Tier premium gifts trigger a stage event.
+            if (['Fire Phoenix', 'Luxury Yacht', 'Universe'].includes(tip.label) && typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('super-gift', {
                     detail: {
                         emoji: tip.emoji,

@@ -37,6 +37,7 @@ export interface DoubleEntryLeg {
   amount: number;
   balanceBefore: number;
   balanceAfter: number;
+  entryType?: string;
 }
 
 export interface LedgerJournalSpec {
@@ -153,11 +154,12 @@ export function commitDoubleEntryJournalInTx(
     entryIds.push(entryRef.id);
     const signedDelta = leg.direction === 'DEBIT' ? -leg.amount : leg.amount;
 
-    tx.set(entryRef, {
+      tx.set(entryRef, {
       id: entryRef.id,
       journalId: journalRef.id,
       journalType: spec.journalType,
       reference: spec.reference,
+      ...(leg.entryType ? { type: leg.entryType } : {}),
       legIndex: index,
       accountId: leg.accountId,
       accountKind: leg.accountKind,

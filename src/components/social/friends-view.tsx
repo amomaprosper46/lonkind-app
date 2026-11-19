@@ -5,370 +5,589 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, UserPlus, Check, UserCheck, MessageSquare, Trash2, Loader2, Sparkles, ShieldCheck, Search } from 'lucide-react';
+import {
+  Users,
+  UserPlus,
+  Check,
+  UserCheck,
+  MessageSquare,
+  Trash2,
+  Loader2,
+  Sparkles,
+  ShieldCheck,
+  Search,
+  MoreHorizontal,
+  User,
+  BadgeCheck,
+  X,
+} from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, deleteDoc, writeBatch, increment } from 'firebase/firestore';
 import Link from 'next/link';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useLiveUserProfile } from '@/hooks/use-live-user-profile';
 
 function PendingRequestCard({
-    req,
-    currentUserUid,
-    onAcceptRequest,
+  req,
+  currentUserUid,
+  onAcceptRequest,
 }: {
-    req: any;
-    currentUserUid: string;
-    onAcceptRequest: (notif: any, e: React.MouseEvent) => void;
+  req: any;
+  currentUserUid: string;
+  onAcceptRequest: (notif: any, e: React.MouseEvent) => void;
 }) {
-    const fromUid = req.from?.uid || req.uid;
-    const liveFrom = useLiveUserProfile(fromUid, req.from?.avatarUrl, req.from?.name, req.from?.handle);
-    const resolvedFrom = {
-        ...req.from,
-        uid: fromUid,
-        name: liveFrom.name,
-        handle: liveFrom.handle,
-        avatarUrl: liveFrom.avatarUrl,
-    };
+  const fromUid = req.from?.uid || req.uid;
+  const liveFrom = useLiveUserProfile(fromUid, req.from?.avatarUrl, req.from?.name, req.from?.handle);
+  const resolvedFrom = {
+    ...req.from,
+    uid: fromUid,
+    name: liveFrom.name,
+    handle: liveFrom.handle,
+    avatarUrl: liveFrom.avatarUrl,
+  };
 
-    return (
-        <div className="flex flex-col justify-between p-4 bg-background rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-center gap-4 mb-4">
-                <Avatar className="h-14 w-14 border-2 border-indigo-500/20">
-                    <AvatarImage src={resolvedFrom.avatarUrl} alt={resolvedFrom.name} />
-                    <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-lg">
-                        {resolvedFrom.name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col overflow-hidden">
-                    <Link href={`/profile/${resolvedFrom.handle}`} className="text-base font-bold hover:text-indigo-600 transition-colors truncate">
-                        {resolvedFrom.name}
-                    </Link>
-                    <span className="text-sm text-muted-foreground truncate">@{resolvedFrom.handle}</span>
-                    <span className="text-xs text-indigo-500 font-medium mt-1">Wants to be friends</span>
-                </div>
-            </div>
-            <div className="flex items-center gap-2 pt-2 border-t border-border/40">
-                <Button
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold shadow-sm"
-                    onClick={(e) => onAcceptRequest({ id: req.uid, type: 'friend_request', fromUser: resolvedFrom, timestamp: req.timestamp, read: false }, e)}
-                >
-                    <Check className="h-4 w-4 mr-2" /> Accept
-                </Button>
-                <Button
-                    variant="outline"
-                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                        deleteDoc(doc(db, 'users', currentUserUid, 'friendRequests', req.uid));
-                        toast({ title: 'Request declined' });
-                    }}
-                >
-                    Decline
-                </Button>
-            </div>
+  return (
+    <div className="flex flex-col justify-between p-4 bg-secondary/25 hover:bg-secondary/40 rounded-2xl border border-border/60 shadow-sm transition-all">
+      <div className="flex items-center gap-3.5 mb-4">
+        <Link href={`/profile/${resolvedFrom.handle}`} className="shrink-0">
+          <Avatar className="h-14 w-14 border-2 border-indigo-500/30 shadow-md">
+            <AvatarImage src={resolvedFrom.avatarUrl} alt={resolvedFrom.name} />
+            <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-lg">
+              {resolvedFrom.name?.charAt(0) || 'U'}
+            </AvatarFallback>
+          </Avatar>
+        </Link>
+        <div className="flex flex-col min-w-0 flex-1">
+          <Link
+            href={`/profile/${resolvedFrom.handle}`}
+            className="text-base font-bold text-foreground hover:text-indigo-400 transition-colors truncate"
+          >
+            {resolvedFrom.name}
+          </Link>
+          <span className="text-xs text-muted-foreground truncate">@{resolvedFrom.handle}</span>
+          <span className="inline-flex items-center gap-1 text-[11px] text-indigo-400 font-semibold mt-1">
+            <UserPlus className="h-3 w-3" /> Sent you a friend request
+          </span>
         </div>
-    );
+      </div>
+
+      <div className="flex items-center gap-2 pt-3 border-t border-border/40">
+        <Button
+          size="sm"
+          className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-sm"
+          onClick={(e) =>
+            onAcceptRequest(
+              {
+                id: req.uid,
+                type: 'friend_request',
+                fromUser: resolvedFrom,
+                timestamp: req.timestamp,
+                read: false,
+              },
+              e
+            )
+          }
+        >
+          <Check className="h-4 w-4 mr-1.5" /> Accept
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1 rounded-xl border-rose-500/30 text-rose-400 hover:bg-rose-500/10"
+          onClick={() => {
+            deleteDoc(doc(db, 'users', currentUserUid, 'friendRequests', req.uid));
+            toast({ title: 'Request declined' });
+          }}
+        >
+          <X className="h-4 w-4 mr-1" /> Decline
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function FriendListItem({
-    friend,
-    onRemoveFriend,
+  friend,
+  onRemoveFriend,
 }: {
-    friend: any;
-    onRemoveFriend: (friendId: string, name: string) => void;
+  friend: any;
+  onRemoveFriend: (friendId: string, name: string) => void;
 }) {
-    const liveFriend = useLiveUserProfile(friend.uid, friend.avatarUrl, friend.name, friend.handle);
-    return (
-        <div className="flex items-center justify-between p-3.5 bg-background/50 hover:bg-background rounded-2xl border border-border/40 hover:border-indigo-500/30 shadow-sm hover:shadow-md transition-all group">
-            <Link href={`/profile/${liveFriend.handle}`} className="flex items-center gap-4 overflow-hidden flex-1">
-                <div className="relative">
-                    <Avatar className="h-12 w-12 border-2 border-transparent group-hover:border-indigo-500/20 transition-all shadow-sm">
-                        <AvatarImage src={liveFriend.avatarUrl} alt={liveFriend.name} />
-                        <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold">
-                            {liveFriend.name?.charAt(0) || 'F'}
-                        </AvatarFallback>
-                    </Avatar>
-                    {friend.uid?.length % 3 !== 0 && (
-                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-green-500 border-2 border-background shadow-sm" title="Online" />
-                    )}
-                </div>
-                <div className="flex flex-col overflow-hidden">
-                    <span className="text-base font-bold text-foreground group-hover:text-indigo-600 transition-colors truncate flex items-center gap-2">
-                        {liveFriend.name}
-                    </span>
-                    <span className="text-sm text-muted-foreground truncate">@{liveFriend.handle}</span>
-                </div>
-            </Link>
-            <div className="flex items-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                <Link href={`/?view=messages&user=${friend.uid}`}>
-                    <Button size="sm" className="h-9 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 font-semibold shadow-sm transition-all flex items-center gap-1.5" title="Send Message">
-                        <MessageSquare className="h-4 w-4" /> <span className="hidden sm:inline">Message</span>
-                    </Button>
-                </Link>
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 rounded-xl text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                    onClick={() => onRemoveFriend(friend.uid, liveFriend.name)}
-                    title="Remove Friend"
-                >
-                    <Trash2 className="h-4 w-4" />
-                </Button>
-            </div>
+  const liveFriend = useLiveUserProfile(friend.uid, friend.avatarUrl, friend.name, friend.handle);
+  const isVerified =
+    Boolean(friend.isProfessional) ||
+    liveFriend.handle?.toLowerCase() === 'lonkind' ||
+    liveFriend.handle?.toLowerCase() === 'admin_lonkind';
+
+  return (
+    <div className="flex items-center justify-between gap-3 p-4 bg-secondary/20 hover:bg-secondary/40 rounded-2xl border border-border/50 hover:border-indigo-500/40 shadow-sm transition-all group">
+      <Link href={`/profile/${liveFriend.handle}`} className="flex items-center gap-3.5 min-w-0 flex-1">
+        <div className="relative shrink-0">
+          <Avatar className="h-14 w-14 border-2 border-indigo-500/25 group-hover:border-indigo-500/50 transition-all shadow-md">
+            <AvatarImage src={liveFriend.avatarUrl} alt={liveFriend.name} />
+            <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold text-lg">
+              {liveFriend.name?.charAt(0) || 'F'}
+            </AvatarFallback>
+          </Avatar>
         </div>
-    );
+
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm sm:text-base font-bold text-foreground group-hover:text-indigo-400 transition-colors truncate">
+              {liveFriend.name}
+            </span>
+            {isVerified && <BadgeCheck className="h-4 w-4 text-indigo-400 shrink-0" />}
+          </div>
+          <span className="text-xs text-muted-foreground truncate">@{liveFriend.handle}</span>
+          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400/90 font-medium mt-1">
+            <UserCheck className="h-3 w-3" /> Friend
+          </span>
+        </div>
+      </Link>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Link href={`/?view=messages&user=${friend.uid}`}>
+          <Button
+            size="sm"
+            className="h-9 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 font-semibold shadow-sm transition-all flex items-center gap-1.5"
+            title="Send Message"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline text-xs">Message</span>
+          </Button>
+        </Link>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+              title="More options"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 rounded-xl">
+            <DropdownMenuItem asChild className="cursor-pointer gap-2 text-xs">
+              <Link href={`/profile/${liveFriend.handle}`}>
+                <User className="h-3.5 w-3.5" />
+                View Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="cursor-pointer gap-2 text-xs">
+              <Link href={`/?view=messages&user=${friend.uid}`}>
+                <MessageSquare className="h-3.5 w-3.5" />
+                Send Direct Message
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => onRemoveFriend(friend.uid, liveFriend.name)}
+              className="cursor-pointer gap-2 text-xs text-rose-400 focus:text-rose-400"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Remove Friend
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  );
 }
 
 interface FriendsViewProps {
-    currentUser: any;
-    friendRequests: any[];
-    friendSuggestions: any[];
-    onAcceptRequest: (notif: any, e: React.MouseEvent) => void;
-    onAddFriend: (user: any) => void;
-    sentRequests: Set<string>;
+  currentUser: any;
+  friendRequests: any[];
+  friendSuggestions: any[];
+  onAcceptRequest: (notif: any, e: React.MouseEvent) => void;
+  onAddFriend: (user: any) => void;
+  sentRequests: Set<string>;
 }
 
 export default function FriendsView({
-    currentUser,
-    friendRequests,
-    friendSuggestions,
-    onAcceptRequest,
-    onAddFriend,
-    sentRequests
+  currentUser,
+  friendRequests,
+  friendSuggestions,
+  onAcceptRequest,
+  onAddFriend,
+  sentRequests,
 }: FriendsViewProps) {
-    const [myFriends, setMyFriends] = useState<any[]>([]);
-    const [isLoadingFriends, setIsLoadingFriends] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
+  const [myFriends, setMyFriends] = useState<any[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('my-friends');
 
-    useEffect(() => {
-        if (!currentUser?.uid) return;
-        setIsLoadingFriends(true);
-        const friendsRef = collection(db, 'users', currentUser.uid, 'friends');
-        const unsub = onSnapshot(friendsRef, (snapshot) => {
-            const list = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-            setMyFriends(list);
-            setIsLoadingFriends(false);
-        }, (error) => {
-            console.error("Error loading friends:", error);
-            setIsLoadingFriends(false);
-        });
-        return () => unsub();
-    }, [currentUser?.uid]);
-
-    const handleRemoveFriend = async (friendId: string, name: string) => {
-        try {
-            await deleteDoc(doc(db, 'users', currentUser.uid, 'friends', friendId));
-            toast({ title: 'Friend Removed', description: `${name} has been removed from your friends list.` });
-        } catch (error) {
-            console.error("Error removing friend:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not remove friend.' });
-        }
-    };
-
-    return (
-        <div className="space-y-6 max-w-5xl mx-auto py-2">
-            {/* Header Banner */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-8 text-white shadow-xl">
-                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div className="space-y-2">
-                        <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur-md">
-                            <Users className="h-4 w-4" /> Lonkind Social Graph
-                        </div>
-                        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Friends & Requests</h1>
-                        <p className="text-indigo-100 max-w-xl text-sm md:text-base">
-                            Manage your personal connections, accept friend requests, and discover inspiring people around the world.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4 bg-white/10 backdrop-blur-lg px-6 py-4 rounded-2xl border border-white/20">
-                        <div className="text-center">
-                            <div className="text-2xl font-black">{myFriends.length}</div>
-                            <div className="text-xs text-indigo-200 uppercase tracking-wider">Friends</div>
-                        </div>
-                        <div className="h-8 w-[1px] bg-white/20" />
-                        <div className="text-center">
-                            <div className="text-2xl font-black">{friendRequests.length}</div>
-                            <div className="text-xs text-indigo-200 uppercase tracking-wider">Requests</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Main Tabs Layout */}
-            <Tabs defaultValue="requests" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-12 bg-muted/60 p-1 rounded-xl">
-                    <TabsTrigger value="requests" className="rounded-lg font-bold flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" /> Pending Requests 
-                        {friendRequests.length > 0 && (
-                            <Badge className="bg-indigo-600 text-white ml-1">{friendRequests.length}</Badge>
-                        )}
-                    </TabsTrigger>
-                    <TabsTrigger value="suggestions" className="rounded-lg font-bold flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-yellow-500" /> Discover People
-                    </TabsTrigger>
-                    <TabsTrigger value="my-friends" className="rounded-lg font-bold flex items-center gap-2">
-                        <UserCheck className="h-4 w-4 text-green-500" /> My Friends ({myFriends.length})
-                    </TabsTrigger>
-                </TabsList>
-
-                {/* TAB 1: PENDING REQUESTS */}
-                <TabsContent value="requests" className="mt-6 space-y-4">
-                    <Card className="border-none shadow-md bg-card/80 backdrop-blur">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-xl">
-                                <UserPlus className="h-5 w-5 text-indigo-500" /> Pending Friend Requests
-                            </CardTitle>
-                            <CardDescription>
-                                People who want to connect with you on Lonkind.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {friendRequests.length === 0 ? (
-                                <div className="text-center py-12 text-muted-foreground bg-muted/20 rounded-2xl border border-dashed border-border/60">
-                                    <ShieldCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                                    <p className="font-semibold text-base">No pending requests</p>
-                                    <p className="text-xs mt-1">When someone sends you a friend request, it will appear here.</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {friendRequests.map((req, i) => (
-                                        <PendingRequestCard
-                                            key={req.uid || i}
-                                            req={req}
-                                            currentUserUid={currentUser.uid}
-                                            onAcceptRequest={onAcceptRequest}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* TAB 2: SUGGESTED FRIENDS */}
-                <TabsContent value="suggestions" className="mt-6 space-y-4">
-                    <Card className="border-none shadow-md bg-card/80 backdrop-blur">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-xl">
-                                <Sparkles className="h-5 w-5 text-yellow-500" /> Recommended for You
-                            </CardTitle>
-                            <CardDescription>
-                                Discover creators and leaders in the community to grow your social circle.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {friendSuggestions.length === 0 ? (
-                                <div className="text-center py-12 text-muted-foreground">
-                                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-indigo-500" />
-                                    <p>Loading community suggestions...</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {friendSuggestions.map((suggestion, i) => {
-                                        const requestSent = sentRequests.has(suggestion.uid);
-                                        return (
-                                            <div key={i} className="flex flex-col items-center text-center p-5 bg-background rounded-2xl border border-border/60 shadow-sm hover:shadow-md hover:border-indigo-500/30 transition-all group">
-                                                <Link href={`/profile/${suggestion.handle}`} className="flex flex-col items-center">
-                                                    <Avatar className="h-20 w-20 border-4 border-indigo-500/10 group-hover:border-indigo-500/30 transition-all mb-3 shadow-md">
-                                                        <AvatarImage src={suggestion.avatarUrl} alt={suggestion.name} />
-                                                        <AvatarFallback className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white font-extrabold text-2xl">
-                                                            {suggestion.name?.charAt(0) || 'U'}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <h3 className="font-bold text-base group-hover:text-indigo-600 transition-colors truncate max-w-[180px]">
-                                                        {suggestion.name}
-                                                    </h3>
-                                                    <p className="text-xs text-muted-foreground truncate max-w-[180px]">@{suggestion.handle}</p>
-                                                    {suggestion.bio && (
-                                                        <p className="text-xs text-muted-foreground/80 mt-2 line-clamp-2 min-h-[32px] px-2">
-                                                            {suggestion.bio}
-                                                        </p>
-                                                    )}
-                                                </Link>
-                                                <Button 
-                                                    className={`w-full mt-4 font-bold rounded-xl shadow-sm transition-all ${
-                                                        requestSent 
-                                                        ? 'bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-300' 
-                                                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                                                    }`}
-                                                    onClick={() => !requestSent && onAddFriend(suggestion)}
-                                                    disabled={requestSent}
-                                                >
-                                                    {requestSent ? (
-                                                        <span className="flex items-center justify-center gap-1">
-                                                            <Check className="h-4 w-4" /> Request Sent
-                                                        </span>
-                                                    ) : (
-                                                        <span className="flex items-center justify-center gap-1">
-                                                            <UserPlus className="h-4 w-4" /> Add Friend
-                                                        </span>
-                                                    )}
-                                                </Button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* TAB 3: MY FRIENDS */}
-                <TabsContent value="my-friends" className="mt-6 space-y-4">
-                    <Card className="border-none shadow-md bg-card/80 backdrop-blur">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-xl">
-                                <UserCheck className="h-5 w-5 text-green-500" /> My Friends ({myFriends.length})
-                            </CardTitle>
-                            <CardDescription>
-                                Your accepted social network on Lonkind.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {isLoadingFriends ? (
-                                <div className="text-center py-12 text-muted-foreground">
-                                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-indigo-500" />
-                                    <p>Loading your friends list...</p>
-                                </div>
-                            ) : myFriends.length === 0 ? (
-                                <div className="text-center py-12 text-muted-foreground bg-muted/20 rounded-2xl border border-dashed border-border/60">
-                                    <Users className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                                    <p className="font-semibold text-base">No friends yet</p>
-                                    <p className="text-xs mt-1">Explore suggested people or accept incoming requests to start building your community!</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            placeholder="Search friends by name or handle..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="pl-9 bg-muted/50 border-transparent focus-visible:ring-indigo-500 rounded-xl"
-                                        />
-                                    </div>
-                                    <div className="flex flex-col gap-3">
-                                        {myFriends.filter(f => f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || f.handle?.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
-                                            <div className="text-center py-8 text-muted-foreground">
-                                                <p>No friends found matching "{searchQuery}"</p>
-                                            </div>
-                                        ) : (
-                                            myFriends.filter(f => f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || f.handle?.toLowerCase().includes(searchQuery.toLowerCase())).map((friend, i) => (
-                                                <FriendListItem
-                                                    key={friend.uid || i}
-                                                    friend={friend}
-                                                    onRemoveFriend={handleRemoveFriend}
-                                                />
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
-        </div>
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    setIsLoadingFriends(true);
+    const friendsRef = collection(db, 'users', currentUser.uid, 'friends');
+    const unsub = onSnapshot(
+      friendsRef,
+      (snapshot) => {
+        const list = snapshot.docs.map((docSnap) => ({ uid: docSnap.id, ...docSnap.data() }));
+        setMyFriends(list);
+        setIsLoadingFriends(false);
+      },
+      (error) => {
+        console.error('Error loading friends:', error);
+        setIsLoadingFriends(false);
+      }
     );
+    return () => unsub();
+  }, [currentUser?.uid]);
+
+  const handleRemoveFriend = async (friendId: string, name: string) => {
+    if (!currentUser?.uid) return;
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'users', currentUser.uid, 'friends', friendId));
+      batch.delete(doc(db, 'users', friendId, 'friends', currentUser.uid));
+      batch.update(doc(db, 'users', currentUser.uid), { friendsCount: increment(-1) });
+      batch.update(doc(db, 'users', friendId), { friendsCount: increment(-1) });
+      await batch.commit();
+      toast({ title: 'Friend Removed', description: `${name} has been removed from your friends list.` });
+    } catch (error) {
+      console.error('Error removing friend:', error);
+      // Fallback single delete if cross-user update permission is restricted
+      try {
+        await deleteDoc(doc(db, 'users', currentUser.uid, 'friends', friendId));
+        toast({ title: 'Friend Removed', description: `${name} has been removed from your friends list.` });
+      } catch {
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not remove friend.' });
+      }
+    }
+  };
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  const filteredFriends = myFriends.filter(
+    (f) =>
+      !normalizedQuery ||
+      f.name?.toLowerCase().includes(normalizedQuery) ||
+      f.handle?.toLowerCase().includes(normalizedQuery)
+  );
+
+  const filteredSuggestions = friendSuggestions.filter(
+    (s) =>
+      !normalizedQuery ||
+      s.name?.toLowerCase().includes(normalizedQuery) ||
+      s.handle?.toLowerCase().includes(normalizedQuery)
+  );
+
+  return (
+    <div className="space-y-5 max-w-5xl mx-auto">
+      {/* Compact Modern Header & Search Bar */}
+      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-slate-900/95 via-indigo-950/50 to-slate-900/95 p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 border border-indigo-500/30 px-2.5 py-0.5 text-[11px] font-bold text-indigo-300">
+              <Users className="h-3.5 w-3.5" /> Your Social Network
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Friends & Connections
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Message your friends, respond to friend requests, and discover new people on Lonkind.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4 bg-secondary/40 px-5 py-3 rounded-2xl border border-border/60 self-start sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('my-friends')}
+              className="text-center hover:opacity-80 transition-opacity"
+            >
+              <div className="text-xl sm:text-2xl font-black text-foreground">{myFriends.length}</div>
+              <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
+                Friends
+              </div>
+            </button>
+            <div className="h-8 w-[1px] bg-border" />
+            <button
+              type="button"
+              onClick={() => setActiveTab('requests')}
+              className="text-center hover:opacity-80 transition-opacity"
+            >
+              <div className="text-xl sm:text-2xl font-black text-indigo-400">{friendRequests.length}</div>
+              <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
+                Requests
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Pending Requests Quick Alert Banner if user is on My Friends tab */}
+        {friendRequests.length > 0 && activeTab !== 'requests' && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40">
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-indigo-200">
+              <UserPlus className="h-4 w-4 text-indigo-400 shrink-0" />
+              <span>
+                You have <strong>{friendRequests.length}</strong> pending friend{' '}
+                {friendRequests.length === 1 ? 'request' : 'requests'} waiting!
+              </span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setActiveTab('requests')}
+              className="h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 shrink-0"
+            >
+              View Requests
+            </Button>
+          </div>
+        )}
+
+        {/* Global Friends & People Filter Bar */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter friends or people by name or @username..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-9 h-10 bg-secondary/50 border-border/60 focus-visible:ring-indigo-500 rounded-xl text-sm"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Tabs Layout (My Friends First) */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-5">
+        <TabsList className="grid w-full grid-cols-3 h-auto p-1.5 gap-1.5 bg-slate-900/90 border border-border/60 rounded-2xl">
+          <TabsTrigger
+            value="my-friends"
+            className="rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+          >
+            <UserCheck className="h-4 w-4 shrink-0" />
+            <span>My Friends ({myFriends.length})</span>
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="requests"
+            className="rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+          >
+            <UserPlus className="h-4 w-4 shrink-0" />
+            <span>Requests</span>
+            {friendRequests.length > 0 && (
+              <Badge className="bg-rose-500 text-white px-1.5 py-0 text-[10px]">{friendRequests.length}</Badge>
+            )}
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="suggestions"
+            className="rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+          >
+            <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>Discover People</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* TAB 1: MY FRIENDS */}
+        <TabsContent value="my-friends" className="mt-0 space-y-4 focus-visible:outline-none">
+          <Card className="rounded-2xl border-border/60 shadow-sm bg-card">
+            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base font-bold">
+                    <UserCheck className="h-4 w-4 text-emerald-400" />
+                    My Friends ({filteredFriends.length})
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Tap any friend to view their profile or start a direct message.
+                  </CardDescription>
+                </div>
+                {myFriends.length === 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActiveTab('suggestions')}
+                    className="rounded-xl text-xs gap-1.5"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    Find People
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-5">
+              {isLoadingFriends ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-indigo-500" />
+                  <p className="text-sm">Loading your friends list...</p>
+                </div>
+              ) : myFriends.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground bg-secondary/15 rounded-2xl border border-dashed border-border/60 space-y-3">
+                  <Users className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  <div>
+                    <p className="font-bold text-base text-foreground">Your friends list is empty</p>
+                    <p className="text-xs mt-1 max-w-sm mx-auto">
+                      Connect with creators and friends in Discover People or accept incoming requests.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setActiveTab('suggestions')}
+                    className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                  >
+                    Discover People to Add
+                  </Button>
+                </div>
+              ) : filteredFriends.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-sm">
+                  No friends match &ldquo;{searchQuery}&rdquo;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {filteredFriends.map((friend, i) => (
+                    <FriendListItem key={friend.uid || i} friend={friend} onRemoveFriend={handleRemoveFriend} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 2: PENDING REQUESTS */}
+        <TabsContent value="requests" className="mt-0 space-y-4 focus-visible:outline-none">
+          <Card className="rounded-2xl border-border/60 shadow-sm bg-card">
+            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
+              <CardTitle className="flex items-center gap-2 text-base font-bold">
+                <UserPlus className="h-4 w-4 text-indigo-400" />
+                Pending Friend Requests ({friendRequests.length})
+              </CardTitle>
+              <CardDescription className="text-xs">
+                People who want to connect with you on Lonkind.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5">
+              {friendRequests.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground bg-secondary/15 rounded-2xl border border-dashed border-border/60">
+                  <ShieldCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="font-semibold text-base text-foreground">No pending friend requests</p>
+                  <p className="text-xs mt-1">When someone sends you a friend request, it will appear right here.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {friendRequests.map((req, i) => (
+                    <PendingRequestCard
+                      key={req.uid || i}
+                      req={req}
+                      currentUserUid={currentUser.uid}
+                      onAcceptRequest={onAcceptRequest}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 3: SUGGESTED FRIENDS */}
+        <TabsContent value="suggestions" className="mt-0 space-y-4 focus-visible:outline-none">
+          <Card className="rounded-2xl border-border/60 shadow-sm bg-card">
+            <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
+              <CardTitle className="flex items-center gap-2 text-base font-bold">
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                Discover People on Lonkind
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Connect with creators, friends, and community members.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5">
+              {friendSuggestions.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-indigo-500" />
+                  <p className="text-sm">Loading community suggestions...</p>
+                </div>
+              ) : filteredSuggestions.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-sm">
+                  No people match &ldquo;{searchQuery}&rdquo;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredSuggestions.map((suggestion, i) => {
+                    const requestSent = sentRequests.has(suggestion.uid);
+                    return (
+                      <div
+                        key={suggestion.uid || i}
+                        className="flex flex-col justify-between p-4 bg-secondary/20 hover:bg-secondary/35 rounded-2xl border border-border/60 hover:border-indigo-500/40 shadow-sm transition-all group"
+                      >
+                        <Link href={`/profile/${suggestion.handle}`} className="flex items-center gap-3.5">
+                          <Avatar className="h-14 w-14 border-2 border-indigo-500/20 group-hover:border-indigo-500/40 transition-all shadow-md shrink-0">
+                            <AvatarImage src={suggestion.avatarUrl} alt={suggestion.name} />
+                            <AvatarFallback className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white font-extrabold text-xl">
+                              {suggestion.name?.charAt(0) || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-sm sm:text-base text-foreground group-hover:text-indigo-400 transition-colors truncate">
+                              {suggestion.name}
+                            </h3>
+                            <p className="text-xs text-muted-foreground truncate">@{suggestion.handle}</p>
+                            {suggestion.bio && (
+                              <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-1">
+                                {suggestion.bio}
+                              </p>
+                            )}
+                          </div>
+                        </Link>
+
+                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/40">
+                          <Button
+                            size="sm"
+                            className={`flex-1 font-bold rounded-xl shadow-sm transition-all ${
+                              requestSent
+                                ? 'bg-secondary text-muted-foreground border border-border'
+                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                            }`}
+                            onClick={() => !requestSent && onAddFriend(suggestion)}
+                            disabled={requestSent}
+                          >
+                            {requestSent ? (
+                              <span className="flex items-center justify-center gap-1.5 text-xs">
+                                <Check className="h-3.5 w-3.5 text-emerald-400" /> Request Sent
+                              </span>
+                            ) : (
+                              <span className="flex items-center justify-center gap-1.5 text-xs">
+                                <UserPlus className="h-3.5 w-3.5" /> Add Friend
+                              </span>
+                            )}
+                          </Button>
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="rounded-xl text-xs px-3"
+                          >
+                            <Link href={`/profile/${suggestion.handle}`}>Profile</Link>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }
