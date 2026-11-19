@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb as db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 import { validateRealFullName } from '@/lib/real-name-validation';
-import { CONSENT_VERSION, DEFAULT_USER_SETTINGS } from '@/lib/settings-schema';
+import {
+  CONSENT_VERSION,
+  DEFAULT_USER_SETTINGS_SERVER as DEFAULT_USER_SETTINGS,
+} from '@/lib/settings-defaults';
 
 /**
  * Sendchamp Live OTP Verification & Auth Custom Token Route
