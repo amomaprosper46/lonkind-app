@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
+import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
@@ -57,6 +58,12 @@ export async function POST(req: NextRequest) {
         { error: 'Missing required checkout fields: userId, amount, coins.' },
         { status: 400 }
       );
+    }
+
+    // Require verified email before unlocking coin purchases (phone-only users unaffected)
+    const verificationGate = await assertEmailVerifiedForAction(String(userId), 'coin purchases');
+    if (!verificationGate.allowed) {
+      return NextResponse.json({ error: verificationGate.error }, { status: 403 });
     }
 
     const cleanCurrency = String(currency || 'NGN').toUpperCase();

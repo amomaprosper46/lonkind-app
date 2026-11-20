@@ -38,6 +38,10 @@ import {
   realFullNameSchema,
   validateRealFullName,
 } from '@/lib/real-name-validation';
+import {
+  strictGmailSchema,
+  validateStrictGmail,
+} from '@/lib/gmail-validation';
 
 declare global {
   interface Window {
@@ -59,7 +63,7 @@ const legalConsentFields = {
 
 const emailFormSchema = z.object({
   name: realFullNameSchema,
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  email: strictGmailSchema,
   password: z.string().min(8, { message: 'Password must be at least 8 characters.' }),
   ...legalConsentFields,
 });
@@ -203,17 +207,38 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
     return payload.formattedName as string;
   };
 
+  const validateEmailOnServer = async (
+    rawEmail: string
+  ): Promise<{ normalizedEmail: string; canonicalEmail: string }> => {
+    const localCheck = validateStrictGmail(rawEmail);
+    if (!localCheck.valid) {
+      throw new Error(localCheck.error);
+    }
+
+    const res = await fetch('/api/auth/validate-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: rawEmail }),
+    });
+
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.valid || !payload?.normalizedEmail || !payload?.canonicalEmail) {
+      throw new Error(payload?.error || 'Please use a valid @gmail.com address.');
+    }
+
+    return {
+      normalizedEmail: payload.normalizedEmail as string,
+      canonicalEmail: payload.canonicalEmail as string,
+    };
+  };
+
   const createEmailAccount = async (data: z.infer<typeof emailFormSchema>) => {
     setIsLoading(true);
     try {
-      const isLonkindAdminAccount =
-        data.email.trim().toLowerCase() === 'admin@lonkind.com';
+      const { normalizedEmail, canonicalEmail } = await validateEmailOnServer(data.email);
+      const formattedName = await validateNameOnServer(data.name);
 
-      const formattedName = isLonkindAdminAccount
-        ? 'Lonkind'
-        : await validateNameOnServer(data.name);
-
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, data.password);
       const user = userCredential.user;
 
       await updateProfile(user, { displayName: formattedName }).catch(() => {});
@@ -230,18 +255,16 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
           ageVerified: true,
           realNameAndGuidelinesAccepted: true,
         };
-        const baseHandle = isLonkindAdminAccount
-          ? 'lonkind'
-          : (formattedName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
+        const baseHandle =
+          (formattedName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user') + '_' + user.uid.slice(-4);
         const initialUserPayload: Record<string, any> = {
           uid: user.uid,
           name: formattedName,
           handle: baseHandle,
-          email: data.email,
-          avatarUrl: isLonkindAdminAccount
-            ? 'https://impactful-ideas.web.app/logo.png'
-            : `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.uid)}`,
-          bio: isLonkindAdminAccount ? 'Official Lonkind Account.' : 'Hey there! I am using Lonkind.',
+          email: normalizedEmail,
+          canonicalEmail,
+          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.uid)}`,
+          bio: 'Hey there! I am using Lonkind.',
           followersCount: 0,
           followingCount: 0,
           coins: 0,
@@ -252,16 +275,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
           createdAt: new Date().toISOString(),
         };
 
-        if (isLonkindAdminAccount) {
-          initialUserPayload.isProfessional = true;
-          initialUserPayload.isAdmin = true;
-        }
-
         await setDoc(userDocRef, initialUserPayload);
-      }
-
-      if (isLonkindAdminAccount) {
-        await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date(), name: 'Lonkind' }, { merge: true }).catch(() => {});
       }
 
       await sendEmailVerification(user).catch(() => {});
@@ -896,10 +910,18 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>Gmail Address</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="you@example.com" {...field} />
+                        <Input
+                          type="email"
+                          placeholder="yourname@gmail.com"
+                          autoComplete="email"
+                          {...field}
+                        />
                       </FormControl>
+                      <p className="text-[11px] text-muted-foreground">
+                        Only valid @gmail.com addresses are accepted.
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

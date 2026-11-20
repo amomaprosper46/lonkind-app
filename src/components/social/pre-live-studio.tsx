@@ -513,6 +513,20 @@ export default function PreLiveStudio({
       }
     }
 
+    // Require verified email before unlocking live streaming (phone-only users unaffected)
+    if (auth.currentUser?.email && !auth.currentUser.emailVerified) {
+      await auth.currentUser.reload().catch(() => {});
+      if (!auth.currentUser.emailVerified) {
+        toast({
+          variant: 'destructive',
+          title: 'Email Verification Required',
+          description:
+            'Please verify your Gmail address (check your inbox for the verification link) before starting a live stream.',
+        });
+        return;
+      }
+    }
+
     onGoLiveReady({
       streamTitle: finalTitle,
       streamCategory,

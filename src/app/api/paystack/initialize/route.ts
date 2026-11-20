@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
+import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
@@ -47,6 +48,12 @@ export async function POST(req: NextRequest) {
     // Validate incoming parameters
     if (!email || !userId || finalAmount <= 0 || coinsToCredit <= 0) {
       return NextResponse.json({ error: 'Missing core tracking entries: email, userId, amount, coins' }, { status: 400 });
+    }
+
+    // Require verified email before unlocking coin purchases (phone-only users unaffected)
+    const verificationGate = await assertEmailVerifiedForAction(String(userId), 'coin purchases');
+    if (!verificationGate.allowed) {
+      return NextResponse.json({ error: verificationGate.error }, { status: 403 });
     }
 
     const cleanCurrency = currency.toUpperCase();
