@@ -20,15 +20,22 @@ const nextConfig = {
     ignoreBuildErrors: true, // Consider removing this later
   },
 
-  serverExternalPackages: [
-    '@genkit-ai/core',
-    '@genkit-ai/google-genai',
-    'genkit',
-    '@opentelemetry/instrumentation',
-    'require-in-the-middle',
-  ],
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
+  productionBrowserSourceMaps: false,
 
   experimental: {
+    cpus: 1,
+    workerThreads: false,
+    serverComponentsExternalPackages: [
+      '@genkit-ai/core',
+      '@genkit-ai/google-genai',
+      'genkit',
+      '@opentelemetry/instrumentation',
+      'require-in-the-middle',
+    ],
     serverActions: {
       bodySizeLimit: '4.5mb',
     },
@@ -37,6 +44,7 @@ const nextConfig = {
   webpack: (config, { dev }) => {
     if (!dev) {
       config.cache = false;
+      config.parallelism = 1;
     }
     return config;
   },
