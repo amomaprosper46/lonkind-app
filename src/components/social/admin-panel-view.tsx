@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, ShieldCheck, ShieldX, AlertTriangle, CheckCircle2, RefreshCw, ClipboardList, Building2, User } from 'lucide-react';
+import { auth } from '@/lib/firebase';
 import type { CurrentUser } from './social-dashboard';
 import { formatDistanceToNow } from 'date-fns';
 import { Separator } from '../ui/separator';
@@ -39,10 +40,17 @@ export default function AdminPanelView({ currentUser }: AdminPanelProps) {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  const isSuperAdmin =
+    (currentUser as any)?.role === 'super_admin' || (currentUser as any)?.isAdmin === true;
+
   const fetchRequests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/admin/approve-payout?adminUid=${currentUser.uid}`);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Admin authentication token missing.');
+      const res = await fetch('/api/admin/approve-payout', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load requests');
       setRequests(data.requests || []);
@@ -51,22 +59,22 @@ export default function AdminPanelView({ currentUser }: AdminPanelProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser.uid]);
+  }, []);
 
   useEffect(() => {
-    if (currentUser.isProfessional) {
+    if (isSuperAdmin) {
       fetchRequests();
     }
-  }, [fetchRequests, currentUser.isProfessional]);
+  }, [fetchRequests, isSuperAdmin]);
 
-  if (!currentUser.isProfessional) {
+  if (!isSuperAdmin) {
     return (
       <main className="col-span-12 md:col-span-8 lg:col-span-9">
         <Card>
           <CardContent className="p-8 text-center">
             <ShieldX className="h-12 w-12 mx-auto text-destructive mb-4" />
             <p className="font-bold text-lg">Admin Access Required</p>
-            <p className="text-muted-foreground">This panel is only accessible to Lonkind administrators.</p>
+            <p className="text-muted-foreground">This panel is only accessible to authorized super-administrators.</p>
           </CardContent>
         </Card>
       </main>
@@ -76,13 +84,17 @@ export default function AdminPanelView({ currentUser }: AdminPanelProps) {
   const handleAction = async (payoutId: string, action: 'approve' | 'reject') => {
     setProcessingId(payoutId);
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Admin authentication token missing.');
       const res = await fetch('/api/admin/approve-payout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           payoutId,
           action,
-          adminUid: currentUser.uid,
           rejectReason: action === 'reject' ? rejectReason : undefined,
         }),
       });

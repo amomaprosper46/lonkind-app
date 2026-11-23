@@ -124,9 +124,6 @@ export function SignInForm({ onSignIn, onForgotPassword, onShowSignUp }: SignInF
             });
             onSignIn();
         } catch(error: any) {
-            if (data.identifier.toLowerCase() === 'admin@lonkind.com') {
-                setShowAdminReset(true);
-            }
             toast({
                 variant: "destructive",
                 title: 'Sign In Failed',

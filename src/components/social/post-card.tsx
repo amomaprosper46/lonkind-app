@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp, Sparkles, EyeOff, TrendingUp, Flame, Scissors } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Heart, Smile, Frown, Loader2, Bookmark, BadgeCheck, Languages, Image, Film, Wand2, Trash2, Coins, AlertTriangle, VolumeX, Music, Lock, Newspaper, ExternalLink, Video, ChevronDown, ChevronUp, Sparkles, EyeOff, TrendingUp, Flame, Scissors, Megaphone } from 'lucide-react';
+import { PromoteDialog } from './promote-dialog';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Timestamp } from 'firebase/firestore';
@@ -159,7 +160,10 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
     const visibleStartMsRef = useRef<number | null>(null);
     const videoPlayStartMsRef = useRef<number | null>(null);
 
+    const [isPromoteOpen, setIsPromoteOpen] = useState(false);
+
     const isAuthor = author.uid === currentUser.uid;
+    const isOwnerPost = isAuthor;
     const canViewVip = !post.isVipOnly || isAuthor || post.unlockedBy?.includes(currentUser?.uid) || isUnlocked;
 
     // Viewport-based impression, dwell time, and offscreen video pause tracking
@@ -850,12 +854,44 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                         </DropdownMenuContent>
                      </DropdownMenu>
 
+                    {isOwnerPost && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex items-center gap-1.5 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                            onClick={() => setIsPromoteOpen(true)}
+                        >
+                            <Megaphone className="h-4 w-4" />
+                            <span>Promote</span>
+                        </Button>
+                    )}
+
                     <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary" onClick={handleShare}>
                         <Share2 className="h-5 w-5" />
                         <span>Share</span>
                     </Button>
                 </div>
             </CardFooter>
+
+            {isOwnerPost && currentUser && (
+                <PromoteDialog
+                    open={isPromoteOpen}
+                    onOpenChange={setIsPromoteOpen}
+                    target={{
+                        targetType: 'post',
+                        targetPostId: post.id,
+                        title: (post.content || `Post by ${currentUser.name}`).slice(0, 100),
+                        description: (post.content || '').slice(0, 240),
+                        mediaUrl: post.imageUrl || post.videoUrl || '',
+                        mediaType: post.videoUrl ? 'video' : 'image',
+                        publisherUid: currentUser.uid,
+                        publisherName: currentUser.name || 'Creator',
+                        publisherHandle: currentUser.handle || 'creator',
+                        publisherAvatar: currentUser.avatarUrl || '',
+                        userCoins: Number(currentUser.coins || 0),
+                    }}
+                />
+            )}
         </Card>
     );
 }

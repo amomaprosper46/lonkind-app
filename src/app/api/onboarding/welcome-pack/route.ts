@@ -28,21 +28,21 @@ export async function POST(request: Request) {
     const dbInstance = adminDb;
     const userRef = dbInstance.collection('users').doc(uid);
 
-    // Resolve the official Lonkind admin account (by name == 'Lonkind' or handle == 'lonkind')
-    let adminUid = FALLBACK_ADMIN_UID;
+    // Resolve the primary super-admin account (@mow / role === 'super_admin')
+    let adminUid: string | null = null;
     try {
-      const byHandle = await dbInstance.collection('users').where('handle', '==', 'lonkind').limit(1).get();
-      if (!byHandle.empty) {
-        adminUid = byHandle.docs[0].id;
+      const byRole = await dbInstance.collection('users').where('role', '==', 'super_admin').limit(1).get();
+      if (!byRole.empty) {
+        adminUid = byRole.docs[0].id;
       } else {
-        const byName = await dbInstance.collection('users').where('name', '==', 'Lonkind').limit(1).get();
-        if (!byName.empty) {
-          adminUid = byName.docs[0].id;
+        const byHandle = await dbInstance.collection('users').where('handle', '==', 'mow').limit(1).get();
+        if (!byHandle.empty) {
+          adminUid = byHandle.docs[0].id;
         }
       }
     } catch (_) {}
 
-    if (uid === adminUid) {
+    if (!adminUid || uid === adminUid) {
       return NextResponse.json({ success: true, skippedAdmin: true });
     }
 
@@ -58,8 +58,8 @@ export async function POST(request: Request) {
       const userData = userSnap.exists ? userSnap.data() : {};
       if (
         userData?.welcomePackClaimed ||
-        userData?.name?.trim()?.toLowerCase() === 'lonkind' ||
-        userData?.handle?.toLowerCase() === 'lonkind'
+        userData?.role === 'super_admin' ||
+        userData?.isAdmin === true
       ) {
         return;
       }

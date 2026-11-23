@@ -16,9 +16,13 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() &&
-        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-         (request.auth.token != null && request.auth.token.email == 'admin@lonkind.com'));
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', '') == 'super_admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'super_admin') ||
+        (request.auth.token != null && request.auth.token.get('role', '') == 'super_admin')
+      );
     }
 
     // Financial, role, and trust fields that NO client may ever forge or mutate directly
@@ -620,6 +624,15 @@ service cloud.firestore {
     match /platform_settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    match /ad_campaigns/{campaignId} {
+      allow read: if true;
+      allow write: if false; // Admin SDK only (enforces atomic ad_spend & super_admin checks)
+
+      match /unique_clicks/{viewerId} {
+        allow read, write: if false;
+      }
     }
 
     /* ====================================================================== */

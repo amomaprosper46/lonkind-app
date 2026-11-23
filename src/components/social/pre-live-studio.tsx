@@ -36,7 +36,10 @@ import {
   Trash2,
   CalendarClock,
   BellRing,
+  Megaphone,
 } from 'lucide-react';
+import { getDoc } from 'firebase/firestore';
+import { PromoteDialog } from './promote-dialog';
 import { toast } from '@/hooks/use-toast';
 import { compressImage } from '@/lib/image-compression';
 import {
@@ -198,6 +201,18 @@ export default function PreLiveStudio({
   const [audioLevels, setAudioLevels] = useState<number[]>([0.12, 0.16, 0.14, 0.18, 0.12]);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRafRef = useRef<number>(0);
+
+  const [isPromoteOpen, setIsPromoteOpen] = useState(false);
+  const [hostCoins, setHostCoins] = useState(0);
+
+  useEffect(() => {
+    if (!hostUid) return;
+    getDoc(doc(db, 'users', hostUid))
+      .then((snap) => {
+        if (snap.exists()) setHostCoins(Number(snap.data()?.coins || 0));
+      })
+      .catch(() => {});
+  }, [hostUid, isPromoteOpen]);
 
   // 3-2-1 Go Live Countdown & Publishing State
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -1403,6 +1418,35 @@ export default function PreLiveStudio({
                 )}
               </div>
             )}
+
+            {/* Optional Promote Live Stream Button (Self-Serve Coin Boost) */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsPromoteOpen(true)}
+              className="w-full h-11 rounded-2xl border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs sm:text-sm gap-2"
+            >
+              <Megaphone className="h-4 w-4 text-amber-400" />
+              Promote This Live Stream with Coins
+            </Button>
+
+            <PromoteDialog
+              open={isPromoteOpen}
+              onOpenChange={setIsPromoteOpen}
+              target={{
+                targetType: 'live',
+                title: streamTitle.trim() || `${hostName} is going LIVE on Lonkind!`,
+                description: `Join @${hostHandle || hostName} live now on Lonkind.`,
+                mediaUrl: thumbnailPreview || activeScheduledStream?.coverUrl || hostAvatar || '',
+                mediaType: 'image',
+                publisherUid: hostUid,
+                publisherName: hostName,
+                publisherHandle: hostHandle || hostName,
+                publisherAvatar: hostAvatar || '',
+                userCoins: hostCoins,
+              }}
+              onPromoted={(_id, remaining) => setHostCoins(remaining)}
+            />
 
             {/* Encouraging Glowing "Go Live Now" CTA Button */}
             <motion.button

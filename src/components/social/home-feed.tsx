@@ -22,6 +22,8 @@ import Link from 'next/link';
 import ngeohash from 'ngeohash';
 import { compressImage } from '@/lib/image-compression';
 import UpcomingLivesBanner, { type ScheduledStreamDoc } from './upcoming-lives-banner';
+import { SponsoredAdCard } from './sponsored-ad-card';
+import type { AdCampaign } from '@/lib/ads-schema';
 
 interface NewPostMedia {
     file: File;
@@ -78,6 +80,22 @@ export default function HomeFeed({
     const [forYouPosts, setForYouPosts] = useState<Post[]>([]);
     const [activeStreams, setActiveStreams] = useState<any[]>([]);
     const [feedType, setFeedType] = useState<'foryou' | 'following'>('foryou');
+    const [activeAds, setActiveAds] = useState<AdCampaign[]>([]);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/ads?placement=all', { cache: 'no-store' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (!cancelled && Array.isArray(data?.campaigns)) {
+                    setActiveAds(data.campaigns);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
 
     // Real-time listener for active live streams to display on home feed
@@ -534,21 +552,43 @@ export default function HomeFeed({
                     </div>
                 ) : activeDisplayPosts.length > 0 ? (
                     <div className="flex flex-col space-y-6">
-                        {activeDisplayPosts.map(post => (
-                            <PostCard 
-                                key={post.id} 
-                                post={post}
-                                currentUser={currentUser}
-                                onReact={(postId, reaction) => onReact && onReact(postId, reaction, post.author?.uid || '')} 
-                                onCommentClick={onComment} 
-                                onSavePost={onSavePost} 
-                                onDeletePost={onDeletePost}
-                                userReaction={userReactions?.get ? userReactions.get(post.id) : undefined} 
-                                isSaved={savedPostIds?.has ? savedPostIds.has(post.id) : false}
-                                isAuthorLive={Boolean(post.author?.uid && activeLiveUids?.has && activeLiveUids.has(post.author.uid))}
-                                onWatchLive={onWatchLive}
+                        {activeAds.some((a) => a.placement === 'live' || a.placement === 'all') && (
+                            <SponsoredAdCard
+                                campaign={activeAds.find((a) => a.placement === 'live' || a.placement === 'all')!}
+                                viewerUid={currentUser?.uid}
+                                variant="live_banner"
                             />
-                        ))}
+                        )}
+                        {activeDisplayPosts.map((post, idx) => {
+                            const feedAds = activeAds.filter((a) => a.placement === 'feed' || a.placement === 'all');
+                            const shouldInjectAd = feedAds.length > 0 && (idx + 1) % 7 === 0;
+                            const adForSlot = shouldInjectAd
+                                ? feedAds[Math.floor(idx / 7) % feedAds.length]
+                                : null;
+                            return (
+                                <React.Fragment key={post.id}>
+                                    <PostCard 
+                                        post={post}
+                                        currentUser={currentUser}
+                                        onReact={(postId, reaction) => onReact && onReact(postId, reaction, post.author?.uid || '')} 
+                                        onCommentClick={onComment} 
+                                        onSavePost={onSavePost} 
+                                        onDeletePost={onDeletePost}
+                                        userReaction={userReactions?.get ? userReactions.get(post.id) : undefined} 
+                                        isSaved={savedPostIds?.has ? savedPostIds.has(post.id) : false}
+                                        isAuthorLive={Boolean(post.author?.uid && activeLiveUids?.has && activeLiveUids.has(post.author.uid))}
+                                        onWatchLive={onWatchLive}
+                                    />
+                                    {adForSlot && (
+                                        <SponsoredAdCard
+                                            campaign={adForSlot}
+                                            viewerUid={currentUser?.uid}
+                                            variant="feed"
+                                        />
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
                     </div>
                 ) : cleanTag ? (
                     <Card>

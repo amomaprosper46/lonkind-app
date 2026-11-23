@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { adminDb as db, adminAuth } from '@/lib/firebase-admin';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { verifySuperAdminRequest } from '@/lib/admin-auth';
 import {
   buildIdempotencyKey,
   commitDoubleEntryJournalInTx,
@@ -11,35 +12,12 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY!;
 
 /**
- * Authenticates the requesting user via token and verifies admin registry.
+ * Authenticates the requesting user via Firebase ID token and strictly
+ * requires `role === 'super_admin'`.
  */
 async function authenticateAdmin(req: NextRequest): Promise<string | null> {
-  try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-    const idToken = authHeader.split('Bearer ')[1];
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
-    const uid = decodedToken.uid;
-    const [adminDoc, userDoc] = await Promise.all([
-      db.collection('admins').doc(uid).get(),
-      db.collection('users').doc(uid).get(),
-    ]);
-    if (adminDoc.exists) return uid;
-    const u = userDoc.data();
-    if (
-      u &&
-      (u.name?.trim()?.toLowerCase() === 'lonkind' ||
-        u.handle?.toLowerCase() === 'lonkind' ||
-        u.handle === 'admin_lonkind' ||
-        u.isAdmin === true)
-    ) {
-      return uid;
-    }
-    return null;
-  } catch (err) {
-    console.error('Admin token verification error:', err);
-    return null;
-  }
+  const result = await verifySuperAdminRequest(req);
+  return result.authorized ? result.uid : null;
 }
 
 /**

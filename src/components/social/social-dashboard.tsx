@@ -437,24 +437,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                 const userData = docSnap.data() as CurrentUser;
                 setCurrentUser(userData);
 
-                // Automatically trigger official follow + welcome DM once for new users (no free coins)
-                const isLonkindAdmin =
-                    userData.name?.trim().toLowerCase() === 'lonkind' ||
-                    userData.handle?.toLowerCase() === 'lonkind' ||
-                    userData.handle === 'admin_lonkind' ||
-                    userData.email?.toLowerCase() === 'admin@lonkind.com';
+                // Automatically trigger welcome pack once for non-admin new users
+                const isSuperAdminAccount =
+                    (userData as any)?.role === 'super_admin' || (userData as any)?.isAdmin === true;
 
-                if (isLonkindAdmin && !welcomeTriggeredRef.current) {
+                if (isSuperAdminAccount && !welcomeTriggeredRef.current) {
                     welcomeTriggeredRef.current = true;
-                    setDoc(doc(db, 'admins', user.uid), { addedAt: new Date(), name: 'Lonkind' }, { merge: true }).catch(() => {});
-                    if (!userData.isProfessional || userData.handle !== 'lonkind') {
-                        updateDoc(userDocRef, {
-                            isProfessional: true,
-                            isAdmin: true,
-                            ...(userData.name?.trim().toLowerCase() === 'lonkind' ? { name: 'Lonkind', handle: 'lonkind' } : {}),
-                        }).catch(() => {});
-                    }
-                } else if (!(userData as any).welcomePackClaimed && !welcomeTriggeredRef.current && user.uid !== '7KTSOaVtOGepngVE7LO3prZvzuo1') {
+                } else if (!(userData as any).welcomePackClaimed && !welcomeTriggeredRef.current) {
                     welcomeTriggeredRef.current = true;
                     user.getIdToken().then((token) => {
                         fetch('/api/onboarding/welcome-pack', {
@@ -1519,10 +1508,16 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                         </Link>
                     </div>
 
-                    {(currentUser?.name?.trim().toLowerCase() === 'lonkind' || currentUser?.handle?.toLowerCase() === 'lonkind' || currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind' || (currentUser as any)?.isAdmin) && (
+                    {((currentUser as any)?.role === 'super_admin' || (currentUser as any)?.isAdmin === true) && (
                         <>
                             <div className="pt-4 pb-1 px-3 text-[11px] font-semibold text-rose-500 uppercase tracking-wider">Administration</div>
                             <NavigationItem label="System Dashboard" icon={ShieldAlert} active={currentView === 'admin'} onClick={() => changeView('admin')} />
+                            <Link href="/admin" className="block px-1 pt-1">
+                                <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-xs text-rose-400 hover:text-rose-300">
+                                    <ShieldAlert className="h-3.5 w-3.5" />
+                                    Open /admin Console
+                                </Button>
+                            </Link>
                         </>
                     )}
                 </aside>
@@ -1681,7 +1676,7 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                                 onViewProfile={() => changeView('profile')}
                             />
                         )}
-                        {currentView === 'admin' && (currentUser?.name?.trim().toLowerCase() === 'lonkind' || currentUser?.handle?.toLowerCase() === 'lonkind' || currentUser?.email === 'admin@lonkind.com' || currentUser?.handle === 'admin_lonkind' || (currentUser as any)?.isAdmin) && <AdminDashboardView />}
+                        {currentView === 'admin' && ((currentUser as any)?.role === 'super_admin' || (currentUser as any)?.isAdmin === true) && <AdminDashboardView />}
                         {currentView === 'live' && (
                             <LiveStreamView
                                 hostUid={(selectedLiveHostUid || currentUser?.uid || '').replace(/^live_/, '')}

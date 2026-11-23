@@ -82,32 +82,27 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
         setIsSaving(true);
         try {
             const usersRef = collection(db, 'users');
-            const isLonkindAdmin =
-                name.trim().toLowerCase() === 'lonkind' ||
-                user.email?.toLowerCase() === 'admin@lonkind.com';
-            let finalHandle = isLonkindAdmin ? 'lonkind' : '';
-            let isHandleUnique = isLonkindAdmin;
+            let finalHandle = '';
+            let isHandleUnique = false;
             const baseHandle = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
-            if (!isLonkindAdmin) {
-                try {
-                    // Try up to 10 times to find a unique handle
-                    for (let i = 0; i < 10; i++) {
-                        const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
-                        const q = query(usersRef, where('handle', '==', handleCandidate));
-                        const handleDoc = await getDocs(q);
-                        if (handleDoc.empty) {
-                            finalHandle = handleCandidate;
-                            isHandleUnique = true;
-                            break;
-                        }
+            try {
+                // Try up to 10 times to find a unique handle
+                for (let i = 0; i < 10; i++) {
+                    const handleCandidate = baseHandle + Math.floor(100 + Math.random() * 900); // 3 random digits
+                    const q = query(usersRef, where('handle', '==', handleCandidate));
+                    const handleDoc = await getDocs(q);
+                    if (handleDoc.empty) {
+                        finalHandle = handleCandidate;
+                        isHandleUnique = true;
+                        break;
                     }
-                } catch (e: any) {
-                    console.warn("Could not verify handle uniqueness (permission denied or network issue). Proceeding with generated handle.", e);
-                    // Fallback: just use a highly random handle to avoid collisions
-                    finalHandle = baseHandle + Math.floor(10000 + Math.random() * 90000); 
-                    isHandleUnique = true;
                 }
+            } catch (e: any) {
+                console.warn("Could not verify handle uniqueness (permission denied or network issue). Proceeding with generated handle.", e);
+                // Fallback: just use a highly random handle to avoid collisions
+                finalHandle = baseHandle + Math.floor(10000 + Math.random() * 90000); 
+                isHandleUnique = true;
             }
 
             if (!isHandleUnique) {
@@ -116,26 +111,20 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
                  return;
             }
 
-            const avatarUrl = isLonkindAdmin
-                ? 'https://impactful-ideas.web.app/logo.png'
-                : placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
-            const isProfessionalAccount = isLonkindAdmin;
+            const avatarUrl = placeholderImages.avatar.url.replace('<seed>', name.charAt(0));
 
             try {
                 const userDocRef = doc(db, "users", user.uid);
                 await setDoc(userDocRef, {
                     uid: user.uid,
-                    name: isLonkindAdmin ? 'Lonkind' : name.trim(),
+                    name: name.trim(),
                     handle: finalHandle,
                     avatarUrl: avatarUrl,
                     ...(user.email && { email: user.email.toLowerCase() }),
                     ...(user.phoneNumber && { phoneNumber: user.phoneNumber }),
-                    isProfessional: isProfessionalAccount,
-                    isAdmin: isProfessionalAccount,
-                    bio: isProfessionalAccount ? 'Official Lonkind Account. Connecting the world, one idea at a time.' : 'Hey there! I am using Lonkind.',
+                    bio: 'Hey there! I am using Lonkind.',
                     followersCount: 0,
                     followingCount: 0,
-                    balance: 0,
                     coins: 0,
                     diamonds: 0,
                 });
@@ -145,18 +134,10 @@ const WelcomeDialog = ({ user, onProfileCreated }: { user: User, onProfileCreate
             }
 
             try {
-                await updateProfile(user, { displayName: isLonkindAdmin ? 'Lonkind' : name.trim(), photoURL: avatarUrl });
+                await updateProfile(user, { displayName: name.trim(), photoURL: avatarUrl });
             } catch (e: any) {
                 console.error("Error during updateProfile:", e);
                 throw new Error("Auth profile update failed: " + e.message);
-            }
-
-            if (isProfessionalAccount) {
-                try {
-                  await setDoc(doc(db, 'admins', user.uid), { addedAt: new Date(), name: 'Lonkind' });
-                } catch (e: any) {
-                  console.warn("Admin registry setup notice:", e);
-                }
             }
 
             toast({ title: 'Welcome to Lonkind!', description: `Your profile has been created with handle @${finalHandle}` });

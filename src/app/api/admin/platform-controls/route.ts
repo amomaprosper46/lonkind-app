@@ -1,46 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { adminDb } from '@/lib/firebase-admin';
+import { verifySuperAdminRequest } from '@/lib/admin-auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export const dynamic = 'force-dynamic';
 
 async function verifyLonkindAdmin(req: NextRequest): Promise<{ uid: string; email?: string } | null> {
-  try {
-    const authHeader = req.headers.get('Authorization') || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-    if (!token) return null;
-
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-    const email = (decoded.email || '').toLowerCase();
-
-    if (email === 'admin@lonkind.com') {
-      return { uid, email };
-    }
-
-    const [adminDoc, userDoc] = await Promise.all([
-      adminDb.collection('admins').doc(uid).get(),
-      adminDb.collection('users').doc(uid).get(),
-    ]);
-
-    if (adminDoc.exists) return { uid, email };
-
-    const u = userDoc.data();
-    if (
-      u &&
-      (u.name?.trim()?.toLowerCase() === 'lonkind' ||
-        u.handle?.toLowerCase() === 'lonkind' ||
-        u.handle === 'admin_lonkind' ||
-        u.email?.toLowerCase() === 'admin@lonkind.com' ||
-        u.isAdmin === true)
-    ) {
-      return { uid, email };
-    }
-    return null;
-  } catch (err) {
-    console.error('[platform-controls] Admin verification failed:', err);
-    return null;
-  }
+  const result = await verifySuperAdminRequest(req);
+  if (!result.authorized) return null;
+  return { uid: result.uid, email: result.email };
 }
 
 export async function GET() {

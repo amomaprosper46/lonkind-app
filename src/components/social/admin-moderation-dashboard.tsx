@@ -77,11 +77,6 @@ export default function AdminModerationDashboard() {
   const fetchModerationData = async () => {
     setIsLoading(true);
     try {
-      // Auto-ensure admin doc for admin@lonkind.com
-      if (auth.currentUser && auth.currentUser.email === 'admin@lonkind.com') {
-        await setDoc(doc(db, 'admins', auth.currentUser.uid), { addedAt: new Date() }, { merge: true }).catch(() => {});
-      }
-
       let fetchedReports: ModerationReport[] = [];
       let fetchedAppeals: ModerationAppeal[] = [];
 
