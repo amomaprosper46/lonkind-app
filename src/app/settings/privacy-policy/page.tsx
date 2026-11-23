@@ -16,23 +16,23 @@ export default function SettingsPrivacyPolicyPage() {
   return (
     <article className="space-y-6">
       {/* Header Banner */}
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-slate-900/95 via-emerald-950/30 to-slate-900/95 p-6 shadow-md space-y-3">
+      <div className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-950 via-emerald-950/40 to-slate-950 p-6 shadow-md space-y-3 text-white">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold gap-1">
+          <Badge className="bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 text-[11px] font-bold gap-1">
             <ShieldCheck className="h-3.5 w-3.5" /> Official Legal Document
           </Badge>
-          <Badge variant="secondary" className="text-[11px] font-semibold gap-1">
+          <Badge className="bg-slate-800 text-slate-200 border border-slate-700 text-[11px] font-semibold gap-1">
             <Calendar className="h-3 w-3" /> Last Updated: {LAST_UPDATED}
           </Badge>
         </div>
 
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2.5 text-foreground">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2.5 text-white">
           <FileText className="h-6 w-6 text-emerald-400 shrink-0" />
           Lonkind Privacy Policy
         </h1>
-        <p className="text-xs sm:text-sm text-muted-foreground max-w-3xl leading-relaxed">
-          Your privacy matters to us. This Privacy Policy explains how <strong>Lonkind</strong> (operated at{' '}
-          <strong>lonkind.com</strong> and our mobile web/Android applications) collects, uses, stores, and protects
+        <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
+          Your privacy matters to us. This Privacy Policy explains how <strong className="text-white">Lonkind</strong> (operated at{' '}
+          <strong className="text-white">lonkind.com</strong> and our mobile web/Android applications) collects, uses, stores, and protects
           your personal information when you connect, broadcast live, message friends, or participate in our creator
           economy.
         </p>

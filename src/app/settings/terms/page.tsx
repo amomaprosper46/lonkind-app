@@ -16,25 +16,25 @@ export default function SettingsTermsOfServicePage() {
   return (
     <article className="space-y-6">
       {/* Header Banner */}
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-slate-900/95 via-amber-950/30 to-slate-900/95 p-6 shadow-md space-y-3">
+      <div className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-950 via-amber-950/40 to-slate-950 p-6 shadow-md space-y-3 text-white">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold gap-1">
+          <Badge className="bg-amber-500/20 text-amber-200 border border-amber-400/40 text-[11px] font-bold gap-1">
             <Gavel className="h-3.5 w-3.5" /> Official Platform Agreement
           </Badge>
-          <Badge variant="secondary" className="text-[11px] font-semibold gap-1">
+          <Badge className="bg-slate-800 text-slate-200 border border-slate-700 text-[11px] font-semibold gap-1">
             <Calendar className="h-3 w-3" /> Last Updated: {LAST_UPDATED}
           </Badge>
         </div>
 
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2.5 text-foreground">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2.5 text-white">
           <Scale className="h-6 w-6 text-amber-400 shrink-0" />
           Lonkind Terms of Service
         </h1>
-        <p className="text-xs sm:text-sm text-muted-foreground max-w-3xl leading-relaxed">
-          Welcome to <strong>Lonkind</strong> (<strong>lonkind.com</strong>). By creating an account, watching or
+        <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
+          Welcome to <strong className="text-white">Lonkind</strong> (<strong className="text-white">lonkind.com</strong>). By creating an account, watching or
           hosting a live stream, messaging other members, or purchasing virtual coins, you agree to these Terms of
           Service and our{' '}
-          <Link href="/settings/privacy-policy" className="text-emerald-400 hover:underline font-semibold">
+          <Link href="/settings/privacy-policy" className="text-emerald-300 hover:underline font-semibold">
             Privacy Policy
           </Link>
           .
