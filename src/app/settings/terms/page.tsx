@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     'Official Lonkind (lonkind.com) Terms of Service governing user accounts, live-streaming guidelines, Creator Wallet virtual currency, and community standards.',
 };
 
-const LAST_UPDATED = 'November 17, 2026';
+const LAST_UPDATED = 'November 22, 2026';
 
 export default function SettingsTermsOfServicePage() {
   return (
@@ -93,13 +93,14 @@ export default function SettingsTermsOfServicePage() {
                 non-refundable except where required by applicable law.
               </li>
               <li>
-                <strong className="text-foreground">Creator Diamonds &amp; Payouts:</strong> Eligible creators earn
-                Diamonds when viewers send virtual gifts. Payout requests are subject to identity/compliance review,
+                <strong className="text-foreground">Creator Diamonds &amp; 24-Hour Payout Processing:</strong> Eligible creators earn
+                Diamonds when viewers send virtual gifts. Verified payout requests are processed within{' '}
+                <strong className="text-foreground">24 hours</strong>, subject to identity/compliance review,
                 anti-fraud ledger verification, minimum withdrawal limits, and applicable local payment processor fees.
               </li>
               <li>
-                <strong className="text-foreground">Fraud &amp; Chargebacks:</strong> Any fraudulent purchase,
-                unauthorized chargeback, or artificial gift-cycling scheme may result in immediate forfeiture of
+                <strong className="text-foreground">Anti-Gift-Cycling, Fraud &amp; Chargebacks:</strong> Any fraudulent purchase,
+                unauthorized chargeback, duplicate-account bonus farming, or artificial gift-cycling scheme may result in immediate forfeiture of
                 disputed balances and permanent account suspension.
               </li>
             </ul>
@@ -145,6 +146,7 @@ export default function SettingsTermsOfServicePage() {
             </h2>
             <div className="p-4 rounded-2xl bg-secondary/35 border border-border/60 space-y-1 text-xs sm:text-sm">
               <p><strong className="text-foreground">Platform:</strong> Lonkind (https://lonkind.com)</p>
+              <p><strong className="text-foreground">Founder &amp; Lead Developer:</strong> Prosper Amoma</p>
               <p>
                 <strong className="text-foreground">Legal Notices:</strong>{' '}
                 <a href="mailto:legal@lonkind.com" className="text-amber-400 hover:underline font-semibold">

@@ -538,11 +538,11 @@ export default function SettingsView({
                   icon={Palette}
                   iconColor="text-purple-400"
                   title="Appearance & Display"
-                  description="Color theme, display language, and Knowledge Work vs Software Engineering interface layout style."
+                  description="Customize theme appearance, display density, and data saver mode."
                   statusText={
                     settings.appearance.layoutStyle === 'software_engineering'
-                      ? 'Engineering UI'
-                      : 'Knowledge Work'
+                      ? 'Compact'
+                      : 'Standard'
                   }
                   onClick={() => navigateTo('appearance')}
                 />

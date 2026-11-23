@@ -509,24 +509,24 @@ export default function WalletView({ currentUser }: WalletViewProps) {
                                         <Button
                                             key={pkg.coins}
                                             variant="outline"
-                                            className="h-auto p-4 flex flex-col items-center gap-1.5 border-2 hover:border-primary transition-all relative overflow-hidden"
+                                            className="h-auto px-3 py-4 flex flex-col items-center justify-center gap-1.5 border-2 hover:border-primary transition-all relative overflow-hidden"
                                             onClick={() => handlePurchase(pkg.coins)}
                                             disabled={isPurchasing !== null}
                                         >
                                             {isEligibleFirstTimeBuyer && (
-                                                <span className="absolute top-1 right-1 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                                                <span className="inline-flex items-center justify-center bg-amber-500 text-black text-[9px] leading-tight font-black px-2 py-0.5 rounded-full shadow-sm mb-1 whitespace-nowrap">
                                                     20% First Purchase Bonus
                                                 </span>
                                             )}
                                             {isPurchasing === pkg.coins ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                                                 <>
-                                                    <div className="flex items-center gap-2">
-                                                        <Coins className="h-6 w-6 text-yellow-500" />
-                                                        <span className="text-xl font-bold">{totalCoins.toLocaleString()}</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Coins className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500 shrink-0" />
+                                                        <span className="text-lg sm:text-xl font-bold">{totalCoins.toLocaleString()}</span>
                                                     </div>
                                                     <p className="text-sm font-semibold">{currentGeo.symbol}{priceLocal.toLocaleString()}</p>
                                                     {isEligibleFirstTimeBuyer && bonusCoins > 0 ? (
-                                                        <p className="text-[10px] text-amber-400 font-bold">
+                                                        <p className="text-[10px] text-amber-400 font-bold text-center leading-tight">
                                                             {pkg.coins.toLocaleString()} Coins + {bonusCoins.toLocaleString()} Bonus
                                                         </p>
                                                     ) : (

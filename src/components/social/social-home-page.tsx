@@ -605,11 +605,13 @@ function SocialHomePageInner() {
           
               <footer className="py-6 border-t bg-background">
                   <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-6 gap-y-2 text-sm font-medium">
-                    <p>{t('footer_copyright')}</p>
+                    <p>&copy; {new Date().getFullYear()} Lonkind. All rights reserved.</p>
+                    <span className="hidden sm:inline">•</span>
+                    <Link href="/about" className="hover:text-primary hover:underline">About</Link>
                     <span className="hidden sm:inline">•</span>
                     <Link href="/privacy" className="hover:text-primary hover:underline">Privacy Policy</Link>
                     <span className="hidden sm:inline">•</span>
-                    <Link href="/privacy-policy" className="hover:text-primary hover:underline">Privacy & Security</Link>
+                    <Link href="/privacy-policy" className="hover:text-primary hover:underline">Privacy &amp; Security</Link>
                     <span className="hidden sm:inline">•</span>
                     <Link href="/terms" className="hover:text-primary hover:underline">Terms of Service</Link>
                   </div>

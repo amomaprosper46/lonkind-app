@@ -805,7 +805,7 @@ export function LiveChatSafetySettingsPanel({
   return (
     <div className="space-y-4">
       {/* 1. LIVE CHAT WORD FILTER CARD */}
-      <div className="rounded-2xl border border-border/60 bg-slate-950/80 p-5 space-y-4 shadow-md">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-5 space-y-4 shadow-md text-[#F3F4F6]">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="h-10 w-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0">
@@ -813,12 +813,12 @@ export function LiveChatSafetySettingsPanel({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-extrabold text-foreground">Live Chat Word Filter</h2>
-                <Badge className="bg-rose-500/15 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
+                <h2 className="text-base font-extrabold text-white">Live Chat Word Filter</h2>
+                <Badge className="bg-rose-500/20 text-rose-200 border border-rose-500/40 text-[10px] font-bold">
                   {blockedWords.length} blocked
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-slate-300 mt-0.5">
                 Automatically block messages containing restricted words or spam phrases before they appear in your Live Stream chat.
               </p>
             </div>
@@ -838,7 +838,7 @@ export function LiveChatSafetySettingsPanel({
             value={wordInput}
             onChange={(e) => setWordInput(e.target.value)}
             placeholder="Add word or phrase (separate multiple with commas)..."
-            className="h-10 rounded-xl bg-slate-900/90 border-border/60 text-xs sm:text-sm"
+            className="h-10 rounded-xl bg-slate-900 border-slate-700 text-white placeholder:text-slate-400 text-xs sm:text-sm"
           />
           <Button
             type="submit"
@@ -852,7 +852,7 @@ export function LiveChatSafetySettingsPanel({
 
         {/* Quick Spam Preset Pills */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] font-semibold text-muted-foreground mr-1 flex items-center gap-1">
+          <span className="text-[11px] font-semibold text-[#F3F4F6] mr-1 flex items-center gap-1">
             <Sparkles className="h-3 w-3 text-amber-400" />
             Quick add:
           </span>
@@ -863,7 +863,7 @@ export function LiveChatSafetySettingsPanel({
               key={preset}
               type="button"
               onClick={() => handleAddWords(preset)}
-              className="px-2.5 py-1 rounded-full bg-secondary/40 hover:bg-rose-500/15 border border-border/60 hover:border-rose-500/40 text-[11px] font-semibold text-muted-foreground hover:text-rose-300 transition-colors"
+              className="px-2.5 py-1 rounded-full bg-slate-800/90 hover:bg-rose-500/20 border border-slate-700 hover:border-rose-400/50 text-[11px] font-semibold text-[#F3F4F6] hover:text-white transition-colors"
             >
               + {preset}
             </button>
@@ -872,18 +872,18 @@ export function LiveChatSafetySettingsPanel({
 
         {/* Active Blocked Words Chips */}
         {blockedWords.length > 0 ? (
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
             {blockedWords.map((word) => (
               <span
                 key={word}
-                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/35 text-xs font-bold text-rose-200"
+                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 text-xs font-bold text-white"
               >
                 <span>{word}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveWord(word)}
                   aria-label={`Remove ${word}`}
-                  className="h-5 w-5 rounded-full hover:bg-rose-500/30 flex items-center justify-center text-rose-300 hover:text-white transition-colors"
+                  className="h-5 w-5 rounded-full hover:bg-rose-500/35 flex items-center justify-center text-rose-200 hover:text-white transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -891,26 +891,26 @@ export function LiveChatSafetySettingsPanel({
             ))}
           </div>
         ) : (
-          <div className="rounded-xl bg-slate-900/50 border border-dashed border-border/50 p-3 text-center text-xs text-muted-foreground">
+          <div className="rounded-xl bg-slate-900/70 border border-dashed border-slate-700 p-3 text-center text-xs text-slate-300">
             No custom blocked words yet. Add words above to auto-filter live chat messages privately.
           </div>
         )}
       </div>
 
       {/* 2. TRUSTED LIVE MODERATORS MANAGER CARD */}
-      <div className="rounded-2xl border border-border/60 bg-slate-950/80 p-5 space-y-4 shadow-md">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-5 space-y-4 shadow-md text-[#F3F4F6]">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
             <ShieldCheck className="h-5 w-5 text-emerald-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-extrabold text-foreground">Trusted Live Moderators</h2>
-              <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+              <h2 className="text-base font-extrabold text-white">Trusted Live Moderators</h2>
+              <Badge className="bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 text-[10px] font-bold">
                 {moderators.length} active
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-300 mt-0.5">
               Appointed moderators receive a green/cyan <strong className="text-emerald-300">MOD</strong> shield in your live chat and can delete messages, mute viewers for 10 mins, or ban spammers.
             </p>
           </div>
@@ -918,12 +918,12 @@ export function LiveChatSafetySettingsPanel({
 
         {/* Search & Appoint Moderator */}
         <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
           <Input
             value={modSearch}
             onChange={(e) => setModSearch(e.target.value)}
             placeholder="Search by @handle or name to appoint a Moderator..."
-            className="pl-9 h-10 rounded-xl bg-slate-900/90 border-border/60 text-xs sm:text-sm"
+            className="pl-9 h-10 rounded-xl bg-slate-900 border-slate-700 text-white placeholder:text-slate-400 text-xs sm:text-sm"
           />
           {isSearchingUsers && (
             <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-indigo-400" />
@@ -932,7 +932,7 @@ export function LiveChatSafetySettingsPanel({
 
         {/* Search Results */}
         {modSearchResults.length > 0 && (
-          <div className="rounded-xl border border-border/60 bg-slate-900/90 divide-y divide-border/40 overflow-hidden">
+          <div className="rounded-xl border border-slate-800 bg-slate-900 divide-y divide-slate-800 overflow-hidden">
             {modSearchResults.map((cand) => {
               const isAlready = modIdsSet.has(cand.uid);
               return (
@@ -941,15 +941,15 @@ export function LiveChatSafetySettingsPanel({
                   className="p-2.5 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Avatar className="h-8 w-8 border border-border/50 shrink-0">
+                    <Avatar className="h-8 w-8 border border-slate-700 shrink-0">
                       <AvatarImage src={cand.avatarUrl} alt={cand.name} />
                       <AvatarFallback className="bg-indigo-600 text-white text-xs">
                         {cand.name.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">{cand.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">@{cand.handle}</p>
+                      <p className="text-xs font-bold text-white truncate">{cand.name}</p>
+                      <p className="text-[11px] text-slate-300 truncate">@{cand.handle}</p>
                     </div>
                   </div>
                   <Button
@@ -958,7 +958,7 @@ export function LiveChatSafetySettingsPanel({
                     onClick={() => handleAppointModerator(cand)}
                     className={`h-8 px-3 rounded-xl text-[11px] font-bold shrink-0 ${
                       isAlready
-                        ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                        ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
                         : 'bg-emerald-600 hover:bg-emerald-500 text-white'
                     }`}
                   >
@@ -985,7 +985,7 @@ export function LiveChatSafetySettingsPanel({
             {moderators.map((mod) => (
               <div
                 key={mod.userId}
-                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/70 border border-emerald-500/20"
+                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900 border border-emerald-500/25"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar className="h-9 w-9 border border-emerald-400/40 shrink-0">
@@ -996,12 +996,12 @@ export function LiveChatSafetySettingsPanel({
                   </Avatar>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs sm:text-sm font-bold text-foreground truncate">
+                      <p className="text-xs sm:text-sm font-bold text-white truncate">
                         {mod.displayName || mod.username}
                       </p>
                       <ModShieldBadge compact />
                     </div>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-[11px] text-slate-300 truncate">
                       @{mod.username}
                     </p>
                   </div>
@@ -1011,7 +1011,7 @@ export function LiveChatSafetySettingsPanel({
                   variant="ghost"
                   disabled={busyModUid === mod.userId}
                   onClick={() => handleRemoveModerator(mod)}
-                  className="h-8 px-3 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 shrink-0"
+                  className="h-8 px-3 rounded-xl text-xs font-bold text-rose-300 hover:text-white hover:bg-rose-500/20 shrink-0"
                 >
                   {busyModUid === mod.userId ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1023,7 +1023,7 @@ export function LiveChatSafetySettingsPanel({
             ))}
           </div>
         ) : (
-          <div className="rounded-xl bg-slate-900/50 border border-dashed border-border/50 p-3 text-center text-xs text-muted-foreground">
+          <div className="rounded-xl bg-slate-900/70 border border-dashed border-slate-700 p-3 text-center text-xs text-slate-300">
             No moderators appointed yet. Search above or tap any viewer&apos;s name in your Live Chat to grant the MOD shield.
           </div>
         )}

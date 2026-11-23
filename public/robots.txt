@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /settings
+Disallow: /wallet
+Disallow: /messages
+Disallow: /friend-requests
+Disallow: /api/
+Disallow: /dev/
+
+Sitemap: https://lonkind.com/sitemap.xml

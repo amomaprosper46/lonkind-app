@@ -29,8 +29,8 @@ export const metadata: Metadata = {
     'live clips',
     'social video platform',
   ],
-  authors: [{ name: 'Lonkind', url: SITE_URL }],
-  creator: 'Lonkind',
+  authors: [{ name: 'Prosper Amoma', url: SITE_URL }],
+  creator: 'Prosper Amoma',
   publisher: 'Lonkind',
   alternates: {
     canonical: '/',
@@ -91,8 +91,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="application-name" content="Lonkind" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#3B82F6" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Lonkind" />
+        <meta name="theme-color" content="#000000" />
+        <link rel="apple-touch-icon" href="/icon-192x192.png" />
       </head>
 
       <body className="font-sans antialiased">

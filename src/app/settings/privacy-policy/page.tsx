@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     'Official Lonkind (lonkind.com) Privacy Policy covering Firebase Authentication, Cloud Firestore data handling, live streaming, virtual wallet records, and user privacy rights.',
 };
 
-const LAST_UPDATED = 'November 17, 2026';
+const LAST_UPDATED = 'November 22, 2026';
 
 export default function SettingsPrivacyPolicyPage() {
   return (
@@ -175,6 +175,7 @@ export default function SettingsPrivacyPolicyPage() {
             </p>
             <div className="p-4 rounded-2xl bg-secondary/35 border border-border/60 space-y-1 text-xs sm:text-sm">
               <p><strong className="text-foreground">Platform:</strong> Lonkind (https://lonkind.com)</p>
+              <p><strong className="text-foreground">Founder &amp; Lead Developer:</strong> Prosper Amoma</p>
               <p>
                 <strong className="text-foreground">Privacy Inquiries:</strong>{' '}
                 <a href="mailto:privacy@lonkind.com" className="text-emerald-400 hover:underline font-semibold">

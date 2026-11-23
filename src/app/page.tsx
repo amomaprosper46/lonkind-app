@@ -7,7 +7,7 @@ type HomePageProps = {
 };
 
 export async function generateMetadata({ searchParams }: HomePageProps): Promise<Metadata> {
-  const siteUrl = 'https://impactful-ideas.web.app';
+  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
   const liveParam = typeof searchParams?.live === 'string' ? searchParams.live : (typeof searchParams?.host === 'string' ? searchParams.host : undefined);
   const postParam = typeof searchParams?.post === 'string' ? searchParams.post : undefined;
 
@@ -89,19 +89,22 @@ export async function generateMetadata({ searchParams }: HomePageProps): Promise
   return {
     title: 'Lonkind — Live Streams & Global Creator Community',
     description: 'Watch live broadcasts, join PK battles, support creators, and connect with friends worldwide on Lonkind.',
+    alternates: {
+      canonical: '/',
+    },
     openGraph: {
       title: 'Lonkind — Live Streams & Global Creator Community',
       description: 'Watch live broadcasts, join PK battles, support creators, and connect with friends worldwide on Lonkind.',
       url: siteUrl,
       siteName: 'Lonkind',
-      images: [{ url: `${siteUrl}/logo.png`, width: 512, height: 512, alt: 'Lonkind' }],
+      images: [{ url: `${siteUrl}/og-banner.png`, width: 1200, height: 630, alt: 'Lonkind — Live Streams & Creator Platform' }],
       type: 'website',
     },
     twitter: {
       card: 'summary_large_image',
       title: 'Lonkind — Live Streams & Global Creator Community',
       description: 'Watch live broadcasts, join PK battles, support creators, and connect with friends worldwide on Lonkind.',
-      images: [`${siteUrl}/logo.png`],
+      images: [`${siteUrl}/og-banner.png`],
     },
   };
 }

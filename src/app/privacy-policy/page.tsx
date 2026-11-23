@@ -1,10 +1,36 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import Link from 'next/link';
 import { Shield, Lock, Eye, Server, RefreshCw, ArrowLeft, Mail, FileText, UserCheck, CreditCard, Trash2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+export const metadata: Metadata = {
+  title: 'Privacy Policy — Lonkind',
+  description:
+    'Learn how Lonkind collects, uses, protects, and manages your personal data, privacy controls, and security across lonkind.com.',
+  alternates: {
+    canonical: '/privacy',
+  },
+  openGraph: {
+    title: 'Privacy Policy — Lonkind',
+    description:
+      'Official Privacy Policy for Lonkind (lonkind.com). Your privacy and data security are our top priorities.',
+    url: 'https://lonkind.com/privacy',
+    siteName: 'Lonkind',
+    images: [{ url: 'https://lonkind.com/og-banner.png', width: 1200, height: 630, alt: 'Lonkind Privacy Policy' }],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Privacy Policy — Lonkind',
+    description:
+      'Official Privacy Policy for Lonkind (lonkind.com).',
+    images: ['https://lonkind.com/og-banner.png'],
+  },
+};
+
 export default function PrivacyPolicyContent() {
-  const lastUpdated = 'October 4, 2026';
+  const lastUpdated = 'November 22, 2026';
 
   return (
     <main className="min-h-screen bg-background selection:bg-primary/20">
@@ -194,7 +220,7 @@ export default function PrivacyPolicyContent() {
               <li>All web traffic is transmitted via mandatory HTTPS/TLS end-to-end encryption.</li>
               <li>Data at rest is stored in Google Cloud Firestore with AES-256 server-side encryption.</li>
               <li>Administrative access to backend infrastructure is restricted via multi-factor authentication and role-based permissions.</li>
-              <li>Personal account information is retained for as long as your account remains active. Transaction logs are retained as required by financial regulations.</li>
+              <li>Personal account information is retained for as long as your account remains active. Virtual Coin, Creator Diamond, anti-gift-cycling audit logs, and 24-hour creator payout transaction records are retained securely as required by financial and anti-fraud regulations.</li>
             </ul>
           </div>
 
@@ -253,7 +279,8 @@ export default function PrivacyPolicyContent() {
               If you have any questions, concerns, or privacy requests regarding this Privacy Policy or our data practices, please contact our Data Protection Officer at:
             </p>
             <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-shadow space-y-2">
-              <p className="font-bold text-foreground">Lonkind Support & Privacy Team</p>
+              <p className="font-bold text-foreground">Lonkind Support &amp; Privacy Team</p>
+              <p className="text-muted-foreground text-sm">Founder &amp; Lead Developer: <span className="font-semibold text-foreground">Prosper Amoma</span></p>
               <p className="text-muted-foreground text-sm">Website: <a href="https://lonkind.com" className="text-primary hover:underline">https://lonkind.com</a></p>
               <p className="text-muted-foreground text-sm">Privacy Email: <a href="mailto:privacy@lonkind.com" className="text-primary font-bold hover:underline">privacy@lonkind.com</a></p>
               <p className="text-muted-foreground text-sm">Support Email: <a href="mailto:support@lonkind.com" className="text-primary font-bold hover:underline">support@lonkind.com</a></p>

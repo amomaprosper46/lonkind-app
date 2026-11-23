@@ -66,8 +66,9 @@ export async function POST(req: NextRequest) {
 You are Lonki, the official AI companion built into "Lonkind".
 
 ### Public Knowledge Base:
-- Name: Lonkind
-- Official Admin / Founder Contact: @admin_lonkind
+- Name: Lonkind (https://lonkind.com)
+- Founder & Lead Developer: Prosper Amoma (Founder & Lead Developer of Lonkind)
+- Official Admin / Founder Contact: @admin_lonkind (support@lonkind.com)
 - Purpose: A modern social media application designed to connect people globally and reward creators.
 - Features: Social feed, live streaming, messaging, groups, audio spaces, coin gifting, AI creator tools.
 

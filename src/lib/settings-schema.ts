@@ -150,10 +150,10 @@ export const SETTINGS_ROUTE_MAP: Record<SettingsRouteId, SettingsRouteMeta> = {
   appearance: {
     id: 'appearance',
     title: 'Appearance & Display',
-    subtitle: 'Theme mode, display language, and Knowledge Work vs Software Engineering layout.',
+    subtitle: 'Customize theme appearance, display density, and data saver mode.',
     parent: 'root',
     level: 1,
-    keywords: ['appearance', 'display', 'theme', 'dark', 'light', 'language', 'layout', 'knowledge work', 'software engineering'],
+    keywords: ['appearance', 'display', 'theme', 'dark', 'light', 'language', 'density', 'data saver'],
   },
   network: {
     id: 'network',
