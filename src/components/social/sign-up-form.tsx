@@ -466,11 +466,11 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
 
   const handleAgeSubmit = async () => {
     const calculatedAge = calculateAge();
-    if (calculatedAge < 13) {
+    if (calculatedAge < 18) {
       toast({
         variant: 'destructive',
-        title: 'Age Requirement Notice',
-        description: 'You must be at least 13 years old to create an account on Lonkind.',
+        title: '18+ Age Requirement',
+        description: 'Lonkind is an 18+ platform. You must be at least 18 years old to register.',
       });
       return;
     }
@@ -484,6 +484,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
         await updateDoc(userDocRef, {
           dateOfBirth,
           age: calculatedAge,
+          isAdult: true,
           birthMonth: parseInt(birthMonth),
           birthDay: parseInt(birthDay),
           birthYear: parseInt(birthYear),
@@ -496,6 +497,7 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
             email: currentUser.email || '',
             dateOfBirth,
             age: calculatedAge,
+            isAdult: true,
             createdAt: new Date().toISOString(),
           }, { merge: true });
         });

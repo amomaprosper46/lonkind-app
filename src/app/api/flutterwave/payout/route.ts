@@ -4,6 +4,7 @@ import { adminDb as db, adminAuth } from '@/lib/firebase-admin';
 import crypto from 'crypto';
 import { commitDoubleEntryJournalInTx, DoubleEntryLeg } from '@/lib/ledger';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
+import { assertAdultUserForAction } from '@/lib/age-gate-server';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
@@ -222,10 +223,16 @@ export async function POST(req: NextRequest) {
     }
     const userId = decodedToken.uid;
 
-    // Require verified email before unlocking creator payouts (phone-only users unaffected)
-    const verificationGate = await assertEmailVerifiedForAction(userId, 'creator payouts');
+    // Require verified email & 18+ age before unlocking creator payouts
+    const [verificationGate, ageGate] = await Promise.all([
+      assertEmailVerifiedForAction(userId, 'creator payouts'),
+      assertAdultUserForAction(userId, 'requesting creator payouts'),
+    ]);
     if (!verificationGate.allowed) {
       return NextResponse.json({ error: verificationGate.error }, { status: 403 });
+    }
+    if (!ageGate.allowed) {
+      return NextResponse.json({ error: ageGate.error }, { status: 403 });
     }
 
     const body = await req.json();

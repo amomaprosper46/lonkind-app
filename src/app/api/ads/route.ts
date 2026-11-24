@@ -7,7 +7,9 @@ import {
   OFFICIAL_BRAND_PROFILE,
   OFFICIAL_BRAND_UID,
   type AdCampaign,
+  type AdRevenueLedgerEntry,
 } from '@/lib/ads-schema';
+import { validateAdContentSafety } from '@/lib/age-and-ad-safety';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +25,14 @@ function serializeCampaign(id: string, data: Record<string, any>): AdCampaign {
     id,
     kind: data.kind || 'brand_ad',
     status: data.status || 'active',
+    targetAudience: data.targetAudience === '21+' ? '21+' : '18+',
     publisherUid: data.publisherUid || OFFICIAL_BRAND_UID,
     publisherName: data.publisherName || 'Lonkind',
     publisherHandle: data.publisherHandle || 'lonkind',
     publisherAvatar: data.publisherAvatar || '/logo.png',
+    publisherVerifiedAge: typeof data.publisherVerifiedAge === 'number' ? data.publisherVerifiedAge : null,
+    publisherIsAdult: data.publisherIsAdult !== false,
+    publisherAccountStanding: data.publisherAccountStanding || 'Good Standing',
     isOfficialBrand: Boolean(data.isOfficialBrand),
     title: data.title || '',
     description: data.description || '',
@@ -46,6 +52,20 @@ function serializeCampaign(id: string, data: Record<string, any>): AdCampaign {
     durationHours: Number(data.durationHours || 168),
     impressions: Number(data.impressions || 0),
     uniqueClicks: Number(data.uniqueClicks || 0),
+    blockedInvalidViews: Number(data.blockedInvalidViews || 0),
+    paymentMethod: data.paymentMethod || (data.isOfficialBrand ? 'brand_free' : 'coins'),
+    paymentStatus: data.paymentStatus || 'paid',
+    refundStatus: data.refundStatus || 'none',
+    flutterwaveTxRef: data.flutterwaveTxRef || null,
+    flutterwaveTransactionId: data.flutterwaveTransactionId || null,
+    flutterwaveRefundId: data.flutterwaveRefundId || null,
+    refundErrorMessage: data.refundErrorMessage || null,
+    refundedAt: toIso(data.refundedAt),
+    amountPaid: Number(data.amountPaid || 0),
+    currencyPaid: data.currencyPaid || null,
+    reportCount: Number(data.reportCount || 0),
+    rejectionReason: data.rejectionReason || null,
+    refundId: data.refundId || null,
     createdAt: toIso(data.createdAt),
     expiresAt: toIso(data.expiresAt),
   };
@@ -92,17 +112,76 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
       }
       await ensureOfficialBrandAccount();
-      const snap = await adminDb.collection('ad_campaigns').limit(100).get();
+      const [snap, reportsSnap, revSnap] = await Promise.all([
+        adminDb.collection('ad_campaigns').limit(100).get(),
+        adminDb.collection('ad_reports').where('status', '==', 'pending').limit(50).get(),
+        adminDb.collection('ad_revenue_ledger').limit(500).get(),
+      ]);
       const campaigns = snap.docs
         .map((d) => serializeCampaign(d.id, d.data()))
-        .filter((c) => c.status !== 'deleted')
+        .filter((c) => c.status !== 'deleted' && c.status !== 'awaiting_payment')
         .sort((a, b) => {
           const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           return tB - tA;
         });
 
-      return NextResponse.json({ campaigns, brandProfile: OFFICIAL_BRAND_PROFILE });
+      const directAdRevenueByCurrency: Record<string, number> = {};
+      const revenueLedger: AdRevenueLedgerEntry[] = revSnap.docs
+        .map((d) => {
+          const rd = d.data();
+          const curr = String(rd.currency || 'NGN').toUpperCase();
+          const amt = Number(rd.amount || 0);
+          if (amt !== 0) {
+            directAdRevenueByCurrency[curr] = Number(
+              ((directAdRevenueByCurrency[curr] || 0) + amt).toFixed(2)
+            );
+          }
+          return {
+            id: d.id,
+            transactionId: String(rd.transactionId || d.id),
+            txRef: String(rd.txRef || ''),
+            type: (rd.type === 'ad_refund' ? 'ad_refund' : 'direct_ad_revenue') as
+              | 'direct_ad_revenue'
+              | 'ad_refund',
+            provider: String(rd.provider || 'flutterwave'),
+            campaignId: String(rd.campaignId || ''),
+            payerUid: String(rd.payerUid || ''),
+            payerHandle: String(rd.payerHandle || ''),
+            amount: amt,
+            currency: curr,
+            status: String(rd.status || 'settled'),
+            refundStatus: rd.refundStatus || 'none',
+            flutterwaveRefundId: rd.flutterwaveRefundId || null,
+            reason: rd.reason || null,
+            createdAt: rd.createdAt?.toDate?.()?.toISOString?.() || null,
+          };
+        })
+        .sort((a, b) => {
+          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tB - tA;
+        });
+
+      const reports = reportsSnap.docs.map((d) => {
+        const rd = d.data();
+        return {
+          id: d.id,
+          campaignId: rd.campaignId || '',
+          campaignTitle: rd.campaignTitle || 'Unknown Campaign',
+          publisherHandle: rd.publisherHandle || 'unknown',
+          reason: rd.reason || 'Reported by user',
+          createdAt: rd.createdAt?.toDate?.()?.toISOString?.() || null,
+        };
+      });
+
+      return NextResponse.json({
+        campaigns,
+        reports,
+        directAdRevenueByCurrency,
+        revenueLedger,
+        brandProfile: OFFICIAL_BRAND_PROFILE,
+      });
     }
 
     // Public active campaigns
@@ -166,6 +245,7 @@ export async function POST(req: NextRequest) {
       const durationHours = Math.max(1, Math.min(24 * 90, Number(body.durationHours || 168)));
       const targetImpressions = Math.max(100, Math.min(10_000_000, Number(body.targetImpressions || 25000)));
       const budgetTier = String(body.budgetTier || 'Official Brand').trim().slice(0, 40);
+      const targetAudience = body.targetAudience === '21+' ? '21+' : '18+';
 
       if (!title || title.length < 3) {
         return NextResponse.json({ error: 'Ad title must be at least 3 characters.' }, { status: 400 });
@@ -176,6 +256,10 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      const safety = validateAdContentSafety(title, description, destinationUrl);
+      if (!safety.safe) {
+        return NextResponse.json({ error: safety.reason }, { status: 400 });
+      }
 
       const now = Date.now();
       const expiresAt = Timestamp.fromMillis(now + durationHours * 60 * 60 * 1000);
@@ -184,6 +268,7 @@ export async function POST(req: NextRequest) {
       const payload = {
         kind: 'brand_ad',
         status: 'active',
+        targetAudience,
         publisherUid: OFFICIAL_BRAND_UID,
         publisherName: OFFICIAL_BRAND_PROFILE.name,
         publisherHandle: OFFICIAL_BRAND_PROFILE.handle,
@@ -252,8 +337,73 @@ export async function POST(req: NextRequest) {
         updates.targetImpressions = Math.max(100, Number(body.targetImpressions) || 1000);
       }
 
+      if (body.targetAudience === '18+' || body.targetAudience === '21+') {
+        updates.targetAudience = body.targetAudience;
+      }
+      const safetyCheck = validateAdContentSafety(
+        updates.title || '',
+        updates.description || '',
+        updates.destinationUrl || ''
+      );
+      if (!safetyCheck.safe) {
+        return NextResponse.json({ error: safetyCheck.reason }, { status: 400 });
+      }
+
       await adminDb.collection('ad_campaigns').doc(id).update(updates);
       return NextResponse.json({ success: true, id });
+    }
+
+    if (action === 'approve_promotion') {
+      const id = String(body.id || '').trim();
+      if (!id) return NextResponse.json({ error: 'Campaign ID required.' }, { status: 400 });
+      const ref = adminDb.collection('ad_campaigns').doc(id);
+      const snap = await ref.get();
+      if (!snap.exists) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
+      const durationHours = Number(snap.data()?.durationHours || 24);
+      await ref.update({
+        status: 'active',
+        approvedByAdminUid: authCheck.uid,
+        approvedAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now() + durationHours * 60 * 60 * 1000),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json({ success: true, id, status: 'active' });
+    }
+
+    if (action === 'reject_promotion') {
+      const id = String(body.id || '').trim();
+      if (!id) return NextResponse.json({ error: 'Campaign ID required.' }, { status: 400 });
+      const campRef = adminDb.collection('ad_campaigns').doc(id);
+      await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(campRef);
+        if (!snap.exists) return;
+        const data = snap.data()!;
+        if (data.status !== 'pending_approval') return;
+        const coinsToRefund = Math.floor(Number(data.coinsSpent || 0));
+        if (coinsToRefund > 0 && data.publisherUid) {
+          tx.update(adminDb.collection('users').doc(data.publisherUid), {
+            coins: FieldValue.increment(coinsToRefund),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        tx.update(campRef, {
+          status: 'rejected',
+          rejectedByAdminUid: authCheck.uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      return NextResponse.json({ success: true, id, status: 'rejected' });
+    }
+
+    if (action === 'dismiss_report') {
+      const reportId = String(body.reportId || '').trim();
+      if (!reportId) return NextResponse.json({ error: 'Report ID required.' }, { status: 400 });
+      await adminDb.collection('ad_reports').doc(reportId).update({
+        status: 'reviewed',
+        reviewedBy: authCheck.uid,
+        reviewedAt: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json({ success: true, reportId });
     }
 
     if (action === 'toggle_status') {

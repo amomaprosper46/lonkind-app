@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { assertAdultUserForAction } from '@/lib/age-gate-server';
 
 const SendStreamGiftSchema = z.object({
   streamId: z.string().min(1),
@@ -50,6 +51,18 @@ export async function POST(req: NextRequest) {
         { error: 'Hosts cannot send paid gifts to themselves.' },
         { status: 400 }
       );
+    }
+
+    // Enforce 18+ age gate on both sender and gift recipient
+    const [senderAgeGate, hostAgeGate] = await Promise.all([
+      assertAdultUserForAction(senderUid, 'sending virtual gifts'),
+      assertAdultUserForAction(cleanHostUid, 'receiving virtual gifts'),
+    ]);
+    if (!senderAgeGate.allowed) {
+      return NextResponse.json({ error: senderAgeGate.error }, { status: 403 });
+    }
+    if (!hostAgeGate.allowed) {
+      return NextResponse.json({ error: 'This creator account is not eligible to receive paid gifts.' }, { status: 403 });
     }
 
     const senderRef = adminDb.collection('users').doc(senderUid);

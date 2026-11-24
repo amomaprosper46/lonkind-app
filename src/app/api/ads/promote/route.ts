@@ -6,6 +6,8 @@ import {
   PROMO_PACKAGES,
   type PromoPackageId,
 } from '@/lib/ads-schema';
+import { validateAdContentSafety } from '@/lib/age-and-ad-safety';
+import { assertAdultUserForAction } from '@/lib/age-gate-server';
 import { commitDoubleEntryJournalInTx, type DoubleEntryLeg } from '@/lib/ledger';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +35,13 @@ export async function POST(req: NextRequest) {
     }
 
     const uid = decodedToken.uid as string;
+
+    // Enforce 18+ Age Gate before creating promoted ads
+    const ageGate = await assertAdultUserForAction(uid, 'creating promoted ads');
+    if (!ageGate.allowed) {
+      return NextResponse.json({ error: ageGate.error }, { status: 403 });
+    }
+
     const body = await req.json().catch(() => null);
     if (!body) {
       return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
@@ -72,6 +81,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid destination URL.' }, { status: 400 });
     }
 
+    // Block prohibited/unsafe ad categories via keyword safety check
+    const contentSafety = validateAdContentSafety(title, description, destinationUrl);
+    if (!contentSafety.safe) {
+      return NextResponse.json({ error: contentSafety.reason }, { status: 400 });
+    }
+
     const userRef = adminDb.collection('users').doc(uid);
     const campaignRef = adminDb.collection('ad_campaigns').doc();
     const txRef = adminDb.collection('transactions').doc();
@@ -105,14 +120,22 @@ export async function POST(req: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // 2. Activate promoted campaign
+      // 2. Submit promoted campaign to Admin review queue (`pending_review`)
       tx.set(campaignRef, {
         kind: 'user_promote',
-        status: 'active',
+        status: 'pending_review',
+        targetAudience: '18+',
         publisherUid: uid,
         publisherName: userData.name || 'Lonkind Creator',
         publisherHandle: userData.handle || userData.username || 'creator',
         publisherAvatar: userData.avatarUrl || '',
+        publisherVerifiedAge: typeof userData.age === 'number' ? userData.age : null,
+        publisherIsAdult: userData.isAdult !== false,
+        publisherAccountStanding: userData.isBanned
+          ? 'Suspended'
+          : userData.fraudFlagged
+          ? 'Flagged'
+          : 'Good Standing',
         isOfficialBrand: false,
         title,
         description,
@@ -136,6 +159,18 @@ export async function POST(req: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
         expiresAt,
       });
+
+      // Tag the creator's post with `promotionStatus: "pending_review"` so the status badge renders immediately
+      if (targetType === 'post' && targetPostId) {
+        tx.set(
+          adminDb.collection('posts').doc(targetPostId),
+          {
+            promotionStatus: 'pending_review',
+            activeCampaignId: campaignRef.id,
+          },
+          { merge: true }
+        );
+      }
 
       // 3. Isolated `type: "ad_spend"` transaction log (excluded from creator earnings/payouts)
       tx.set(txRef, {

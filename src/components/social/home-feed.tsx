@@ -24,6 +24,7 @@ import { compressImage } from '@/lib/image-compression';
 import UpcomingLivesBanner, { type ScheduledStreamDoc } from './upcoming-lives-banner';
 import { SponsoredAdCard } from './sponsored-ad-card';
 import type { AdCampaign } from '@/lib/ads-schema';
+import { filterEligibleAdsForViewer } from '@/lib/ad-frequency';
 
 interface NewPostMedia {
     file: File;
@@ -550,20 +551,27 @@ export default function HomeFeed({
                         <SkeletonCard />
                         <SkeletonCard />
                     </div>
-                ) : activeDisplayPosts.length > 0 ? (
+                ) : activeDisplayPosts.length > 0 ? (() => {
+                    const viewerAge = typeof (currentUser as any)?.age === 'number' ? (currentUser as any).age : null;
+                    const eligibleAds = filterEligibleAdsForViewer(activeAds, viewerAge);
+                    const liveBannerAd = eligibleAds.find((a) => a.placement === 'live' || a.placement === 'all') || null;
+                    const feedAds = eligibleAds.filter((a) => a.placement === 'feed' || a.placement === 'all');
+
+                    return (
                     <div className="flex flex-col space-y-6">
-                        {activeAds.some((a) => a.placement === 'live' || a.placement === 'all') && (
+                        {liveBannerAd && (
                             <SponsoredAdCard
-                                campaign={activeAds.find((a) => a.placement === 'live' || a.placement === 'all')!}
+                                campaign={liveBannerAd}
                                 viewerUid={currentUser?.uid}
                                 variant="live_banner"
+                                onHidden={(id) => setActiveAds((prev) => prev.filter((a) => a.id !== id))}
                             />
                         )}
                         {activeDisplayPosts.map((post, idx) => {
-                            const feedAds = activeAds.filter((a) => a.placement === 'feed' || a.placement === 'all');
-                            const shouldInjectAd = feedAds.length > 0 && (idx + 1) % 7 === 0;
+                            // Max 1 sponsored card every 8 organic posts (never back-to-back)
+                            const shouldInjectAd = feedAds.length > 0 && (idx + 1) % 8 === 0;
                             const adForSlot = shouldInjectAd
-                                ? feedAds[Math.floor(idx / 7) % feedAds.length]
+                                ? feedAds[Math.floor(idx / 8) % feedAds.length]
                                 : null;
                             return (
                                 <React.Fragment key={post.id}>
@@ -584,13 +592,15 @@ export default function HomeFeed({
                                             campaign={adForSlot}
                                             viewerUid={currentUser?.uid}
                                             variant="feed"
+                                            onHidden={(id) => setActiveAds((prev) => prev.filter((a) => a.id !== id))}
                                         />
                                     )}
                                 </React.Fragment>
                             );
                         })}
                     </div>
-                ) : cleanTag ? (
+                    );
+                })() : cleanTag ? (
                     <Card>
                         <CardContent className="p-8 text-center text-muted-foreground">
                             <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-extrabold text-2xl mx-auto mb-4">

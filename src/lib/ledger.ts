@@ -26,6 +26,7 @@ export type LedgerJournalType =
   | 'VIP_POST_UNLOCK'
   | 'COIN_PURCHASE'
   | 'AD_SPEND'
+  | 'AD_REFUND'
   | 'PAYOUT_ESCROW_HOLD'
   | 'PAYOUT_SETTLED'
   | 'PAYOUT_REFUND';

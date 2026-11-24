@@ -633,6 +633,29 @@ service cloud.firestore {
       match /unique_clicks/{viewerId} {
         allow read, write: if false;
       }
+
+      match /view_windows/{windowId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /ad_revenue_ledger/{txId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /ad_reports/{reportId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /ad_feedback/{feedbackId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /ad_refund_idempotency/{refundId} {
+      allow read, write: if false;
     }
 
     /* ====================================================================== */

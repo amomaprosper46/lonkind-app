@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Coins,
+  CreditCard,
   Megaphone,
   Loader2,
   Sparkles,
@@ -22,9 +23,18 @@ import {
   AlertTriangle,
   Wallet,
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { auth } from '@/lib/firebase';
 import { toast } from '@/hooks/use-toast';
 import {
+  AD_CURRENCY_RATES_FROM_NGN,
+  getPromoPackagePrice,
   PROMO_PACKAGE_LIST,
   PROMO_PACKAGES,
   type AdCampaign,
@@ -61,6 +71,8 @@ export function PromoteDialog({
   onPromoted,
 }: PromoteDialogProps) {
   const [selectedPkgId, setSelectedPkgId] = useState<PromoPackageId>('starter');
+  const [paymentMethod, setPaymentMethod] = useState<'coins' | 'flutterwave'>('coins');
+  const [currency, setCurrency] = useState<string>('NGN');
   const [headline, setHeadline] = useState(target?.title || '');
   const [ctaLabel, setCtaLabel] = useState(
     target?.targetType === 'live' ? 'Join Live' : 'View Post'
@@ -83,12 +95,15 @@ export function PromoteDialog({
 
   const selectedPkg = PROMO_PACKAGES[selectedPkgId];
   const currentCoins = Math.floor(Number(target.userCoins || 0));
-  const lacksCoins = currentCoins < selectedPkg.coins;
+  const lacksCoins = paymentMethod === 'coins' && currentCoins < selectedPkg.coins;
+  const currencyMeta = AD_CURRENCY_RATES_FROM_NGN[currency] || AD_CURRENCY_RATES_FROM_NGN.NGN;
+  const selectedFiatPrice = getPromoPackagePrice(selectedPkg, currency);
 
   const previewCampaign: AdCampaign = {
     id: 'preview',
     kind: 'user_promote',
     status: 'active',
+    targetAudience: '18+',
     publisherUid: target.publisherUid,
     publisherName: target.publisherName,
     publisherHandle: target.publisherHandle,
@@ -117,7 +132,7 @@ export function PromoteDialog({
   };
 
   const handleLaunch = async () => {
-    if (lacksCoins) {
+    if (paymentMethod === 'coins' && lacksCoins) {
       setInsufficientError({ required: selectedPkg.coins, current: currentCoins });
       return;
     }
@@ -132,6 +147,39 @@ export function PromoteDialog({
           title: 'Sign In Required',
           description: 'Please sign in again to launch your promotion.',
         });
+        return;
+      }
+
+      if (paymentMethod === 'flutterwave') {
+        const res = await fetch('/api/ads/flutterwave/initialize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            packageId: selectedPkg.id,
+            currency,
+            targetType: target.targetType,
+            targetPostId: target.targetPostId,
+            title: headline.trim() || target.title,
+            description: target.description,
+            mediaUrl: target.mediaUrl || '',
+            mediaType: target.mediaType || 'image',
+            ctaLabel,
+          }),
+        });
+
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.paymentLink) {
+          throw new Error(data?.error || 'Could not initialize Flutterwave ad payment.');
+        }
+
+        toast({
+          title: 'Redirecting to Flutterwave...',
+          description: 'Complete your Card, Bank Transfer, USSD, or Mobile Money payment to submit your ad for approval.',
+        });
+        window.location.href = data.paymentLink;
         return;
       }
 
@@ -167,8 +215,8 @@ export function PromoteDialog({
       }
 
       toast({
-        title: '🚀 Promotion Live!',
-        description: `Your ${selectedPkg.name} campaign is active (${selectedPkg.coins.toLocaleString()} Coins spent).`,
+        title: '✅ Promotion Submitted for Review!',
+        description: `Your ${selectedPkg.name} campaign (${selectedPkg.coins.toLocaleString()} Coins) is pending safety approval and will go live once approved (auto-refunded if rejected).`,
       });
       onPromoted?.(data.campaignId, data.remainingCoins);
       onOpenChange(false);
@@ -192,19 +240,79 @@ export function PromoteDialog({
             Promote {target.targetType === 'live' ? 'Live Stream' : 'Post'}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Reach more viewers across Lonkind using your Coin balance. Ad spend is recorded
-            separately from creator payouts.
+            Reach more viewers across Lonkind using Coins or direct Flutterwave payment (Card, Bank
+            Transfer, USSD, Mobile Money). Ad payments are strictly isolated from creator gift wallets.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          {/* Wallet Balance Bar */}
-          <div className="rounded-xl border border-border/70 bg-muted/30 px-3.5 py-2.5 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-medium">Available Coin Balance</span>
-            <span className="font-extrabold text-amber-500 flex items-center gap-1.5 text-sm">
-              <Coins className="h-4 w-4" />
-              {currentCoins.toLocaleString()} Coins
-            </span>
+          {/* Payment Method Selector */}
+          <div className="space-y-2">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Payment Method
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMethod('coins');
+                  setInsufficientError(null);
+                }}
+                className={cn(
+                  'rounded-xl border p-2.5 text-left transition-all flex items-center gap-2',
+                  paymentMethod === 'coins'
+                    ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500'
+                    : 'border-border/70 hover:bg-muted/40'
+                )}
+              >
+                <Coins className="h-4 w-4 text-amber-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-foreground">Pay with Coins</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Balance: {currentCoins.toLocaleString()} Coins
+                  </p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMethod('flutterwave');
+                  setInsufficientError(null);
+                }}
+                className={cn(
+                  'rounded-xl border p-2.5 text-left transition-all flex items-center gap-2',
+                  paymentMethod === 'flutterwave'
+                    ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
+                    : 'border-border/70 hover:bg-muted/40'
+                )}
+              >
+                <CreditCard className="h-4 w-4 text-emerald-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-foreground">Flutterwave Direct</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Card • Bank • USSD • MoMo
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {paymentMethod === 'flutterwave' && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Billing Currency</span>
+                <Select value={currency} onValueChange={setCurrency}>
+                  <SelectTrigger className="h-8 w-28 text-xs rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(AD_CURRENCY_RATES_FROM_NGN).map(([code, meta]) => (
+                      <SelectItem key={code} value={code}>
+                        {code} ({meta.symbol})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Promotion Packages */}
@@ -215,6 +323,7 @@ export function PromoteDialog({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {PROMO_PACKAGE_LIST.map((pkg) => {
                 const active = selectedPkgId === pkg.id;
+                const pkgFiat = getPromoPackagePrice(pkg, currency);
                 return (
                   <button
                     key={pkg.id}
@@ -238,10 +347,18 @@ export function PromoteDialog({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm font-black text-amber-500 flex items-center gap-1">
-                      <Coins className="h-3.5 w-3.5" />
-                      {pkg.coins.toLocaleString()} Coins
-                    </p>
+                    {paymentMethod === 'flutterwave' ? (
+                      <p className="text-sm font-black text-emerald-500 flex items-center gap-1">
+                        <CreditCard className="h-3.5 w-3.5" />
+                        {currencyMeta.symbol}
+                        {pkgFiat.toLocaleString()}
+                      </p>
+                    ) : (
+                      <p className="text-sm font-black text-amber-500 flex items-center gap-1">
+                        <Coins className="h-3.5 w-3.5" />
+                        {pkg.coins.toLocaleString()} Coins
+                      </p>
+                    )}
                     <p className="text-[11px] text-muted-foreground">
                       {pkg.durationLabel} • {pkg.targetImpressions.toLocaleString()} views
                     </p>
@@ -285,7 +402,7 @@ export function PromoteDialog({
           </div>
 
           {/* Insufficient Coins Friendly Prompt */}
-          {(lacksCoins || insufficientError) && (
+          {paymentMethod === 'coins' && (lacksCoins || insufficientError) && (
             <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-2.5 text-xs">
                 <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
@@ -295,7 +412,8 @@ export function PromoteDialog({
                     You need{' '}
                     <strong>{(insufficientError?.required ?? selectedPkg.coins).toLocaleString()} Coins</strong>{' '}
                     (currently{' '}
-                    <strong>{(insufficientError?.current ?? currentCoins).toLocaleString()} Coins</strong>).
+                    <strong>{(insufficientError?.current ?? currentCoins).toLocaleString()} Coins</strong>),
+                    or switch to <strong>Flutterwave Direct</strong> above.
                   </p>
                 </div>
               </div>
@@ -317,11 +435,17 @@ export function PromoteDialog({
           >
             {isLaunching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : paymentMethod === 'flutterwave' ? (
+              <CreditCard className="h-4 w-4" />
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
             {isLaunching
-              ? 'Launching Campaign...'
+              ? paymentMethod === 'flutterwave'
+                ? 'Connecting to Flutterwave...'
+                : 'Launching Campaign...'
+              : paymentMethod === 'flutterwave'
+              ? `Pay ${currencyMeta.symbol}${selectedFiatPrice.toLocaleString()} via Flutterwave`
               : `Launch ${selectedPkg.name} (${selectedPkg.coins.toLocaleString()} Coins)`}
           </Button>
         </div>

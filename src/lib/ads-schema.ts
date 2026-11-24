@@ -9,6 +9,8 @@ export interface PromoPackage {
   id: PromoPackageId;
   name: string;
   coins: number;
+  priceNgn: number;
+  priceUsd: number;
   durationHours: number;
   durationLabel: string;
   targetImpressions: number;
@@ -21,6 +23,8 @@ export const PROMO_PACKAGES: Record<PromoPackageId, PromoPackage> = {
     id: 'starter',
     name: 'Starter Boost',
     coins: 100,
+    priceNgn: 1000,
+    priceUsd: 1.5,
     durationHours: 24,
     durationLabel: '24 Hours',
     targetImpressions: 1000,
@@ -30,6 +34,8 @@ export const PROMO_PACKAGES: Record<PromoPackageId, PromoPackage> = {
     id: 'growth',
     name: 'Growth Reach',
     coins: 300,
+    priceNgn: 3000,
+    priceUsd: 4.0,
     durationHours: 72,
     durationLabel: '3 Days',
     targetImpressions: 4000,
@@ -40,6 +46,8 @@ export const PROMO_PACKAGES: Record<PromoPackageId, PromoPackage> = {
     id: 'spotlight',
     name: 'Spotlight Pro',
     coins: 750,
+    priceNgn: 7500,
+    priceUsd: 9.5,
     durationHours: 168,
     durationLabel: '7 Days',
     targetImpressions: 12000,
@@ -47,6 +55,25 @@ export const PROMO_PACKAGES: Record<PromoPackageId, PromoPackage> = {
     badge: 'Best Value',
   },
 };
+
+export const AD_CURRENCY_RATES_FROM_NGN: Record<string, { symbol: string; multFromNgn: number }> = {
+  NGN: { symbol: '₦', multFromNgn: 1 },
+  USD: { symbol: '$', multFromNgn: 0.0015 },
+  GHS: { symbol: '₵', multFromNgn: 0.015 },
+  KES: { symbol: 'KSh', multFromNgn: 0.15 },
+  GBP: { symbol: '£', multFromNgn: 0.0012 },
+  EUR: { symbol: '€', multFromNgn: 0.0014 },
+  ZAR: { symbol: 'R', multFromNgn: 0.025 },
+};
+
+export function getPromoPackagePrice(pkg: PromoPackage, currency: string): number {
+  const code = String(currency || 'NGN').toUpperCase();
+  if (code === 'NGN') return pkg.priceNgn;
+  if (code === 'USD') return pkg.priceUsd;
+  const info = AD_CURRENCY_RATES_FROM_NGN[code];
+  if (!info) return pkg.priceNgn;
+  return Number((pkg.priceNgn * info.multFromNgn).toFixed(2));
+}
 
 export const PROMO_PACKAGE_LIST: PromoPackage[] = [
   PROMO_PACKAGES.starter,
@@ -65,18 +92,63 @@ export const AD_CTA_OPTIONS = [
 
 export type AdCtaLabel = (typeof AD_CTA_OPTIONS)[number];
 
-export type AdCampaignStatus = 'active' | 'paused' | 'completed' | 'deleted';
+export type AdCampaignStatus =
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'awaiting_payment'
+  | 'pending_review'
+  | 'pending_approval'
+  | 'rejected'
+  | 'rejected_refund_needed'
+  | 'deleted';
+export type AdRefundStatus =
+  | 'none'
+  | 'refund_processing'
+  | 'refunded'
+  | 'manual_refund_required'
+  | 'refunded_manually';
 export type AdCampaignKind = 'brand_ad' | 'user_promote';
 export type AdTargetType = 'external' | 'post' | 'live';
+export type AdTargetAudience = '18+' | '21+';
+
+export interface AdRevenueLedgerEntry {
+  id: string;
+  transactionId: string;
+  txRef: string;
+  type: 'direct_ad_revenue' | 'ad_refund';
+  provider: string;
+  campaignId: string;
+  payerUid: string;
+  payerHandle: string;
+  amount: number;
+  currency: string;
+  status: string;
+  refundStatus?: AdRefundStatus;
+  flutterwaveRefundId?: string | null;
+  reason?: string | null;
+  createdAt: string | null;
+}
+
+export const AD_REJECTION_REASONS = [
+  'Misleading Claim',
+  'Inappropriate Media',
+  'Invalid Link',
+  'Policy Violation',
+] as const;
 
 export interface AdCampaign {
   id: string;
   kind: AdCampaignKind;
   status: AdCampaignStatus;
+  targetAudience: AdTargetAudience;
   publisherUid: string;
   publisherName: string;
   publisherHandle: string;
   publisherAvatar: string;
+  publisherVerifiedAge?: number | null;
+  publisherIsAdult?: boolean;
+  publisherAccountStanding?: string;
   isOfficialBrand: boolean;
   title: string;
   description: string;
@@ -96,6 +168,20 @@ export interface AdCampaign {
   durationHours: number;
   impressions: number;
   uniqueClicks: number;
+  blockedInvalidViews?: number;
+  paymentMethod?: 'coins' | 'flutterwave' | 'brand_free';
+  paymentStatus?: 'paid' | 'pending' | 'refund_needed' | 'refunded';
+  refundStatus?: AdRefundStatus;
+  flutterwaveTxRef?: string | null;
+  flutterwaveTransactionId?: string | null;
+  flutterwaveRefundId?: string | null;
+  refundErrorMessage?: string | null;
+  refundedAt?: string | null;
+  amountPaid?: number;
+  currencyPaid?: string | null;
+  reportCount?: number;
+  rejectionReason?: string | null;
+  refundId?: string | null;
   createdAt: string | null;
   expiresAt: string | null;
 }

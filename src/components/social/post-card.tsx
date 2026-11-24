@@ -854,7 +854,17 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                         </DropdownMenuContent>
                      </DropdownMenu>
 
-                    {isOwnerPost && (
+                    {isOwnerPost && ((post as any)?.promotionStatus === 'pending_review' || (post as any)?.promotionStatus === 'pending_approval') ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/35 px-2.5 py-1 text-[11px] font-bold text-amber-500">
+                            <Megaphone className="h-3 w-3 shrink-0" />
+                            <span>Under Review • Usually approved within a few hours</span>
+                        </span>
+                    ) : isOwnerPost && (post as any)?.promotionStatus === 'active' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 px-2.5 py-1 text-[11px] font-bold text-emerald-500">
+                            <Megaphone className="h-3 w-3 shrink-0" />
+                            <span>Promoted • Live</span>
+                        </span>
+                    ) : isOwnerPost ? (
                         <Button
                             variant="ghost"
                             size="sm"
@@ -864,7 +874,7 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                             <Megaphone className="h-4 w-4" />
                             <span>Promote</span>
                         </Button>
-                    )}
+                    ) : null}
 
                     <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary" onClick={handleShare}>
                         <Share2 className="h-5 w-5" />

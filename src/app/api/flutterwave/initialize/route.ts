@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
+import { assertAdultUserForAction } from '@/lib/age-gate-server';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
@@ -60,10 +61,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Require verified email before unlocking coin purchases (phone-only users unaffected)
-    const verificationGate = await assertEmailVerifiedForAction(String(userId), 'coin purchases');
+    // Require verified email & 18+ age before unlocking coin purchases
+    const [verificationGate, ageGate] = await Promise.all([
+      assertEmailVerifiedForAction(String(userId), 'coin purchases'),
+      assertAdultUserForAction(String(userId), 'purchasing coins'),
+    ]);
     if (!verificationGate.allowed) {
       return NextResponse.json({ error: verificationGate.error }, { status: 403 });
+    }
+    if (!ageGate.allowed) {
+      return NextResponse.json({ error: ageGate.error }, { status: 403 });
     }
 
     const cleanCurrency = String(currency || 'NGN').toUpperCase();
