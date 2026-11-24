@@ -3,6 +3,13 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import { verifyAppCheckRequest } from '@/lib/app-check-server';
+import {
+  checkRateLimit,
+  parseStrictPositiveInt,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+} from '@/lib/security-shield';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
@@ -32,6 +39,8 @@ const CURRENCY_RATE_PER_COIN: Record<string, number> = {
  * Initializes a Flutterwave v3 Standard Checkout session for purchasing Lonkind Coins.
  */
 export async function POST(req: NextRequest) {
+  const appCheck = await verifyAppCheckRequest(req, 'flutterwave/initialize');
+  if (!appCheck.ok) return appCheck.response;
   try {
     if (!FLW_SECRET_KEY || FLW_SECRET_KEY.includes('xxxxxxx')) {
       return NextResponse.json(
@@ -50,15 +59,24 @@ export async function POST(req: NextRequest) {
       currency = 'NGN',
     } = body;
 
-    const coinsToCredit = Number(rawCoinsToCredit || coins || 0);
+    const coinsToCredit = parseStrictPositiveInt(Number(rawCoinsToCredit || coins), 10_000_000);
     const numericAmount = Number(amount || 0);
     const customerEmail = String(email || '').trim() || 'member@lonkind.com';
 
-    if (!userId || numericAmount <= 0 || coinsToCredit <= 0) {
+    if (!userId || !Number.isFinite(numericAmount) || numericAmount <= 0 || coinsToCredit === null) {
       return NextResponse.json(
-        { error: 'Missing required checkout fields: userId, amount, coins.' },
+        { error: 'Invalid checkout fields: userId, positive amount, and positive integer coins are required.' },
         { status: 400 }
       );
+    }
+
+    const rl = checkRateLimit({
+      namespace: 'flw_coin_init',
+      key: String(userId),
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
     // Require verified email & 18+ age before unlocking coin purchases

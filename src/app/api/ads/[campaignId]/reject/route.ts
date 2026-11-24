@@ -7,6 +7,18 @@ import {
   executeFlutterwaveAdRefund,
   sendAdRefundEmailIfConfigured,
 } from '@/lib/ad-flutterwave-refund';
+import {
+  admin2faRequiredResponse,
+  checkAdminStepUpSession,
+  extractAuditRequestMeta,
+} from '@/lib/admin-2fa';
+import {
+  checkRateLimit,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  sanitizePlainText,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,14 +42,41 @@ export async function POST(
     return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
 
+  const auditMeta = extractAuditRequestMeta(req);
+  const rl = checkRateLimit({
+    namespace: 'admin_ad_reject',
+    key: authCheck.uid,
+    ...RATE_LIMIT_PRESETS.ADMIN_SENSITIVE,
+  });
+  if (!rl.allowed) {
+    return rateLimitExceededResponse(rl.retryAfterSeconds);
+  }
+
   try {
     const campaignId = String(context?.params?.campaignId || '').trim();
     if (!campaignId) {
       return NextResponse.json({ error: 'Missing campaignId.' }, { status: 400 });
     }
 
+    // Require 2FA step-up verification when rejecting/refunding Flutterwave real-money ads
+    const preCheckSnap = await adminDb.collection('ad_campaigns').doc(campaignId).get();
+    if (preCheckSnap.exists && preCheckSnap.data()?.paymentMethod === 'flutterwave') {
+      const stepUp = await checkAdminStepUpSession(req, authCheck.uid);
+      if (!stepUp.verified) {
+        await writeSecurityAuditLog({
+          action: 'admin_ad_refund',
+          actorUid: authCheck.uid,
+          actorHandle: authCheck.handle,
+          ...auditMeta,
+          status: 'blocked',
+          details: { campaignId, reason: 'ADMIN_2FA_REQUIRED' },
+        });
+        return admin2faRequiredResponse(stepUp.reason);
+      }
+    }
+
     const body = await req.json().catch(() => null);
-    const reason = String(body?.reason || '').trim().slice(0, 200);
+    const reason = sanitizePlainText(body?.reason, 200);
     if (!reason) {
       return NextResponse.json(
         { error: 'Please select a rejection reason before rejecting and refunding.' },

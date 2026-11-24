@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTermiiOtp, formatPhoneNumberForTermii } from '@/lib/termii';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import {
+  checkRateLimit,
+  getClientIp,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +19,23 @@ export async function POST(req: NextRequest) {
         { error: 'pinId and pin are required.' },
         { status: 400 }
       );
+    }
+
+    const clientIp = getClientIp(req);
+    const rl = checkRateLimit({
+      namespace: 'termii_verify_otp',
+      key: `${clientIp}:${String(pinId).trim()}`,
+      ...RATE_LIMIT_PRESETS.AUTH_BRUTE_FORCE,
+    });
+    if (!rl.allowed) {
+      await writeSecurityAuditLog({
+        action: 'failed_login_spike',
+        ipAddress: clientIp,
+        userAgent: req.headers.get('user-agent') || '',
+        status: 'blocked',
+        details: { endpoint: '/api/termii/verify-otp' },
+      });
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
     // 1. Verify OTP with Termii

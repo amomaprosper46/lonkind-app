@@ -1,7 +1,15 @@
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { sendSendchampSms, sendSendchampWhatsApp } from '@/lib/sendchamp';
 import { adminDb as db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
+import {
+  checkRateLimit,
+  getClientIp,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 /**
  * Sendchamp Live OTP Generator & Dispatch Route
@@ -15,9 +23,25 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanPhone = phoneNumber.trim();
+    const clientIp = getClientIp(req);
+    const rl = checkRateLimit({
+      namespace: 'auth_send_otp',
+      key: `${clientIp}:${cleanPhone}`,
+      ...RATE_LIMIT_PRESETS.AUTH_BRUTE_FORCE,
+    });
+    if (!rl.allowed) {
+      await writeSecurityAuditLog({
+        action: 'failed_login_spike',
+        ipAddress: clientIp,
+        userAgent: req.headers.get('user-agent') || '',
+        status: 'blocked',
+        details: { endpoint: '/api/sendchamp/send-otp' },
+      });
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
 
-    // Generate secure 6-digit OTP code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit OTP code
+    const otpCode = String(crypto.randomInt(100000, 1000000));
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
 
     // Store in Firestore doc under 'sendchamp_otp_verifications'

@@ -15,34 +15,46 @@ service firebase.storage {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
+        request.auth.token.superAdmin == true
+      );
     }
 
-    function isImageUnder5MB() {
+    function isAdmin() {
+      return isSuperAdmin();
+    }
+
+    // Block dangerous executable/script extensions (.exe, .html, .js, .sh, .apk, .bat, .php, .svg)
+    function hasSafeMediaFilename(fileName) {
+      return !fileName.lower().matches('.*\\.(exe|html|htm|js|mjs|cjs|sh|bat|cmd|apk|php|ps1|svg|msi|scr)$');
+    }
+
+    function isImageUnder5MB(fileName) {
       return request.resource != null
+        && hasSafeMediaFilename(fileName)
         && request.resource.contentType != null
-        && request.resource.contentType.matches('image/.*')
+        && request.resource.contentType.matches('image/(jpeg|jpg|png|webp|gif|avif)')
         && request.resource.size < 5 * 1024 * 1024;
     }
 
-    function isVideoUnder50MB() {
+    function isVideoUnder30MB(fileName) {
       return request.resource != null
+        && hasSafeMediaFilename(fileName)
         && request.resource.contentType != null
-        && request.resource.contentType.matches('video/.*')
-        && request.resource.size < 50 * 1024 * 1024;
+        && request.resource.contentType.matches('video/(mp4|webm|quicktime|mov)')
+        && request.resource.size < 30 * 1024 * 1024;
     }
 
-    function isSafePostMediaUnder50MB() {
-      return request.resource != null
+    function isSafePostMediaUnder30MB(fileName) {
+      return isImageUnder5MB(fileName) || isVideoUnder30MB(fileName) || (
+        request.resource != null
+        && hasSafeMediaFilename(fileName)
         && request.resource.contentType != null
-        && (
-          request.resource.contentType.matches('image/.*') ||
-          request.resource.contentType.matches('video/.*') ||
-          request.resource.contentType.matches('audio/.*')
-        )
-        && request.resource.size < 50 * 1024 * 1024;
+        && request.resource.contentType.matches('audio/(mpeg|mp3|wav|ogg|webm|aac)')
+        && request.resource.size < 15 * 1024 * 1024
+      );
     }
 
     /* ====================================================================== */
@@ -58,9 +70,9 @@ service firebase.storage {
     /* AVATARS (`avatars/{userId}/...`) — image/* ONLY, max 5 MB, owner-only  */
     /* ====================================================================== */
 
-    match /avatars/{userId}/{allPaths=**} {
+    match /avatars/{userId}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(userId) && isImageUnder5MB();
+      allow write: if isOwner(userId) && isImageUnder5MB(fileName);
       allow delete: if isOwner(userId) || isAdmin();
     }
 
@@ -68,35 +80,45 @@ service firebase.storage {
     /* STREAM THUMBNAILS & COVERS — image/* ONLY, max 5 MB, owner-only        */
     /* ====================================================================== */
 
-    match /thumbnails/{userId}/{allPaths=**} {
+    match /thumbnails/{userId}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(userId) && isImageUnder5MB();
+      allow write: if isOwner(userId) && isImageUnder5MB(fileName);
       allow delete: if isOwner(userId) || isAdmin();
     }
 
-    match /stream_thumbnails/{userId}/{allPaths=**} {
+    match /stream_thumbnails/{userId}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(userId) && isImageUnder5MB();
-      allow delete: if isOwner(userId) || isAdmin();
-    }
-
-    /* ====================================================================== */
-    /* LIVE HIGHLIGHT CLIPS (`clips/{userId}/...`) — video/*, 50 MB, owner    */
-    /* ====================================================================== */
-
-    match /clips/{userId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if isOwner(userId) && isVideoUnder50MB();
+      allow write: if isOwner(userId) && isImageUnder5MB(fileName);
       allow delete: if isOwner(userId) || isAdmin();
     }
 
     /* ====================================================================== */
-    /* FEED POSTS MEDIA (`posts/{userId}/...`)                                */
+    /* AD BANNERS (`ad_banners/{userId}/...`) — 5 MB image / 30 MB video      */
     /* ====================================================================== */
 
-    match /posts/{userId}/{allPaths=**} {
+    match /ad_banners/{userId}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(userId) && isSafePostMediaUnder50MB();
+      allow write: if (isOwner(userId) || isAdmin()) && (isImageUnder5MB(fileName) || isVideoUnder30MB(fileName));
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* LIVE HIGHLIGHT CLIPS (`clips/{userId}/...`) — video/*, 30 MB, owner    */
+    /* ====================================================================== */
+
+    match /clips/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isVideoUnder30MB(fileName);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* FEED POSTS MEDIA (`posts/{userId}/...`) — 5 MB img / 30 MB video       */
+    /* ====================================================================== */
+
+    match /posts/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isSafePostMediaUnder30MB(fileName);
       allow delete: if isOwner(userId) || isAdmin();
     }
 
@@ -104,10 +126,18 @@ service firebase.storage {
     /* USER PERSONAL VAULT (`users/{userId}/...`)                             */
     /* ====================================================================== */
 
-    match /users/{userId}/{allPaths=**} {
+    match /users/{userId}/{fileName} {
       allow read: if isOwner(userId);
-      allow write: if isOwner(userId) && isSafePostMediaUnder50MB();
+      allow write: if isOwner(userId) && isSafePostMediaUnder30MB(fileName);
       allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    /* ====================================================================== */
+    /* PRIVATE DATABASE BACKUPS (`backups/**`) — SERVER ADMIN SDK ONLY        */
+    /* ====================================================================== */
+
+    match /backups/{allPaths=**} {
+      allow read, write: if false;
     }
 
     /* ====================================================================== */

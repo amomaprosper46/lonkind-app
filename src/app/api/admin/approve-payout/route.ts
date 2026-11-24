@@ -3,6 +3,17 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { verifySuperAdminRequest } from '@/lib/admin-auth';
 import {
+  admin2faRequiredResponse,
+  checkAdminStepUpSession,
+  extractAuditRequestMeta,
+} from '@/lib/admin-2fa';
+import {
+  checkRateLimit,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
+import {
   buildIdempotencyKey,
   commitDoubleEntryJournalInTx,
   DoubleEntryLeg,
@@ -101,8 +112,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized. Admin access required.' }, { status: 403 });
     }
 
+    const auditMeta = extractAuditRequestMeta(req);
+    const rl = checkRateLimit({
+      namespace: 'admin_approve_payout',
+      key: verifiedAdminUid,
+      ...RATE_LIMIT_PRESETS.ADMIN_SENSITIVE,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
+
+    const stepUp = await checkAdminStepUpSession(req, verifiedAdminUid);
+    if (!stepUp.verified) {
+      await writeSecurityAuditLog({
+        action: 'admin_payout_decision',
+        actorUid: verifiedAdminUid,
+        ...auditMeta,
+        status: 'blocked',
+        details: { reason: 'ADMIN_2FA_REQUIRED' },
+      });
+      return admin2faRequiredResponse(stepUp.reason);
+    }
+
     const body = await req.json();
     const { payoutId, action, rejectReason } = body;
+
+    await writeSecurityAuditLog({
+      action: 'admin_payout_decision',
+      actorUid: verifiedAdminUid,
+      ...auditMeta,
+      status: 'success',
+      details: { payoutId, decision: action },
+    });
 
     if (!payoutId || !action || !['approve', 'reject'].includes(action)) {
       return NextResponse.json({ error: 'Invalid request parameters.' }, { status: 400 });

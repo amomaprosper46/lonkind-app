@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { guardGeminiAiEndpoint } from '@/lib/app-check-server';
 
 const InputSchema = z.object({
   question: z.string().trim().min(1, 'Question cannot be empty.'),
@@ -178,6 +179,8 @@ Examples:
  * POST: Secure, Context-Aware Lonki AI Core Router with Full Conversational Memory
  */
 export async function POST(req: NextRequest) {
+  const aiGuard = await guardGeminiAiEndpoint(req, 'assistant', 20, 10 * 60 * 1000);
+  if (!aiGuard.ok) return aiGuard.response;
   try {
     const body = await req.json();
     const parsed = InputSchema.safeParse(body);

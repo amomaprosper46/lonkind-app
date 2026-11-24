@@ -5,6 +5,12 @@ import crypto from 'crypto';
 import { commitDoubleEntryJournalInTx, DoubleEntryLeg } from '@/lib/ledger';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import {
+  checkRateLimit,
+  parseStrictPositiveInt,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+} from '@/lib/security-shield';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 
@@ -135,7 +141,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required payout fields.' }, { status: 400 });
     }
 
-    const requiredDiamonds = Number(diamondAmount || Math.ceil(amountNaira / rate));
+    const rl = checkRateLimit({
+      namespace: 'ps_payout',
+      key: userId,
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
+
+    const computedDiamonds = Number(diamondAmount || Math.ceil(amountNaira / rate));
+    const requiredDiamonds = parseStrictPositiveInt(computedDiamonds, 10_000_000);
+    if (requiredDiamonds === null) {
+      return NextResponse.json(
+        { error: 'Withdrawal diamond amount must be a strict positive integer.' },
+        { status: 400 }
+      );
+    }
     const grossAmount = Number((requiredDiamonds * rate).toFixed(2));
     const platformFee = Number((grossAmount * 0.25).toFixed(2));
     const amountPaid = Number((grossAmount * 0.75).toFixed(2));

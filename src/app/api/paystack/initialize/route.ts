@@ -3,6 +3,12 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import {
+  checkRateLimit,
+  parseStrictPositiveInt,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+} from '@/lib/security-shield';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
@@ -44,11 +50,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { email, userId, amount, amountNaira, coins, coinsToCredit: rawCoins, currency = 'NGN' } = body;
     const finalAmount = Number(amount || amountNaira || 0);
-    const coinsToCredit = Number(rawCoins || coins || 0);
+    const coinsToCredit = parseStrictPositiveInt(Number(rawCoins || coins), 10_000_000);
 
     // Validate incoming parameters
-    if (!email || !userId || finalAmount <= 0 || coinsToCredit <= 0) {
-      return NextResponse.json({ error: 'Missing core tracking entries: email, userId, amount, coins' }, { status: 400 });
+    if (!email || !userId || !Number.isFinite(finalAmount) || finalAmount <= 0 || coinsToCredit === null) {
+      return NextResponse.json({ error: 'Invalid checkout fields: email, userId, positive amount, and positive integer coins required.' }, { status: 400 });
+    }
+
+    const rl = checkRateLimit({
+      namespace: 'ps_coin_init',
+      key: String(userId),
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
     // Require verified email & 18+ age before unlocking coin purchases

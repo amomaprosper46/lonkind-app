@@ -9,6 +9,13 @@ import {
 } from '@/lib/ledger';
 import { giftEventBroker } from '@/lib/gift-event-broker';
 import { redisStreamLeaderboard } from '@/lib/redis-leaderboard';
+import {
+  checkRateLimit,
+  parseStrictPositiveInt,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  sanitizePlainText,
+} from '@/lib/security-shield';
 
 const InputSchema = z.object({
   toUserId: z.string().trim().min(1, 'Recipient target UID required.'),
@@ -56,6 +63,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Rate limit: max 10 gift requests per minute per user
+    const rl = checkRateLimit({
+      namespace: 'gift_coins',
+      key: verifiedSenderUid,
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
+
     const body = await req.json();
     const parsed = InputSchema.safeParse(body);
 
@@ -66,12 +83,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const validCoinAmount = parseStrictPositiveInt(parsed.data.coinAmount, 10_000_000);
+    if (validCoinAmount === null) {
+      return NextResponse.json(
+        { error: 'Coin amount must be a strict positive integer.' },
+        { status: 400 }
+      );
+    }
+
     const {
       toUserId,
-      coinAmount,
       unitPrice,
       quantity,
-      giftName,
       giftEmoji,
       roomId,
       spaceId,
@@ -79,6 +102,8 @@ export async function POST(req: NextRequest) {
       isCauseDonation,
       idempotencyKey: clientKey,
     } = parsed.data;
+    const coinAmount = validCoinAmount;
+    const giftName = parsed.data.giftName ? sanitizePlainText(parsed.data.giftName, 60) : undefined;
     const targetUserId = toUserId.replace(/^live_/, '');
     const effectiveRoomId = roomId || spaceId || `live_${targetUserId}`;
     const effectiveQuantity = quantity && quantity > 0 ? quantity : 1;

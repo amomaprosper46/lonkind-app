@@ -3,6 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
 import { getMessaging } from 'firebase-admin/messaging';
+import { getAppCheck } from 'firebase-admin/app-check';
 import { getFirebaseAdminServiceAccount } from './parse-service-account';
 
 function initApp() {
@@ -26,3 +27,4 @@ export const adminDb = getFirestore(app);
 export const adminAuth = getAuth(app);
 export const adminStorage = getStorage(app);
 export const adminMessaging = getMessaging(app);
+export const adminAppCheck = getAppCheck(app);

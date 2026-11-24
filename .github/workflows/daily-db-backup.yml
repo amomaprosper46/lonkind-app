@@ -1,0 +1,22 @@
+name: Lonkind Daily Database Backup (03:00 AM WAT)
+
+on:
+  schedule:
+    # 02:00 UTC = 03:00 AM WAT (West Africa Time, UTC+1)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger-daily-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Lonkind Daily Backup Endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET secret is not set in GitHub Repository Secrets."
+            exit 1
+          fi
+          curl --fail --silent --show-error \
+            -X POST "https://lonkind.com/api/cron/daily-backup" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"

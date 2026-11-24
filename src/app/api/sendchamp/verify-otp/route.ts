@@ -6,6 +6,13 @@ import {
   CONSENT_VERSION,
   DEFAULT_USER_SETTINGS_SERVER as DEFAULT_USER_SETTINGS,
 } from '@/lib/settings-defaults';
+import {
+  checkRateLimit,
+  getClientIp,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 /**
  * Sendchamp Live OTP Verification & Auth Custom Token Route
@@ -16,6 +23,23 @@ export async function POST(req: NextRequest) {
 
     if (!phoneNumber || !code) {
       return NextResponse.json({ error: 'Phone number and verification code are required.' }, { status: 400 });
+    }
+
+    const clientIp = getClientIp(req);
+    const rl = checkRateLimit({
+      namespace: 'auth_verify_otp',
+      key: `${clientIp}:${String(phoneNumber).trim()}`,
+      ...RATE_LIMIT_PRESETS.AUTH_BRUTE_FORCE,
+    });
+    if (!rl.allowed) {
+      await writeSecurityAuditLog({
+        action: 'failed_login_spike',
+        ipAddress: clientIp,
+        userAgent: req.headers.get('user-agent') || '',
+        status: 'blocked',
+        details: { endpoint: '/api/sendchamp/verify-otp' },
+      });
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
     // Enforce Layer 1 Legal Consent Gate on phone signup

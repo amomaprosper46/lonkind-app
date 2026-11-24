@@ -3,6 +3,17 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 import { verifySuperAdminRequest } from '@/lib/admin-auth';
 import { sendAdRefundEmailIfConfigured } from '@/lib/ad-flutterwave-refund';
+import {
+  admin2faRequiredResponse,
+  checkAdminStepUpSession,
+  extractAuditRequestMeta,
+} from '@/lib/admin-2fa';
+import {
+  checkRateLimit,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +32,38 @@ export async function POST(
   if (!authCheck.authorized) {
     return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
+
+  const auditMeta = extractAuditRequestMeta(req);
+  const rl = checkRateLimit({
+    namespace: 'admin_ad_mark_refunded',
+    key: authCheck.uid,
+    ...RATE_LIMIT_PRESETS.ADMIN_SENSITIVE,
+  });
+  if (!rl.allowed) {
+    return rateLimitExceededResponse(rl.retryAfterSeconds);
+  }
+
+  const stepUp = await checkAdminStepUpSession(req, authCheck.uid);
+  if (!stepUp.verified) {
+    await writeSecurityAuditLog({
+      action: 'admin_ad_manual_refund',
+      actorUid: authCheck.uid,
+      actorHandle: authCheck.handle,
+      ...auditMeta,
+      status: 'blocked',
+      details: { campaignId: context?.params?.campaignId, reason: 'ADMIN_2FA_REQUIRED' },
+    });
+    return admin2faRequiredResponse(stepUp.reason);
+  }
+
+  await writeSecurityAuditLog({
+    action: 'admin_ad_manual_refund',
+    actorUid: authCheck.uid,
+    actorHandle: authCheck.handle,
+    ...auditMeta,
+    status: 'success',
+    details: { campaignId: context?.params?.campaignId },
+  });
 
   try {
     const campaignId = String(context?.params?.campaignId || '').trim();

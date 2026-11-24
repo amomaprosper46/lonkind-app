@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
+import { guardGeminiAiEndpoint } from '@/lib/app-check-server';
 
 /**
  * Lonkind AI Voice Note & Chat Translator Route
  * Translates audio voice notes & text into target language
  */
 export async function POST(req: NextRequest) {
+  const aiGuard = await guardGeminiAiEndpoint(req, 'voice_translator', 20, 10 * 60 * 1000);
+  if (!aiGuard.ok) return aiGuard.response;
   try {
     const { text, targetLanguage = 'English' } = await req.json();
 

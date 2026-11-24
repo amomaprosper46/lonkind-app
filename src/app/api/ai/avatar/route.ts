@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardGeminiAiEndpoint } from '@/lib/app-check-server';
 
 export async function POST(req: NextRequest) {
+  const aiGuard = await guardGeminiAiEndpoint(req, 'ai_avatar', 10, 10 * 60 * 1000);
+  if (!aiGuard.ok) return aiGuard.response;
   try {
     const body = await req.json();
     const { name, handle, bio, style, mood } = body;

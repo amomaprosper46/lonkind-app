@@ -15,37 +15,56 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
+    // Reusable Super-Admin (`mow`) helper: checks Firestore `role == "super_admin"` or custom claim `superAdmin == true`
+    function isSuperAdmin() {
       return isSignedIn() && (
         (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', '') == 'super_admin') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'super_admin') ||
-        (request.auth.token != null && request.auth.token.get('role', '') == 'super_admin')
+        (request.auth.token != null && (
+          request.auth.token.get('superAdmin', false) == true ||
+          request.auth.token.get('role', '') == 'super_admin'
+        ))
       );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin();
     }
 
     // Financial, role, and trust fields that NO client may ever forge or mutate directly
     function protectedUserKeys() {
       return [
-        'walletBalance', 'coins', 'diamonds', 'balance', 'balanceUSD', 'balanceNaira',
+        'walletBalance', 'coins', 'diamonds', 'coinBalance', 'bonusBalance', 'cashableBalance',
+        'balance', 'balanceUSD', 'balanceNaira',
         'earningsNaira', 'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
         'hasMadeFirstPurchase', 'firstPurchaseAt', 'promoBonusCoinsReceived',
-        'isAdmin', 'isVerified', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
+        'isAdmin', 'isVerified', 'isOfficialBrand', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
         'isProfessional', 'fraudFlagged', 'velocityFlagged', 'createdAt'
       ];
     }
 
     function hasValidInitialWalletState() {
       return !request.resource.data.keys().hasAny([
-        'walletBalance', 'balance', 'balanceUSD', 'balanceNaira', 'earningsNaira',
+        'walletBalance', 'coinBalance', 'bonusBalance', 'cashableBalance',
+        'balance', 'balanceUSD', 'balanceNaira', 'earningsNaira',
         'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
         'hasMadeFirstPurchase', 'firstPurchaseAt', 'promoBonusCoinsReceived',
-        'isAdmin', 'isVerified', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
+        'isAdmin', 'isVerified', 'isOfficialBrand', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
         'isProfessional', 'fraudFlagged', 'velocityFlagged'
       ]) &&
       (!('coins' in request.resource.data) || request.resource.data.coins == 0) &&
       (!('diamonds' in request.resource.data) || request.resource.data.diamonds == 0);
+    }
+
+    // Enforce 18+ age verification flag and valid @gmail.com email (when email is supplied) on new client signups
+    function hasValidAdultAndGmailSignup() {
+      return (!('email' in request.resource.data) ||
+        (request.resource.data.email is string &&
+          request.resource.data.email.lower().matches('^[^\\s@]+@gmail\\.com$'))) &&
+        (!('isAdult' in request.resource.data) || request.resource.data.isAdult == true) &&
+        (!('age' in request.resource.data) || (request.resource.data.age is number && request.resource.data.age >= 18));
     }
 
     // Enforce realistic First + Last Name on direct client-side user document creation
@@ -108,8 +127,13 @@ service cloud.firestore {
       // Authenticated users can read public profile docs (private vaults live in subcollections)
       allow get, list: if isSignedIn();
 
-      // Prevent minting coins/walletBalance, forging roles, or registering fake/single-word names on signup
-      allow create: if isAdmin() || (isOwner(userId) && hasValidInitialWalletState() && hasValidRealName());
+      // Prevent minting coins/walletBalance, forging roles, underage/non-Gmail signups, or fake names on signup
+      allow create: if isSuperAdmin() || (
+        isOwner(userId) &&
+        hasValidInitialWalletState() &&
+        hasValidRealName() &&
+        hasValidAdultAndGmailSignup()
+      );
 
       // Users may ONLY edit their own non-financial profile/privacy/blockedWords fields
       allow update: if isSignedIn() && (
@@ -656,6 +680,41 @@ service cloud.firestore {
 
     match /ad_refund_idempotency/{refundId} {
       allow read, write: if false;
+    }
+
+    // Immutable Defense-in-Depth Security Audit Trail & Super-Admin 2FA
+    match /security_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /admin_2fa_challenges/{uid} {
+      allow read, write: if false;
+    }
+
+    match /admin_2fa_sessions/{uid} {
+      allow read, write: if false;
+    }
+
+    match /system_backups/{backupId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // Zero client-side writes on dedicated wallet, coin transaction, and payout collections
+    match /wallets/{walletId} {
+      allow read: if isSuperAdmin() || (isSignedIn() && (walletId == request.auth.uid || resource.data.userId == request.auth.uid));
+      allow create, update, delete: if false;
+    }
+
+    match /coin_transactions/{txId} {
+      allow read: if isSuperAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /payout_requests/{reqId} {
+      allow read: if isSuperAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     /* ====================================================================== */

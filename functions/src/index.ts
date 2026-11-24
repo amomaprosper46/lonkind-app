@@ -1,6 +1,7 @@
 import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 import { createHmac, timingSafeEqual } from "crypto";
+import * as zlib from "zlib";
 import * as admin from 'firebase-admin';
 import * as logger from "firebase-functions/logger";
 import { onRequest } from "firebase-functions/v2/https";
@@ -506,5 +507,164 @@ export const flutterwaveWebhook = onRequest(
     }
 
     res.status(200).send("OK");
+  }
+);
+
+// =========================================================================
+// 💾 FEATURE D: SCHEDULED DAILY FIRESTORE BACKUP (03:00 AM AFRICA/LAGOS)
+// =========================================================================
+
+const BACKUP_COLLECTIONS = [
+  "users",
+  "wallets",
+  "transactions",
+  "coin_transactions",
+  "payoutRequests",
+  "payout_requests",
+  "ad_campaigns",
+  "ad_revenue_ledger",
+  "security_audit_logs",
+];
+
+function serializeBackupVal(val: any): any {
+  if (val === null || val === undefined) return val;
+  if (typeof val?.toDate === "function") return val.toDate().toISOString();
+  if (val instanceof Date) return val.toISOString();
+  if (Array.isArray(val)) return val.map(serializeBackupVal);
+  if (typeof val === "object") {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (k === "fcmTokens" || k === "ephemeralCache") continue;
+      out[k] = serializeBackupVal(v);
+    }
+    return out;
+  }
+  return val;
+}
+
+/**
+ * Automated Daily Firestore Backup to Private Firebase Storage (`backups/`).
+ * Runs every 24 hours at 03:00 AM Africa/Lagos time, compresses critical collections
+ * with Gzip (`zlib`), enforces 14-day rolling retention, and logs to `system_backups`
+ * and `security_audit_logs` (displayed in `mow`'s Admin Dashboard).
+ */
+export const scheduledDailyFirestoreBackup = onSchedule(
+  {
+    schedule: "0 3 * * *",
+    timeZone: "Africa/Lagos",
+    memory: "512MiB",
+    timeoutSeconds: 300,
+  },
+  async () => {
+    const backupRef = db.collection("system_backups").doc();
+    const now = new Date();
+    const dateStamp = now.toISOString().slice(0, 10);
+    const fileName = `lonkind_backup_${dateStamp}.json.gz`;
+    const storagePath = `backups/${fileName}`;
+
+    try {
+      const collectionsData: Record<string, Record<string, any>[]> = {};
+      const docCounts: Record<string, number> = {};
+      let totalDocs = 0;
+
+      for (const colName of BACKUP_COLLECTIONS) {
+        const snap = await db.collection(colName).limit(5000).get();
+        if (snap.empty) {
+          docCounts[colName] = 0;
+          continue;
+        }
+        collectionsData[colName] = snap.docs.map((d) => ({
+          _id: d.id,
+          ...serializeBackupVal(d.data()),
+        }));
+        docCounts[colName] = snap.size;
+        totalDocs += snap.size;
+      }
+
+      const payload = {
+        schemaVersion: "1.0",
+        app: "Lonkind",
+        exportedAt: now.toISOString(),
+        retentionDays: 14,
+        totalDocs,
+        docCounts,
+        collections: collectionsData,
+      };
+
+      const gzipBuffer = zlib.gzipSync(Buffer.from(JSON.stringify(payload), "utf8"), { level: 9 });
+      const bucket = admin.storage().bucket();
+      await bucket.file(storagePath).save(gzipBuffer, {
+        resumable: false,
+        contentType: "application/gzip",
+        private: true,
+        metadata: {
+          cacheControl: "no-store, max-age=0",
+          metadata: { app: "lonkind", trigger: "scheduled", totalDocs: String(totalDocs) },
+        },
+      });
+
+      // Rolling 14-day retention cleanup
+      let prunedOldBackups = 0;
+      const cutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+      const [files] = await bucket.getFiles({ prefix: "backups/" });
+      for (const f of files) {
+        const createdMs = f.metadata?.timeCreated ? Date.parse(f.metadata.timeCreated) : 0;
+        if (createdMs > 0 && createdMs < cutoffMs && f.name !== storagePath) {
+          await f.delete().catch(() => {});
+          prunedOldBackups += 1;
+        }
+      }
+
+      await backupRef.set({
+        id: backupRef.id,
+        fileName,
+        storagePath,
+        bucketName: bucket.name,
+        sizeBytes: gzipBuffer.length,
+        totalDocs,
+        docCounts,
+        trigger: "scheduled",
+        status: "healthy",
+        errorMessage: null,
+        prunedOldBackups,
+        createdByUid: "firebase_scheduler",
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await db.collection("security_audit_logs").add({
+        action: "database_backup_created",
+        actorUid: "firebase_scheduler",
+        actorHandle: null,
+        ipAddress: "cloud-scheduler",
+        status: "success",
+        immutable: true,
+        details: {
+          backupId: backupRef.id,
+          fileName,
+          sizeBytes: gzipBuffer.length,
+          totalDocs,
+          prunedOldBackups,
+        },
+        timestamp: FieldValue.serverTimestamp(),
+      });
+
+      logger.info(`[DailyBackup] ✅ Saved ${storagePath} (${gzipBuffer.length} bytes, ${totalDocs} docs, pruned ${prunedOldBackups})`);
+    } catch (err: any) {
+      logger.error("[DailyBackup] ❌ Scheduled backup failed:", err);
+      await backupRef.set({
+        id: backupRef.id,
+        fileName: "failed",
+        storagePath: "",
+        sizeBytes: 0,
+        totalDocs: 0,
+        docCounts: {},
+        trigger: "scheduled",
+        status: "failed",
+        errorMessage: err?.message || "Scheduled backup failed",
+        prunedOldBackups: 0,
+        createdByUid: "firebase_scheduler",
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
   }
 );

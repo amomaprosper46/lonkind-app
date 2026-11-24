@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ShieldCheck, Wallet, Sparkles, Loader2, Megaphone } from 'lucide-react';
+import { ShieldCheck, Wallet, Sparkles, Loader2, Megaphone, Lock } from 'lucide-react';
 import AdminPanelView from '@/components/social/admin-panel-view';
 import AdminModerationDashboard from '@/components/social/admin-moderation-dashboard';
 import AdminEventsAndGiftsStudio from '@/components/social/admin-events-and-gifts-studio';
 import { AdminAdManager } from '@/components/social/admin-ad-manager';
+import { AdminSecurityShield } from '@/components/social/admin-security-shield';
+import { AdminDatabaseBackups } from '@/components/social/admin-database-backups';
 import type { CurrentUser } from '@/components/social/social-dashboard';
 
 export default function AdminDashboardPage() {
@@ -34,25 +36,31 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <Tabs defaultValue="ads" className="space-y-6">
-      <TabsList className="grid w-full max-w-3xl grid-cols-2 sm:grid-cols-4 h-auto gap-1 rounded-xl p-1">
-        <TabsTrigger value="ads" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
-          <Megaphone className="h-4 w-4" />
-          Ad Manager
-        </TabsTrigger>
-        <TabsTrigger value="payouts" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
-          <Wallet className="h-4 w-4" />
-          Payout Approvals
-        </TabsTrigger>
-        <TabsTrigger value="moderation" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
-          <ShieldCheck className="h-4 w-4" />
-          Moderation
-        </TabsTrigger>
-        <TabsTrigger value="events" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
-          <Sparkles className="h-4 w-4" />
-          Events &amp; Gifts
-        </TabsTrigger>
-      </TabsList>
+    <div className="space-y-5">
+      <AdminSecurityShield />
+      <Tabs defaultValue="ads" className="space-y-6">
+        <TabsList className="grid w-full max-w-4xl grid-cols-2 sm:grid-cols-5 h-auto gap-1 rounded-xl p-1">
+          <TabsTrigger value="ads" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
+            <Megaphone className="h-4 w-4" />
+            Ad Manager
+          </TabsTrigger>
+          <TabsTrigger value="payouts" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
+            <Wallet className="h-4 w-4" />
+            Payout Approvals
+          </TabsTrigger>
+          <TabsTrigger value="moderation" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
+            <ShieldCheck className="h-4 w-4" />
+            Moderation
+          </TabsTrigger>
+          <TabsTrigger value="events" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
+            <Sparkles className="h-4 w-4" />
+            Events &amp; Gifts
+          </TabsTrigger>
+          <TabsTrigger value="security" className="gap-1.5 text-xs sm:text-sm font-semibold py-2">
+            <Lock className="h-4 w-4 text-emerald-500" />
+            Security &amp; System
+          </TabsTrigger>
+        </TabsList>
 
       <TabsContent value="ads">
         <AdminAdManager />
@@ -69,6 +77,12 @@ export default function AdminDashboardPage() {
       <TabsContent value="events">
         <AdminEventsAndGiftsStudio />
       </TabsContent>
+
+      <TabsContent value="security" className="space-y-6">
+        <AdminDatabaseBackups />
+        <AdminSecurityShield showAuditTable />
+      </TabsContent>
     </Tabs>
+    </div>
   );
 }

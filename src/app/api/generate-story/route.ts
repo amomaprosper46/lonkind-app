@@ -3,6 +3,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { guardGeminiAiEndpoint } from '@/lib/app-check-server';
 
 // Enforce structured input tracking and validate parameters
 const InputSchema = z.object({
@@ -14,6 +15,9 @@ const InputSchema = z.object({
  * POST: Monetized, Injection-Resistant Creative Story Generation Router
  */
 export async function POST(req: NextRequest) {
+  const aiGuard = await guardGeminiAiEndpoint(req, 'generate_story', 10, 10 * 60 * 1000);
+  if (!aiGuard.ok) return aiGuard.response;
+
   const STORY_GENERATION_COST = 2; // Fixed wallet transaction metric
 
   try {

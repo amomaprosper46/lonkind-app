@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase-admin';
+import { guardGeminiAiEndpoint } from '@/lib/app-check-server';
 
 const roastRateLimit = new Map<string, number>();
 
 export async function POST(req: NextRequest) {
+  const aiGuard = await guardGeminiAiEndpoint(req, 'ai_roast', 10, 10 * 60 * 1000);
+  if (!aiGuard.ok) return aiGuard.response;
   try {
     const body = await req.json();
     const { userId, name, handle, bio, postCount, followersCount, followingCount, isProfessional, badges, style } = body;

@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { verifySuperAdminRequest } from '@/lib/admin-auth';
 import { FieldValue } from 'firebase-admin/firestore';
+import {
+  admin2faRequiredResponse,
+  checkAdminStepUpSession,
+  extractAuditRequestMeta,
+} from '@/lib/admin-2fa';
+import {
+  checkRateLimit,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,9 +51,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized: Lonkind Admin access required.' }, { status: 403 });
   }
 
+  const auditMeta = extractAuditRequestMeta(req);
+  const rl = checkRateLimit({
+    namespace: 'admin_platform_controls',
+    key: adminUser.uid,
+    ...RATE_LIMIT_PRESETS.ADMIN_SENSITIVE,
+  });
+  if (!rl.allowed) {
+    return rateLimitExceededResponse(rl.retryAfterSeconds);
+  }
+
   try {
     const body = await req.json();
     const { action } = body;
+
+    // Require 2FA step-up for high-risk role/balance mutations
+    const highRiskActions = new Set(['grant_event_reward', 'update_user_role', 'set_user_role']);
+    if (highRiskActions.has(String(action || ''))) {
+      const stepUp = await checkAdminStepUpSession(req, adminUser.uid);
+      if (!stepUp.verified) {
+        await writeSecurityAuditLog({
+          action: 'admin_platform_control',
+          actorUid: adminUser.uid,
+          ...auditMeta,
+          status: 'blocked',
+          details: { action, reason: 'ADMIN_2FA_REQUIRED' },
+        });
+        return admin2faRequiredResponse(stepUp.reason);
+      }
+    }
+
+    await writeSecurityAuditLog({
+      action: action === 'update_user_role' || action === 'set_user_role' ? 'admin_role_change' : 'admin_platform_control',
+      actorUid: adminUser.uid,
+      ...auditMeta,
+      status: 'success',
+      details: { action },
+    });
 
     // 1. Set Free Gift of the Day / Active Event Configuration
     if (action === 'set_event_config') {

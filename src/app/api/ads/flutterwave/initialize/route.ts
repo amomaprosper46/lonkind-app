@@ -9,6 +9,13 @@ import {
 } from '@/lib/ads-schema';
 import { validateAdContentSafety } from '@/lib/age-and-ad-safety';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import { verifyAppCheckRequest } from '@/lib/app-check-server';
+import {
+  checkRateLimit,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  sanitizePlainText,
+} from '@/lib/security-shield';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +37,8 @@ function resolveCanonicalOrigin(req: NextRequest): string {
  * completely isolated from coin purchases (`flw_tx_...` / `LONKIND_COIN_`).
  */
 export async function POST(req: NextRequest) {
+  const appCheck = await verifyAppCheckRequest(req, 'ads/flutterwave/initialize');
+  if (!appCheck.ok) return appCheck.response;
   try {
     if (!FLW_SECRET_KEY || FLW_SECRET_KEY.includes('xxxxxxx')) {
       return NextResponse.json(
@@ -51,6 +60,15 @@ export async function POST(req: NextRequest) {
     }
 
     const uid = decoded.uid as string;
+    const rl = checkRateLimit({
+      namespace: 'ads_flw_init',
+      key: uid,
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
+
     const ageGate = await assertAdultUserForAction(uid, 'purchasing promoted ads');
     if (!ageGate.allowed) {
       return NextResponse.json({ error: ageGate.error }, { status: 403 });
@@ -69,16 +87,14 @@ export async function POST(req: NextRequest) {
     const expectedAmount = getPromoPackagePrice(pkg, currency);
 
     const targetType = body.targetType === 'live' ? 'live' : 'post';
-    const title = String(body.title || '').trim().slice(0, 120);
-    const description = String(body.description || '').trim().slice(0, 280);
+    const title = sanitizePlainText(body.title, 120);
+    const description = sanitizePlainText(body.description, 280);
     const mediaUrl = String(body.mediaUrl || '').trim();
     const thumbnailUrl = String(body.thumbnailUrl || mediaUrl).trim();
     const mediaType = body.mediaType === 'video' ? 'video' : 'image';
-    const ctaLabel = String(
-      body.ctaLabel || (targetType === 'live' ? 'Join Live' : 'View Post')
-    )
-      .trim()
-      .slice(0, 30);
+    const ctaLabel =
+      sanitizePlainText(body.ctaLabel, 30) ||
+      (targetType === 'live' ? 'Join Live' : 'View Post');
     const targetPostId = targetType === 'post' ? String(body.targetPostId || '').trim() || null : null;
     const targetHostUid = targetType === 'live' ? uid : null;
     const destinationUrl =

@@ -3,6 +3,14 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import { verifyAppCheckRequest } from '@/lib/app-check-server';
+import {
+  checkRateLimit,
+  parseStrictPositiveInt,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+  sanitizePlainText,
+} from '@/lib/security-shield';
 
 const SendStreamGiftSchema = z.object({
   streamId: z.string().min(1),
@@ -24,6 +32,8 @@ const SendStreamGiftSchema = z.object({
  *  5. Advances `streams/{streamId}.streamGoal.currentAmount` when goal type === 'COINS'
  */
 export async function POST(req: NextRequest) {
+  const appCheck = await verifyAppCheckRequest(req, 'streams/send-gift');
+  if (!appCheck.ok) return appCheck.response;
   try {
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
@@ -34,6 +44,16 @@ export async function POST(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     const senderUid = decoded.uid;
 
+    // Rate limit: max 10 gift requests per minute per user
+    const rl = checkRateLimit({
+      namespace: 'send_gift',
+      key: senderUid,
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
+
     const raw = await req.json().catch(() => null);
     const parsed = SendStreamGiftSchema.safeParse(raw);
     if (!parsed.success) {
@@ -43,7 +63,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { streamId, hostUid, giftId, giftName, giftEmoji, price, comboCount } = parsed.data;
+    const { streamId, hostUid, giftId, giftEmoji, comboCount } = parsed.data;
+    const price = parseStrictPositiveInt(parsed.data.price, 10_000_000);
+    if (price === null) {
+      return NextResponse.json(
+        { error: 'Gift price must be a strict positive integer.' },
+        { status: 400 }
+      );
+    }
+    const giftName = sanitizePlainText(parsed.data.giftName, 60) || 'Gift';
     const cleanHostUid = hostUid.replace(/^live_/, '');
 
     if (senderUid === cleanHostUid) {

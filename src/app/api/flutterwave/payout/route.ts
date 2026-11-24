@@ -5,6 +5,12 @@ import crypto from 'crypto';
 import { commitDoubleEntryJournalInTx, DoubleEntryLeg } from '@/lib/ledger';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import {
+  checkRateLimit,
+  parseStrictPositiveInt,
+  RATE_LIMIT_PRESETS,
+  rateLimitExceededResponse,
+} from '@/lib/security-shield';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
@@ -223,6 +229,16 @@ export async function POST(req: NextRequest) {
     }
     const userId = decodedToken.uid;
 
+    // Rate limit: max 10 payout requests per minute per user
+    const rl = checkRateLimit({
+      namespace: 'flw_payout',
+      key: userId,
+      ...RATE_LIMIT_PRESETS.FINANCIAL_ACTION,
+    });
+    if (!rl.allowed) {
+      return rateLimitExceededResponse(rl.retryAfterSeconds);
+    }
+
     // Require verified email & 18+ age before unlocking creator payouts
     const [verificationGate, ageGate] = await Promise.all([
       assertEmailVerifiedForAction(userId, 'creator payouts'),
@@ -237,10 +253,10 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { diamondAmount: rawDiamondAmount, bankCode, accountNumber, accountName, currency = 'NGN' } = body;
-    const diamondAmount = Number(rawDiamondAmount || 0);
+    const diamondAmount = parseStrictPositiveInt(Number(rawDiamondAmount), 10_000_000);
 
-    if (!diamondAmount || !bankCode || !accountNumber || !accountName) {
-      return NextResponse.json({ error: 'Missing required payout fields (diamondAmount, bankCode, accountNumber, accountName).' }, { status: 400 });
+    if (diamondAmount === null || !bankCode || !accountNumber || !accountName) {
+      return NextResponse.json({ error: 'Invalid or missing payout fields. diamondAmount must be a positive integer.' }, { status: 400 });
     }
 
     if (diamondAmount < MINIMUM_PAYOUT_DIAMONDS) {

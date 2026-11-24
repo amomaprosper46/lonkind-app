@@ -200,15 +200,21 @@ export const OFFICIAL_BRAND_PROFILE = {
   role: 'brand',
 };
 
+const BLOCKED_AD_EXT_RE = /\.(exe|apk|bat|cmd|scr|msi|sh|dmg|ps1|vbs|jar|dll|com|pif)(\?|#|$)/i;
+
 export function isSafeAdDestinationUrl(raw: string): boolean {
   if (!raw || typeof raw !== 'string') return false;
   const trimmed = raw.trim();
+  if (trimmed.length > 2048 || /[\s<>'"`]/.test(trimmed)) return false;
   if (trimmed.startsWith('/')) {
-    return !trimmed.startsWith('//');
+    return !trimmed.startsWith('//') && !trimmed.includes('..');
   }
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'https:';
+    if (parsed.protocol !== 'https:') return false;
+    if (!parsed.hostname || !parsed.hostname.includes('.')) return false;
+    if (BLOCKED_AD_EXT_RE.test(parsed.pathname)) return false;
+    return true;
   } catch {
     return false;
   }

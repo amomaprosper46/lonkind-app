@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { guardGeminiAiEndpoint } from '@/lib/app-check-server';
 
 // Input validation schema
 const PersonalAiInputSchema = z.object({
@@ -28,6 +29,8 @@ function normalizeContent(content: any) {
  * POST: Conversational AI Route
  */
 export async function POST(req: NextRequest) {
+  const aiGuard = await guardGeminiAiEndpoint(req, 'personal_ai', 20, 10 * 60 * 1000);
+  if (!aiGuard.ok) return aiGuard.response;
   try {
     const body = await req.json();
 

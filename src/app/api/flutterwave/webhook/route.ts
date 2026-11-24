@@ -7,6 +7,11 @@ import {
   DoubleEntryLeg,
 } from '@/lib/ledger';
 import { settleCoinPurchaseWithFirstTimeBonus } from '@/lib/first-purchase-bonus';
+import {
+  getClientIp,
+  verifyWebhookSignatureTimingSafe,
+  writeSecurityAuditLog,
+} from '@/lib/security-shield';
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || process.env.FLUTTERWAVE_SECRET_KEY || '';
 const FLW_WEBHOOK_HASH =
@@ -22,9 +27,20 @@ export async function POST(req: NextRequest) {
   try {
     const verifHash = req.headers.get('verif-hash') || req.headers.get('verif_hash') || '';
 
-    // If a dedicated webhook secret hash is configured, require an exact match
-    if (FLW_WEBHOOK_HASH && verifHash !== FLW_WEBHOOK_HASH) {
+    // Strict constant-time webhook signature verification (`crypto.timingSafeEqual`)
+    if (
+      !FLW_WEBHOOK_HASH ||
+      !verifHash ||
+      !verifyWebhookSignatureTimingSafe(verifHash, FLW_WEBHOOK_HASH)
+    ) {
       console.warn('[Flutterwave Webhook] Missing or invalid verif-hash — request rejected');
+      await writeSecurityAuditLog({
+        action: 'webhook_signature_rejected',
+        ipAddress: getClientIp(req),
+        userAgent: req.headers.get('user-agent') || '',
+        status: 'blocked',
+        details: { endpoint: '/api/flutterwave/webhook', hasHeader: Boolean(verifHash) },
+      });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 

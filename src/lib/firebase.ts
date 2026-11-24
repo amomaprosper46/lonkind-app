@@ -5,7 +5,13 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database";
 import { getMessaging, isSupported, type Messaging } from "firebase/messaging";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+  ReCaptchaV3Provider,
+  getToken as getAppCheckToken,
+  type AppCheck,
+} from "firebase/app-check";
 
 // Your web app's Firebase configuration
 // These values are read from environment variables for deployment.
@@ -41,19 +47,43 @@ export const auth = (app ? getAuth(app) : null) as unknown as ReturnType<typeof 
 export const storage = (app ? getStorage(app) : null) as unknown as ReturnType<typeof getStorage>;
 export const rtdb = (app ? getDatabase(app) : null) as unknown as ReturnType<typeof getDatabase>;
 
-// Initialize App Check (browser-only)
+// Initialize App Check (browser-only, supports reCAPTCHA Enterprise or v3)
+export let appCheckInstance: AppCheck | null = null;
 if (typeof window !== "undefined" && app) {
-    try {
-        if (process.env.NODE_ENV === 'development') {
-            (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN || true;
-        }
-        initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || 'missing-recaptcha-key'),
-            isTokenAutoRefreshEnabled: true
-        });
-    } catch (e) {
-        console.error("Firebase App Check failed to initialize", e);
+  try {
+    if (process.env.NODE_ENV === "development") {
+      (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN =
+        process.env.NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN || true;
     }
+    const enterpriseKey = process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
+    const v3Key = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "";
+    if (enterpriseKey) {
+      appCheckInstance = initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(enterpriseKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+    } else if (v3Key && v3Key !== "missing-recaptcha-key") {
+      appCheckInstance = initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(v3Key),
+        isTokenAutoRefreshEnabled: true,
+      });
+    }
+  } catch (e) {
+    console.warn("Firebase App Check initialization skipped:", e);
+  }
+}
+
+/**
+ * Helper for client API calls to attach `X-Firebase-AppCheck` token header when active.
+ */
+export async function getAppCheckHeaders(): Promise<Record<string, string>> {
+  if (!appCheckInstance) return {};
+  try {
+    const res = await getAppCheckToken(appCheckInstance, false);
+    return res?.token ? { "X-Firebase-AppCheck": res.token } : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
