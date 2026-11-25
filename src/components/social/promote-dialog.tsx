@@ -72,7 +72,7 @@ export function PromoteDialog({
 }: PromoteDialogProps) {
   const [selectedPkgId, setSelectedPkgId] = useState<PromoPackageId>('starter');
   const [paymentMethod, setPaymentMethod] = useState<'coins' | 'flutterwave'>('coins');
-  const [currency, setCurrency] = useState<string>('NGN');
+  const [currency, setCurrency] = useState<string>('USD');
   const [headline, setHeadline] = useState(target?.title || '');
   const [ctaLabel, setCtaLabel] = useState(
     target?.targetType === 'live' ? 'Join Live' : 'View Post'

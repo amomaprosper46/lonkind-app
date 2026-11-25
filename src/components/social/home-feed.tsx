@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, where, getDocs, limit, startAfter, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import CreatePostCard from './create-post-card';
 import PostCard from './post-card';
-import SkeletonCard from './skeleton-card';
+import { FeedCardSkeleton, AdCardSkeleton, EmptyState } from '@/components/ui/skeletons';
 import { Loader2, Users, Radio, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Post, ReactionType } from './post-card';
@@ -99,10 +99,10 @@ export default function HomeFeed({
     }, []);
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
 
-    // Real-time listener for active live streams to display on home feed
+    // Real-time listener for active live streams (capped at 20 to protect Blaze reads)
     useEffect(() => {
         const streamsCol = collection(db, 'live_streams');
-        const q = query(streamsCol, where('status', '==', 'active'));
+        const q = query(streamsCol, where('status', '==', 'active'), limit(20));
         const unsub = onSnapshot(q, (snapshot) => {
             const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })).filter((s: any) => {
                 // Filter out stale streams (> 12 hours old)
@@ -172,7 +172,42 @@ export default function HomeFeed({
     }, [currentUser]);
 
     const [newPostsAvailableCount, setNewPostsAvailableCount] = useState(0);
+    const [lastForYouDoc, setLastForYouDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+    const [hasMoreForYou, setHasMoreForYou] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [extraForYouPosts, setExtraForYouPosts] = useState<Post[]>([]);
     const initialLoadRef = React.useRef(false);
+    const forYouCountRef = React.useRef(0);
+
+    const loadMoreForYouPosts = useCallback(async () => {
+        if (!lastForYouDoc || isLoadingMore || !hasMoreForYou) return;
+        setIsLoadingMore(true);
+        try {
+            const nextQuery = query(
+                collection(db, "posts"),
+                where('groupId', '==', null),
+                orderBy("timestamp", "desc"),
+                startAfter(lastForYouDoc),
+                limit(15)
+            );
+            const snap = await getDocs(nextQuery);
+            if (snap.empty) {
+                setHasMoreForYou(false);
+                return;
+            }
+            const nextBatch = snap.docs.map(d => ({ id: d.id, ...d.data() } as Post));
+            setLastForYouDoc(snap.docs[snap.docs.length - 1] || null);
+            setHasMoreForYou(snap.docs.length === 15);
+            setExtraForYouPosts((prev) => {
+                const seen = new Set(prev.map(p => p.id));
+                return [...prev, ...nextBatch.filter(p => !seen.has(p.id))];
+            });
+        } catch (err) {
+            console.warn("Load more posts error:", err);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    }, [lastForYouDoc, isLoadingMore, hasMoreForYou]);
 
     useEffect(() => {
         if (followingUids === null) {
@@ -183,52 +218,58 @@ export default function HomeFeed({
         setIsLoadingPosts(true);
         const postsCollection = collection(db, "posts");
         
-        // 1. Listen for "Following" Posts (Chronological)
+        // 1. Listen for "Following" Posts (Chronological, strictly capped at 20 for Blaze scalability)
         let followingQuery;
         if (followingUids.length <= 1) {
              followingQuery = query(
                 postsCollection,
                 where("author.uid", "==", currentUser.uid),
                 where('groupId', '==', null),
-                orderBy("timestamp", "desc")
+                orderBy("timestamp", "desc"),
+                limit(20)
             );
         } else {
             followingQuery = query(
                 postsCollection, 
                 where("author.uid", "in", followingUids.slice(0, 30)),
                 where('groupId', '==', null),
-                orderBy("timestamp", "desc")
+                orderBy("timestamp", "desc"),
+                limit(20)
             );
         }
         
         const unsubFollowing = onSnapshot(followingQuery, (querySnapshot) => {
             const postList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
             setFollowingPosts(postList);
-            setIsLoadingPosts(false); // We consider it loaded when following loads
+            setIsLoadingPosts(false);
         }, (serverError: any) => {
             console.error("Following listener error:", serverError);
             setIsLoadingPosts(false);
         });
 
-        // 2. Listen for "For You" Posts (Algorithmic)
+        // 2. Listen for "For You" Posts (Algorithmic, capped at 20 + startAfter pagination)
         const forYouQuery = query(
             postsCollection,
-            where('groupId', '==', null), // Only show non-group posts on main feeds
+            where('groupId', '==', null),
             orderBy("timestamp", "desc"),
-            where("timestamp", ">=", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)) // Last 14 days
+            where("timestamp", ">=", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)),
+            limit(20)
         );
 
         const unsubForYou = onSnapshot(forYouQuery, (querySnapshot) => {
             const postList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
             const sortedList = postList.sort((a, b) => calculateScore(b) - calculateScore(a));
+            setLastForYouDoc(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
+            setHasMoreForYou(querySnapshot.docs.length === 20);
 
-            if (initialLoadRef.current && postList.length > forYouPosts.length && forYouPosts.length > 0) {
-                const diff = postList.length - forYouPosts.length;
+            if (initialLoadRef.current && postList.length > forYouCountRef.current && forYouCountRef.current > 0) {
+                const diff = postList.length - forYouCountRef.current;
                 setNewPostsAvailableCount(prev => prev + diff);
             } else {
                 initialLoadRef.current = true;
             }
 
+            forYouCountRef.current = postList.length;
             setForYouPosts(sortedList);
         }, (serverError: any) => {
              console.error("For You listener error:", serverError);
@@ -238,7 +279,7 @@ export default function HomeFeed({
             unsubFollowing();
             unsubForYou();
         };
-    }, [followingUids, currentUser.uid, calculateScore, forYouPosts.length]);
+    }, [followingUids, currentUser.uid, calculateScore]);
 
     const [hashtagDbPosts, setHashtagDbPosts] = useState<Post[]>([]);
     const [isLoadingHashtag, setIsLoadingHashtag] = useState(false);
@@ -546,16 +587,25 @@ export default function HomeFeed({
                 )}
 
                 {(isLoadingPosts || (cleanTag && isLoadingHashtag && activeDisplayPosts.length === 0)) ? (
-                    <div className="flex flex-col space-y-4">
-                        <SkeletonCard />
-                        <SkeletonCard />
-                        <SkeletonCard />
+                    <div className="flex flex-col space-y-5">
+                        <FeedCardSkeleton withMedia />
+                        <AdCardSkeleton />
+                        <FeedCardSkeleton withMedia={false} />
                     </div>
                 ) : activeDisplayPosts.length > 0 ? (() => {
                     const viewerAge = typeof (currentUser as any)?.age === 'number' ? (currentUser as any).age : null;
                     const eligibleAds = filterEligibleAdsForViewer(activeAds, viewerAge);
                     const liveBannerAd = eligibleAds.find((a) => a.placement === 'live' || a.placement === 'all') || null;
                     const feedAds = eligibleAds.filter((a) => a.placement === 'feed' || a.placement === 'all');
+                    const mergedFeedPosts =
+                        feedType === 'foryou' && !cleanTag && extraForYouPosts.length > 0
+                            ? [
+                                ...activeDisplayPosts,
+                                ...extraForYouPosts.filter(
+                                    (ep) => !activeDisplayPosts.some((ap) => ap.id === ep.id)
+                                ),
+                              ]
+                            : activeDisplayPosts;
 
                     return (
                     <div className="flex flex-col space-y-6">
@@ -567,7 +617,7 @@ export default function HomeFeed({
                                 onHidden={(id) => setActiveAds((prev) => prev.filter((a) => a.id !== id))}
                             />
                         )}
-                        {activeDisplayPosts.map((post, idx) => {
+                        {mergedFeedPosts.map((post, idx) => {
                             // Max 1 sponsored card every 8 organic posts (never back-to-back)
                             const shouldInjectAd = feedAds.length > 0 && (idx + 1) % 8 === 0;
                             const adForSlot = shouldInjectAd
@@ -598,36 +648,53 @@ export default function HomeFeed({
                                 </React.Fragment>
                             );
                         })}
+
+                        {feedType === 'foryou' && !cleanTag && hasMoreForYou && (
+                            <div className="pt-2 space-y-4">
+                                {isLoadingMore && <FeedCardSkeleton withMedia={false} />}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={loadMoreForYouPosts}
+                                    disabled={isLoadingMore}
+                                    className="w-full rounded-xl h-10 font-bold text-xs"
+                                >
+                                    {isLoadingMore ? (
+                                        <><Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Loading more posts...</>
+                                    ) : (
+                                        'Load More Posts'
+                                    )}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                     );
                 })() : cleanTag ? (
-                    <Card>
-                        <CardContent className="p-8 text-center text-muted-foreground">
-                            <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-extrabold text-2xl mx-auto mb-4">
-                                #
-                            </div>
-                            <h3 className="text-xl font-semibold">No posts found with {normalizedTag}</h3>
-                            <p className="mt-1">Be the first to share a post with this hashtag!</p>
-                            {onClearHashtag && (
-                                <Button variant="outline" className="mt-4" onClick={onClearHashtag}>
+                    <EmptyState
+                        icon={<span className="text-xl font-black">#</span>}
+                        title={`No posts found with ${normalizedTag}`}
+                        description="Be the first creator to share a post with this hashtag!"
+                        action={
+                            onClearHashtag ? (
+                                <Button variant="outline" size="sm" className="rounded-xl" onClick={onClearHashtag}>
                                     View All Posts
                                 </Button>
-                            )}
-                        </CardContent>
-                    </Card>
+                            ) : undefined
+                        }
+                    />
                 ) : (
-                    <Card>
-                        <CardContent className="p-8 text-center text-muted-foreground">
-                            <Users className="h-12 w-12 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold">Your Feed is Quiet</h3>
-                            <p className="mt-1">Follow people to see their posts here. Start by checking out the Explore page or the suggestions on the right.</p>
-                             <Link href="/?view=explore">
-                                <Button variant="outline" className="mt-4">
+                    <EmptyState
+                        icon={<Users className="h-6 w-6" />}
+                        title="Your Feed is Quiet"
+                        description="Follow creators to see their posts here, or explore trending posts across Lonkind."
+                        action={
+                            <Link href="/?view=explore">
+                                <Button variant="outline" size="sm" className="rounded-xl">
                                     Explore Lonkind
                                 </Button>
                             </Link>
-                        </CardContent>
-                    </Card>
+                        }
+                    />
                 )}
             </div>
         </main>

@@ -47,13 +47,15 @@ service cloud.firestore {
 
     function hasValidInitialWalletState() {
       return !request.resource.data.keys().hasAny([
-        'walletBalance', 'coinBalance', 'bonusBalance', 'cashableBalance',
+        'walletBalance', 'bonusBalance', 'cashableBalance',
         'balance', 'balanceUSD', 'balanceNaira', 'earningsNaira',
         'heldEarningsNaira', 'lifetimeTipsReceived', 'lifetimeTipsGiven',
         'hasMadeFirstPurchase', 'firstPurchaseAt', 'promoBonusCoinsReceived',
-        'isAdmin', 'isVerified', 'isOfficialBrand', 'kycVerified', 'payoutTier', 'isTopCreator', 'role',
+        'isAdmin', 'isVerified', 'isOfficialBrand', 'kycVerified', 'payoutTier', 'isTopCreator',
         'isProfessional', 'fraudFlagged', 'velocityFlagged'
       ]) &&
+      (!('role' in request.resource.data) || request.resource.data.role == 'user') &&
+      (!('coinBalance' in request.resource.data) || request.resource.data.coinBalance == 0) &&
       (!('coins' in request.resource.data) || request.resource.data.coins == 0) &&
       (!('diamonds' in request.resource.data) || request.resource.data.diamonds == 0);
     }

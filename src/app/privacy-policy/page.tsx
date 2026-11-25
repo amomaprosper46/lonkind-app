@@ -3,6 +3,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Shield, Lock, Eye, Server, RefreshCw, ArrowLeft, Mail, FileText, UserCheck, CreditCard, Trash2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PublicFooter } from '@/components/social/public-footer';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy — Lonkind',
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPolicyContent() {
-  const lastUpdated = 'November 22, 2026';
+  const lastUpdated = 'November 24, 2026';
 
   return (
     <main className="min-h-screen bg-background selection:bg-primary/20">
@@ -259,13 +260,16 @@ export default function PrivacyPolicyContent() {
             </div>
           </div>
 
-          {/* Section 8: Children's Privacy */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-4">
-              8. Children's Privacy
+          {/* Section 8: Global Age Eligibility (18+) & International Privacy Rights (GDPR / CCPA) */}
+          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md space-y-3">
+            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-2">
+              8. Global Age Policy (18+) &amp; International Privacy Rights (GDPR / CCPA)
             </h2>
             <p className="text-muted-foreground leading-relaxed text-sm">
-              Lonkind is not directed to children under 13 years of age. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided personal data to us, please contact us immediately at privacy@lonkind.com so we can promptly delete the data.
+              Lonkind is an <strong className="text-foreground">18+ global platform</strong> operated worldwide by its founder based in Nigeria. We do not knowingly collect personal information from anyone under 18 years of age.
+            </p>
+            <p className="text-muted-foreground leading-relaxed text-sm">
+              Regardless of where you live (including the European Economic Area under <strong className="text-foreground">GDPR</strong>, California under <strong className="text-foreground">CCPA/CPRA</strong>, the UK, Africa, Asia, or the Americas), you have the right to access, export, correct, or permanently delete your personal data at any time via Settings or by emailing <a href="mailto:privacy@lonkind.com" className="text-primary underline">privacy@lonkind.com</a>.
             </p>
           </div>
 
@@ -289,6 +293,7 @@ export default function PrivacyPolicyContent() {
 
         </div>
       </div>
+      <PublicFooter />
     </main>
   );
 }

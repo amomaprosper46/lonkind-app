@@ -2,7 +2,7 @@
 import React, { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { SignUpForm } from '@/components/social/sign-up-form';
+import { SignUpForm, EmailVerificationPendingScreen } from '@/components/social/sign-up-form';
 import { SignInForm } from '@/components/social/sign-in-form';
 import { Users, Video, Share2, Loader2, WifiOff, AlertTriangle, Radio } from 'lucide-react';
 import SocialDashboard from './social-dashboard';
@@ -182,6 +182,7 @@ function SocialHomePageInner() {
   const [authView, setAuthView] = React.useState<'signIn' | 'signUp'>('signUp');
   const [isOnline, setIsOnline] = React.useState(true);
   const [isNewUser, setIsNewUser] = React.useState(false);
+  const [needsEmailVerification, setNeedsEmailVerification] = React.useState(false);
   const [showTutorial, setShowTutorial] = React.useState(false);
   
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
@@ -218,11 +219,15 @@ function SocialHomePageInner() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
+    if (!window.recaptchaVerifier && recaptchaContainerRef.current && auth) {
+      try {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-            'size': 'invisible',
-            'callback': (response: any) => {},
+          size: 'invisible',
+          callback: () => {},
         });
+      } catch {
+        // Ignore duplicate recaptcha render in React StrictMode
+      }
     }
     
     return () => {
@@ -265,18 +270,34 @@ function SocialHomePageInner() {
           }
           
           if (!userDoc.exists()) {
-            setIsNewUser(true);
+            // Newly created Gmail signup may still be writing its initial doc; show email verification first if unverified
+            if (user.email && !user.emailVerified) {
+              setNeedsEmailVerification(true);
+              setIsNewUser(false);
+            } else {
+              setNeedsEmailVerification(false);
+              setIsNewUser(true);
+            }
           } else {
+            const uData = userDoc.data() || {};
+            const isSuperAdminAccount = uData.role === 'super_admin' || uData.isAdmin === true;
+            const hasVerifiedEmail = Boolean(user.emailVerified || uData.emailVerified === true);
+            // Only gate unverified email-password accounts (never block @mow or phone-only accounts)
+            if (user.email && !hasVerifiedEmail && !isSuperAdminAccount && uData.emailVerified === false) {
+              setNeedsEmailVerification(true);
+            } else {
+              setNeedsEmailVerification(false);
+            }
             setIsNewUser(false);
           }
         } catch (error: any) {
           console.error("Error fetching user document:", error);
           toast({ variant: 'destructive', title: 'Database Connection Error', description: error.message });
-          // If we can't check, we shouldn't trap them in a spinner. 
-          // We will assume they are not a new user so the dashboard loads and shows the fallback error UI.
+          setNeedsEmailVerification(false);
           setIsNewUser(false);
         }
       } else {
+        setNeedsEmailVerification(false);
         setIsNewUser(false);
       }
     };
@@ -347,6 +368,21 @@ function SocialHomePageInner() {
   
   const AppContent = () => {
       if (user) {
+        if (needsEmailVerification && user.email && !user.emailVerified) {
+            return (
+              <div className="min-h-screen flex items-center justify-center bg-background p-4">
+                <Card className="w-full max-w-md rounded-2xl border-border/70 shadow-xl">
+                  <CardContent className="p-6">
+                    <EmailVerificationPendingScreen
+                      email={user.email}
+                      onVerified={() => setNeedsEmailVerification(false)}
+                      onSignOutAndBack={handleSignOut}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            );
+        }
         if (isNewUser) {
             return <WelcomeDialog user={user} onProfileCreated={() => {
                 setIsNewUser(false);
@@ -585,16 +621,18 @@ function SocialHomePageInner() {
               </main>
           
               <footer className="py-6 border-t bg-background">
-                  <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-6 gap-y-2 text-sm font-medium">
-                    <p>&copy; {new Date().getFullYear()} Lonkind. All rights reserved.</p>
+                  <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-5 gap-y-2 text-sm font-medium">
+                    <p>&copy; {new Date().getFullYear()} Lonkind — Live Streams &amp; Global Creator Community.</p>
                     <span className="hidden sm:inline">•</span>
                     <Link href="/about" className="hover:text-primary hover:underline">About</Link>
                     <span className="hidden sm:inline">•</span>
                     <Link href="/privacy" className="hover:text-primary hover:underline">Privacy Policy</Link>
                     <span className="hidden sm:inline">•</span>
-                    <Link href="/privacy-policy" className="hover:text-primary hover:underline">Privacy &amp; Security</Link>
-                    <span className="hidden sm:inline">•</span>
                     <Link href="/terms" className="hover:text-primary hover:underline">Terms of Service</Link>
+                    <span className="hidden sm:inline">•</span>
+                    <Link href="/refund-policy" className="hover:text-primary hover:underline">Coins &amp; Refund Policy</Link>
+                    <span className="hidden sm:inline">•</span>
+                    <Link href="/contact" className="hover:text-primary hover:underline">Help &amp; Support</Link>
                   </div>
               </footer>
           </div>

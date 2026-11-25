@@ -1,17 +1,39 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ShieldCheck, Wallet, Sparkles, Loader2, Megaphone, Lock } from 'lucide-react';
-import AdminPanelView from '@/components/social/admin-panel-view';
-import AdminModerationDashboard from '@/components/social/admin-moderation-dashboard';
-import AdminEventsAndGiftsStudio from '@/components/social/admin-events-and-gifts-studio';
-import { AdminAdManager } from '@/components/social/admin-ad-manager';
-import { AdminSecurityShield } from '@/components/social/admin-security-shield';
-import { AdminDatabaseBackups } from '@/components/social/admin-database-backups';
+import { ShieldCheck, Wallet, Sparkles, Megaphone, Lock } from 'lucide-react';
+import { SettingsRowSkeleton, AdCardSkeleton } from '@/components/ui/skeletons';
 import type { CurrentUser } from '@/components/social/social-dashboard';
+
+// Route-level code splitting: lazy-load all heavy Admin modules with zero-CLS skeletons
+const AdminPanelView = dynamic(() => import('@/components/social/admin-panel-view'), {
+  ssr: false,
+  loading: () => <SettingsRowSkeleton count={4} />,
+});
+const AdminModerationDashboard = dynamic(
+  () => import('@/components/social/admin-moderation-dashboard'),
+  { ssr: false, loading: () => <SettingsRowSkeleton count={4} /> }
+);
+const AdminEventsAndGiftsStudio = dynamic(
+  () => import('@/components/social/admin-events-and-gifts-studio'),
+  { ssr: false, loading: () => <SettingsRowSkeleton count={4} /> }
+);
+const AdminAdManager = dynamic(
+  () => import('@/components/social/admin-ad-manager').then((m) => m.AdminAdManager),
+  { ssr: false, loading: () => <AdCardSkeleton /> }
+);
+const AdminSecurityShield = dynamic(
+  () => import('@/components/social/admin-security-shield').then((m) => m.AdminSecurityShield),
+  { ssr: false, loading: () => <SettingsRowSkeleton count={2} /> }
+);
+const AdminDatabaseBackups = dynamic(
+  () => import('@/components/social/admin-database-backups').then((m) => m.AdminDatabaseBackups),
+  { ssr: false, loading: () => <SettingsRowSkeleton count={3} /> }
+);
 
 export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -29,8 +51,9 @@ export default function AdminDashboardPage() {
 
   if (!currentUser) {
     return (
-      <div className="py-16 flex items-center justify-center">
-        <Loader2 className="h-7 w-7 animate-spin text-primary" />
+      <div className="space-y-4">
+        <SettingsRowSkeleton count={1} />
+        <AdCardSkeleton />
       </div>
     );
   }
@@ -62,27 +85,27 @@ export default function AdminDashboardPage() {
           </TabsTrigger>
         </TabsList>
 
-      <TabsContent value="ads">
-        <AdminAdManager />
-      </TabsContent>
+        <TabsContent value="ads">
+          <AdminAdManager />
+        </TabsContent>
 
-      <TabsContent value="payouts">
-        <AdminPanelView currentUser={currentUser} />
-      </TabsContent>
+        <TabsContent value="payouts">
+          <AdminPanelView currentUser={currentUser} />
+        </TabsContent>
 
-      <TabsContent value="moderation">
-        <AdminModerationDashboard />
-      </TabsContent>
+        <TabsContent value="moderation">
+          <AdminModerationDashboard />
+        </TabsContent>
 
-      <TabsContent value="events">
-        <AdminEventsAndGiftsStudio />
-      </TabsContent>
+        <TabsContent value="events">
+          <AdminEventsAndGiftsStudio />
+        </TabsContent>
 
-      <TabsContent value="security" className="space-y-6">
-        <AdminDatabaseBackups />
-        <AdminSecurityShield showAuditTable />
-      </TabsContent>
-    </Tabs>
+        <TabsContent value="security" className="space-y-6">
+          <AdminDatabaseBackups />
+          <AdminSecurityShield showAuditTable />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

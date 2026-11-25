@@ -14,7 +14,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://lonkind.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Lonkind — Go Live, Connect & Share Moments',
+    default: 'Lonkind — Live Streams & Global Creator Community',
     template: '%s | Lonkind',
   },
   description:
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     apple: '/icon-192x192.png',
   },
   openGraph: {
-    title: 'Lonkind — Go Live, Connect & Share Moments',
+    title: 'Lonkind — Live Streams & Global Creator Community',
     description:
       'Watch interactive live streams, join multi-guest broadcasts, send 3D virtual gifts, and connect with creators worldwide on Lonkind.',
     url: SITE_URL,
@@ -72,7 +72,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@lonkind',
     creator: '@lonkind',
-    title: 'Lonkind — Go Live, Connect & Share Moments',
+    title: 'Lonkind — Live Streams & Global Creator Community',
     description:
       'Watch interactive live streams, join multi-guest broadcasts, send 3D virtual gifts, and connect with creators worldwide on Lonkind.',
     images: ['/og-banner.png'],

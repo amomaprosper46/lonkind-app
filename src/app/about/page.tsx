@@ -14,18 +14,19 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PublicFooter } from '@/components/social/public-footer';
 
 export const metadata: Metadata = {
-  title: 'About Lonkind — Independent Nigerian Creator & Live-Streaming Platform',
+  title: 'About Lonkind — Live Streams & Global Creator Community',
   description:
-    'Learn about Lonkind (lonkind.com), an independent Nigerian creator and live-streaming platform for real-time broadcasts, community connection, and transparent creator monetization.',
+    'Learn about Lonkind (lonkind.com), a global live-streaming, interactive gifting, and creator community platform connecting creators and audiences across every continent.',
   alternates: {
     canonical: '/about',
   },
   openGraph: {
-    title: 'About Lonkind — Independent Nigerian Creator & Live-Streaming Platform',
+    title: 'About Lonkind — Live Streams & Global Creator Community',
     description:
-      'Lonkind is an independent Nigerian creator and live-streaming platform built for real-time broadcasts, authentic communities, and fair creator payouts.',
+      'Lonkind is a worldwide live-streaming and creator economy platform connecting creators and audiences globally with real-time broadcasts and transparent payouts.',
     url: 'https://lonkind.com/about',
     siteName: 'Lonkind',
     images: [{ url: 'https://lonkind.com/og-banner.png', width: 1200, height: 630, alt: 'About Lonkind' }],
@@ -33,9 +34,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'About Lonkind — Independent Nigerian Creator & Live-Streaming Platform',
+    title: 'About Lonkind — Live Streams & Global Creator Community',
     description:
-      'Learn about Lonkind (lonkind.com), an independent Nigerian creator and live-streaming platform.',
+      'Learn about Lonkind (lonkind.com), a global live-streaming and creator community platform.',
     images: ['https://lonkind.com/og-banner.png'],
   },
 };
@@ -77,7 +78,7 @@ export default function AboutPage() {
             className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-3 py-1"
           >
             <Globe className="h-3.5 w-3.5 mr-1.5" />
-            Independent Nigerian Creator &amp; Live-Streaming Platform
+            Live Streams &amp; Global Creator Community
           </Badge>
 
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
@@ -86,11 +87,12 @@ export default function AboutPage() {
 
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-3xl">
             <strong className="text-foreground">Lonkind</strong> (
-            <span className="font-semibold text-foreground">lonkind.com</span>) is an independent
-            Nigerian creator and live-streaming social platform built to help creators, entertainers,
-            educators, and everyday communities connect in real time. From interactive live video and
-            audio broadcasts to multi-guest co-hosting, encrypted messaging, and transparent creator
-            monetization, Lonkind puts authentic human connection and creator ownership first.
+            <span className="font-semibold text-foreground">lonkind.com</span>) is a global
+            live-streaming, interactive gifting, and creator economy platform connecting creators,
+            entertainers, educators, and communities across every continent. Operated globally by
+            its founder based in Nigeria, Lonkind supports multi-currency payments (USD, GBP, EUR,
+            NGN, GHS, KES, ZAR), real-time co-hosting, encrypted messaging, and transparent creator
+            payouts worldwide.
           </p>
         </section>
 
@@ -214,23 +216,7 @@ export default function AboutPage() {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 border-t bg-background">
-        <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-6 gap-y-2 text-sm font-medium">
-          <p>&copy; {currentYear} Lonkind. All rights reserved.</p>
-          <span className="hidden sm:inline">•</span>
-          <Link href="/about" className="text-foreground font-semibold">
-            About
-          </Link>
-          <span className="hidden sm:inline">•</span>
-          <Link href="/privacy" className="hover:text-primary hover:underline">
-            Privacy Policy
-          </Link>
-          <span className="hidden sm:inline">•</span>
-          <Link href="/terms" className="hover:text-primary hover:underline">
-            Terms of Service
-          </Link>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

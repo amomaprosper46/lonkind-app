@@ -270,3 +270,24 @@
 }
 
 
+
+/* ✨ Smooth Theme-Aware Skeleton Shimmer (Zero CLS) */
+@keyframes lonkindShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.lonkind-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted) / 0.65) 25%,
+    hsl(var(--muted-foreground) / 0.14) 50%,
+    hsl(var(--muted) / 0.65) 75%
+  );
+  background-size: 200% 100%;
+  animation: lonkindShimmer 1.6s ease-in-out infinite;
+}

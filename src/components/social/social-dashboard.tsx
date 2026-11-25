@@ -107,23 +107,31 @@ const MobileNavItem = ({
     );
 };
 
-const MessagingView = dynamic(() => import('./messaging-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const SettingsView = dynamic(() => import('./settings-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const VideosView = dynamic(() => import('./videos-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const SavedView = dynamic(() => import('./saved-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const ExploreView = dynamic(() => import('./explore-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const GroupsView = dynamic(() => import('./groups-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const SpacesView = dynamic(() => import('./spaces-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const NearbyView = dynamic(() => import('./nearby-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
+import {
+  FeedCardSkeleton,
+  LiveStreamGridSkeleton,
+  ProfileHeaderSkeleton,
+  WalletBalanceSkeleton,
+  SettingsRowSkeleton,
+} from '@/components/ui/skeletons';
+
+const MessagingView = dynamic(() => import('./messaging-view').then(mod => mod.default), { loading: () => <SettingsRowSkeleton count={5} />, ssr: false });
+const SettingsView = dynamic(() => import('./settings-view').then(mod => mod.default), { loading: () => <SettingsRowSkeleton count={5} />, ssr: false });
+const VideosView = dynamic(() => import('./videos-view').then(mod => mod.default), { loading: () => <LiveStreamGridSkeleton count={4} />, ssr: false });
+const SavedView = dynamic(() => import('./saved-view').then(mod => mod.default), { loading: () => <FeedCardSkeleton />, ssr: false });
+const ExploreView = dynamic(() => import('./explore-view').then(mod => mod.default), { loading: () => <LiveStreamGridSkeleton count={6} />, ssr: false });
+const GroupsView = dynamic(() => import('./groups-view').then(mod => mod.default), { loading: () => <SettingsRowSkeleton count={4} />, ssr: false });
+const SpacesView = dynamic(() => import('./spaces-view').then(mod => mod.default), { loading: () => <LiveStreamGridSkeleton count={4} />, ssr: false });
+const NearbyView = dynamic(() => import('./nearby-view').then(mod => mod.default), { loading: () => <LiveStreamGridSkeleton count={4} />, ssr: false });
 const CommentSheet = dynamic(() => import('./comment-sheet').then(mod => mod.default), { ssr: false });
-const AdminDashboardView = dynamic(() => import('./admin-dashboard-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const FriendsView = dynamic(() => import('./friends-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const ProfileView = dynamic(() => import('./profile-view').then(mod => mod.default), { loading: () => <LoadingComponent />, ssr: false });
-const SuggestionsPage = dynamic(() => import('@/app/suggestions/page').then(m => m.default), { loading: () => <LoadingComponent />, ssr: false });
-const FriendRequestsPage = dynamic(() => import('@/app/friend-requests/page').then(m => m.default), { loading: () => <LoadingComponent />, ssr: false });
-const LiveStreamView = dynamic(() => import('./live-stream-view'), { ssr: false });
+const AdminDashboardView = dynamic(() => import('./admin-dashboard-view').then(mod => mod.default), { loading: () => <SettingsRowSkeleton count={5} />, ssr: false });
+const FriendsView = dynamic(() => import('./friends-view').then(mod => mod.default), { loading: () => <SettingsRowSkeleton count={5} />, ssr: false });
+const GroupDetailsView = dynamic(() => import('./group-details-view').then(mod => mod.default), { loading: () => <FeedCardSkeleton />, ssr: false });
+const WalletView = dynamic(() => import('./wallet-view').then(mod => mod.default), { loading: () => <WalletBalanceSkeleton />, ssr: false });
+const ProfileView = dynamic(() => import('./profile-view').then(mod => mod.default), { loading: () => <ProfileHeaderSkeleton />, ssr: false });
+const SuggestionsPage = dynamic(() => import('@/app/suggestions/page').then(m => m.default), { loading: () => <SettingsRowSkeleton count={5} />, ssr: false });
+const FriendRequestsPage = dynamic(() => import('@/app/friend-requests/page').then(m => m.default), { loading: () => <SettingsRowSkeleton count={4} />, ssr: false });
+const LiveStreamView = dynamic(() => import('./live-stream-view'), { loading: () => <LiveStreamGridSkeleton count={4} />, ssr: false });
 
 type SocialDashboardProps = {
   user: FirebaseUser;
@@ -1511,13 +1519,13 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     {((currentUser as any)?.role === 'super_admin' || (currentUser as any)?.isAdmin === true) && (
                         <>
                             <div className="pt-4 pb-1 px-3 text-[11px] font-semibold text-rose-500 uppercase tracking-wider">Administration</div>
-                            <NavigationItem label="System Dashboard" icon={ShieldAlert} active={currentView === 'admin'} onClick={() => changeView('admin')} />
-                            <Link href="/admin" className="block px-1 pt-1">
-                                <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-xs text-rose-400 hover:text-rose-300">
-                                    <ShieldAlert className="h-3.5 w-3.5" />
-                                    Open /admin Console
+                            <Link href="/admin" className="block px-1 pt-0.5">
+                                <Button size="sm" className="w-full justify-start gap-2 text-xs font-bold rounded-xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 border border-amber-500/40 text-amber-400 hover:text-amber-300 hover:bg-amber-500/25">
+                                    <ShieldAlert className="h-4 w-4 shrink-0" />
+                                    Ads &amp; Admin Console (/admin)
                                 </Button>
                             </Link>
+                            <NavigationItem label="System Dashboard" icon={ShieldAlert} active={currentView === 'admin'} onClick={() => changeView('admin')} />
                         </>
                     )}
                 </aside>

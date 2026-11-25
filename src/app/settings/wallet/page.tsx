@@ -2,17 +2,13 @@
 
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { Loader2, Wallet } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { useSettingsContext } from '../settings-context';
+import { WalletBalanceSkeleton } from '@/components/ui/skeletons';
 
 const WalletView = dynamic(() => import('@/components/social/wallet-view'), {
   ssr: false,
-  loading: () => (
-    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
-      <Loader2 className="h-7 w-7 animate-spin text-amber-400" />
-      <p className="text-xs">Loading Creator Wallet &amp; Firestore balances...</p>
-    </div>
-  ),
+  loading: () => <WalletBalanceSkeleton />,
 });
 
 export default function SettingsWalletPage() {
