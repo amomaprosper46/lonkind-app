@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { verifySuperAdminRequest } from '@/lib/admin-auth';
 import {
   isSafeAdDestinationUrl,
@@ -105,6 +105,37 @@ export async function GET(req: NextRequest) {
   try {
     const scope = req.nextUrl.searchParams.get('scope');
     const placement = req.nextUrl.searchParams.get('placement') || 'all';
+
+    if (scope === 'mine') {
+      const authHeader = req.headers.get('Authorization') || '';
+      if (!authHeader.startsWith('Bearer ')) {
+        return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+      }
+      let uid = '';
+      try {
+        const decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim());
+        uid = decoded.uid;
+      } catch {
+        return NextResponse.json({ error: 'Invalid or expired session.' }, { status: 401 });
+      }
+
+      const snap = await adminDb
+        .collection('ad_campaigns')
+        .where('publisherUid', '==', uid)
+        .limit(50)
+        .get();
+
+      const campaigns = snap.docs
+        .map((d) => serializeCampaign(d.id, d.data()))
+        .filter((c) => c.status !== 'deleted' && c.status !== 'awaiting_payment')
+        .sort((a, b) => {
+          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tB - tA;
+        });
+
+      return NextResponse.json({ campaigns });
+    }
 
     if (scope === 'admin') {
       const authCheck = await verifySuperAdminRequest(req);

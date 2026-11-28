@@ -3,18 +3,16 @@ import Link from 'next/link';
 import { Globe, Mail } from 'lucide-react';
 
 export function PublicFooter() {
-  const currentYear = new Date().getFullYear();
-
   return (
     <footer className="border-t border-border/70 bg-muted/20 mt-auto">
       <div className="container max-w-5xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
         <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
           <span className="inline-flex items-center gap-1.5 font-bold text-foreground">
             <Globe className="h-3.5 w-3.5 text-primary" />
-            Lonkind — Live Streams &amp; Global Creator Community
+            Lonkind Technologies (CAC, Nigeria)
           </span>
           <span className="hidden sm:inline">•</span>
-          <span>© {currentYear} Lonkind. All rights reserved.</span>
+          <span>© 2026 Lonkind Technologies. All rights reserved.</span>
         </div>
 
         <nav

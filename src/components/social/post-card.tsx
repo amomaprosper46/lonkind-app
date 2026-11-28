@@ -866,12 +866,12 @@ export default function PostCard({ post, currentUser, onReact, onCommentClick, o
                         </span>
                     ) : isOwnerPost ? (
                         <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="flex items-center gap-1.5 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                            className="flex items-center gap-1.5 rounded-full h-8 px-3 border-amber-500/45 bg-amber-500/15 text-amber-500 hover:text-amber-400 hover:bg-amber-500/25 font-bold text-xs"
                             onClick={() => setIsPromoteOpen(true)}
                         >
-                            <Megaphone className="h-4 w-4" />
+                            <Megaphone className="h-3.5 w-3.5" />
                             <span>Promote</span>
                         </Button>
                     ) : null}

@@ -622,7 +622,7 @@ function SocialHomePageInner() {
           
               <footer className="py-6 border-t bg-background">
                   <div className="container flex flex-wrap justify-center items-center text-muted-foreground gap-x-5 gap-y-2 text-sm font-medium">
-                    <p>&copy; {new Date().getFullYear()} Lonkind — Live Streams &amp; Global Creator Community.</p>
+                    <p>&copy; 2026 Lonkind Technologies. All rights reserved.</p>
                     <span className="hidden sm:inline">•</span>
                     <Link href="/about" className="hover:text-primary hover:underline">About</Link>
                     <span className="hidden sm:inline">•</span>

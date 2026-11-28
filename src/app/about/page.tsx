@@ -89,10 +89,12 @@ export default function AboutPage() {
             <strong className="text-foreground">Lonkind</strong> (
             <span className="font-semibold text-foreground">lonkind.com</span>) is a global
             live-streaming, interactive gifting, and creator economy platform connecting creators,
-            entertainers, educators, and communities across every continent. Operated globally by
-            its founder based in Nigeria, Lonkind supports multi-currency payments (USD, GBP, EUR,
-            NGN, GHS, KES, ZAR), real-time co-hosting, encrypted messaging, and transparent creator
-            payouts worldwide.
+            entertainers, educators, and communities across every continent. Lonkind is owned and
+            operated globally by <strong className="text-foreground">Lonkind Technologies</strong>,
+            a company duly registered under the{' '}
+            <strong className="text-foreground">Corporate Affairs Commission (CAC) of Nigeria</strong>,
+            supporting multi-currency payments (USD, GBP, EUR, NGN, GHS, KES, ZAR), real-time
+            co-hosting, encrypted messaging, and transparent creator payouts worldwide.
           </p>
         </section>
 

@@ -1,21 +1,32 @@
 import type { Metadata } from 'next';
-import React from 'react';
 import Link from 'next/link';
-import { Shield, Lock, Eye, Server, RefreshCw, ArrowLeft, Mail, FileText, UserCheck, CreditCard, Trash2, Globe } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Image from 'next/image';
+import {
+  Shield,
+  ArrowLeft,
+  RefreshCw,
+  Database,
+  Lock,
+  CreditCard,
+  Globe,
+  Cookie,
+  Trash2,
+  Mail,
+  Sparkles,
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { PublicFooter } from '@/components/social/public-footer';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — Lonkind',
+  title: 'Privacy Policy — Lonkind Technologies',
   description:
-    'Learn how Lonkind collects, uses, protects, and manages your personal data, privacy controls, and security across lonkind.com.',
-  alternates: {
-    canonical: '/privacy',
-  },
+    'Official Privacy Policy for Lonkind (lonkind.com), owned and operated globally by Lonkind Technologies (CAC, Nigeria): 18+ data protection, @gmail.com auth, Google Firebase security & encrypted daily backups, Flutterwave PCI-DSS Level 1 privacy, and GDPR/CCPA rights.',
+  alternates: { canonical: '/privacy' },
   openGraph: {
-    title: 'Privacy Policy — Lonkind',
+    title: 'Privacy Policy — Lonkind Technologies',
     description:
-      'Official Privacy Policy for Lonkind (lonkind.com). Your privacy and data security are our top priorities.',
+      'Official global Privacy Policy for Lonkind (lonkind.com), owned and operated by Lonkind Technologies.',
     url: 'https://lonkind.com/privacy',
     siteName: 'Lonkind',
     images: [{ url: 'https://lonkind.com/og-banner.png', width: 1200, height: 630, alt: 'Lonkind Privacy Policy' }],
@@ -23,277 +34,272 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Privacy Policy — Lonkind',
-    description:
-      'Official Privacy Policy for Lonkind (lonkind.com).',
+    title: 'Privacy Policy — Lonkind Technologies',
+    description: 'Official global Privacy Policy for Lonkind (lonkind.com).',
     images: ['https://lonkind.com/og-banner.png'],
   },
 };
 
+const POLICY_VERSION = 'v3.1';
+const LAST_UPDATED = 'November 28, 2026';
+
 export default function PrivacyPolicyContent() {
-  const lastUpdated = 'November 24, 2026';
-
   return (
-    <main className="min-h-screen bg-background selection:bg-primary/20">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-primary/5 py-16 md:py-24 border-b border-primary/10">
-        <div className="absolute inset-0 bg-grid-slate-900/[0.04] bg-[bottom_1px_center] dark:bg-grid-slate-400/[0.05] dark:bg-bottom dark:border-b dark:border-slate-100/5"></div>
-        <div className="container relative max-w-4xl mx-auto px-6 lg:px-8">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="mb-8 -ml-3 text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Home
-            </Button>
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <header className="sticky top-0 z-40 w-full border-b bg-background/90 backdrop-blur-md">
+        <div className="container max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5 font-extrabold text-lg tracking-tight">
+            <Image src="/logo.png" alt="Lonkind" width={32} height={32} className="rounded-lg" />
+            <span>Lonkind</span>
           </Link>
-          <div className="flex items-center gap-5 mb-6">
-            <div className="p-3.5 bg-primary/10 rounded-2xl shadow-sm border border-primary/20">
-              <Shield className="h-8 w-8 text-primary" />
-            </div>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight">Privacy Policy</h1>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Lonkind
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-1 container max-w-4xl mx-auto px-4 py-10 sm:py-14 space-y-8">
+        {/* Hero */}
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-primary/40 bg-primary/10 text-primary font-semibold px-3 py-1"
+            >
+              <Shield className="h-3.5 w-3.5 mr-1.5" />
+              Policy {POLICY_VERSION}
+            </Badge>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/40 px-3 py-1 rounded-full border border-border/60">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Last Updated: {LAST_UPDATED}
+            </span>
           </div>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
-            At Lonkind, your privacy and data security are our top priorities. This Privacy Policy details how we collect, use, store, disclose, and safeguard your personal information when you visit or use our platform at lonkind.com.
+
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">Privacy Policy</h1>
+          <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
+            <strong className="text-foreground">Lonkind</strong> (
+            <strong className="text-foreground">lonkind.com</strong>) is owned and operated
+            globally by <strong className="text-foreground">Lonkind Technologies</strong>, a
+            company duly registered under the{' '}
+            <strong className="text-foreground">Corporate Affairs Commission (CAC) of Nigeria</strong>.
+            This Privacy Policy explains how Lonkind Technologies collects, safeguards, and manages
+            your personal data worldwide.
           </p>
-          <div className="mt-6 flex items-center gap-2 text-sm font-medium text-muted-foreground/80 bg-background/50 w-fit px-4 py-1.5 rounded-full border border-primary/10 backdrop-blur-sm">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Last Updated: {lastUpdated}
-          </div>
-        </div>
-      </div>
+        </section>
 
-      {/* Content Section */}
-      <div className="container max-w-4xl mx-auto px-6 lg:px-8 py-16 md:py-24">
-        <div className="prose prose-slate dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight max-w-none space-y-12">
-          
-          {/* Section 1: Overview & Scope */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-blue-500/10 rounded-xl">
-                <Globe className="h-6 w-6 text-blue-500" />
-              </div>
-              1. Overview & Scope
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg">
-              Lonkind ("we", "us", "our", or "Platform") provides real-time social networking, live streaming, interactive gifting, and messaging services via lonkind.com and associated applications. This Privacy Policy applies to all users worldwide and governs all data processing activities conducted by Lonkind. By accessing or using Lonkind, you acknowledge that you have read and understood this Privacy Policy.
-            </p>
-          </div>
-
-          {/* Section 2: Information We Collect */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-indigo-500/10 rounded-xl">
-                <Eye className="h-6 w-6 text-indigo-500" />
-              </div>
-              2. Information We Collect
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-6">
-              We collect information to provide, maintain, and optimize our services. The categories of information we collect include:
-            </p>
-            
-            <div className="space-y-6">
-              <div className="border-l-4 border-primary pl-4 py-1">
-                <h3 className="text-lg font-bold text-foreground mb-1">A. Account & Profile Data</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  When you register an account, we collect your display name, username (@handle), email address, phone number, password, profile photo, and optional bio information.
-                </p>
-              </div>
-
-              <div className="border-l-4 border-indigo-500 pl-4 py-1">
-                <h3 className="text-lg font-bold text-foreground mb-1">B. Google Account Data (Google OAuth)</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  If you sign up or log in using Google OAuth, we collect your basic Google profile details, including your primary email address, full name, profile picture URL, and Google user identifier. We only request basic authentication scope permissions and do not access or store private Google Drive files, contacts, or calendar data.
-                </p>
-              </div>
-
-              <div className="border-l-4 border-green-500 pl-4 py-1">
-                <h3 className="text-lg font-bold text-foreground mb-1">C. Financial & Creator Payout Information</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  When you purchase Lonkind Coins or withdraw earned creator balances, we collect transaction logs, currency amounts, and payout settlement details (such as bank name, account number, and account holder name). Credit/debit card numbers and sensitive banking credentials are handled directly by PCI-DSS compliant payment gateways (Paystack & Flutterwave) and are never stored on Lonkind servers.
-                </p>
-              </div>
-
-              <div className="border-l-4 border-purple-500 pl-4 py-1">
-                <h3 className="text-lg font-bold text-foreground mb-1">D. User Content & Real-time Communications</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  We store posts, images, audio clips, comments, direct messages, live stream video/audio metadata, virtual gifts sent/received, and social connections (followers/following).
-                </p>
-              </div>
-
-              <div className="border-l-4 border-amber-500 pl-4 py-1">
-                <h3 className="text-lg font-bold text-foreground mb-1">E. Technical, Device & Analytics Data</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  We automatically collect standard technical information including IP address, browser type, operating system version, system language, push notification tokens (Firebase Cloud Messaging), and app interaction analytics.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Google API Limited Use Disclosure */}
-          <div className="bg-card border border-blue-500/30 rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md bg-blue-500/5">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-blue-500/20 rounded-xl">
-                <UserCheck className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              3. Google OAuth & API Limited Use Disclosure
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-4">
-              Lonkind strictly adheres to Google's API Services User Data Policy:
-            </p>
-            <div className="p-6 bg-background/80 rounded-2xl border border-blue-500/20 space-y-4 text-muted-foreground text-sm leading-relaxed">
-              <p className="font-semibold text-foreground">
-                Lonkind's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google API Services User Data Policy</a>, including the Limited Use requirements.
-              </p>
-              <ul className="list-disc pl-5 space-y-2">
-                <li>We do not sell Google user data to third parties, data brokers, or advertising networks.</li>
-                <li>We do not use Google user data to serve personalized advertisements.</li>
-                <li>We do not transfer Google user data to third parties unless necessary to provide or improve app functionality, comply with applicable laws, or as part of a merger or acquisition.</li>
-                <li>We do not use Google user data for training generalized AI or machine learning models.</li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Section 4: How We Use Your Data */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-green-500/10 rounded-xl">
-                <Lock className="h-6 w-6 text-green-500" />
-              </div>
-              4. How We Use Your Information
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-6">
-              We process your personal information strictly for legitimate service purposes:
-            </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {[
-                'Authenticating users & protecting accounts',
-                'Delivering live streaming & real-time messaging',
-                'Processing coin purchases & creator payouts',
-                'Preventing fraud, spam, and security breaches',
-                'Sending system verifications & SMS/email alerts',
-                'Providing customer support & resolving appeals',
-                'Maintaining platform performance & reliability',
-                'Enforcing our Terms of Service & guidelines'
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 bg-muted/50 p-4 rounded-2xl border border-border/50">
-                  <div className="h-2 w-2 rounded-full bg-primary/60"></div>
-                  <span className="text-muted-foreground font-medium text-sm">{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Section 5: Third-Party Service Providers */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-purple-500/10 rounded-xl">
-                <CreditCard className="h-6 w-6 text-purple-500" />
-              </div>
-              5. Data Sharing & Sub-Processors
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-4">
-              We do NOT sell, rent, or trade your personal data. We share data only with verified infrastructure providers who process data strictly under our instructions:
-            </p>
-            <ul className="space-y-4 text-muted-foreground list-none pl-0">
-              <li className="p-4 bg-muted/40 rounded-2xl border">
-                <strong className="text-foreground">Google Cloud Platform & Firebase:</strong> Provides secure cloud infrastructure, user authentication, Firestore database, file storage, and hosting.
+        {/* Policy Version & Recent Updates */}
+        <Card className="rounded-2xl border-primary/25 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-extrabold flex items-center gap-2 text-primary">
+              <Sparkles className="h-4 w-4" />
+              Policy Version &amp; Recent Updates ({POLICY_VERSION} — {LAST_UPDATED})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs sm:text-sm text-muted-foreground">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                Updated data controller identity to{' '}
+                <strong className="text-foreground">Lonkind Technologies</strong> (CAC, Nigeria)
+                operating globally at lonkind.com.
               </li>
-              <li className="p-4 bg-muted/40 rounded-2xl border">
-                <strong className="text-foreground">Paystack & Flutterwave:</strong> Licensed payment gateways that process coin purchases and creator bank account payouts.
+              <li>
+                Documented <strong className="text-foreground">18+ Date of Birth</strong>{' '}
+                verification and <strong className="text-foreground">Real-Name + @gmail.com</strong>{' '}
+                (anti-disposable &amp; anti-<code className="text-xs">+</code>-alias) account
+                integrity checks.
               </li>
-              <li className="p-4 bg-muted/40 rounded-2xl border">
-                <strong className="text-foreground">Termii:</strong> Telecommunications gateway used for sending SMS one-time verification passwords (OTP).
+              <li>
+                Disclosed <strong className="text-foreground">Google Firebase</strong> cloud
+                security (Authentication, Cloud Firestore, Cloud Storage, App Check, and encrypted
+                daily backups with 14-day rolling retention).
+              </li>
+              <li>
+                Confirmed <strong className="text-foreground">Flutterwave PCI-DSS Level 1</strong>{' '}
+                payment privacy with strict Zero Card &amp; Bank Credential Storage.
               </li>
             </ul>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Section 6: Data Security & Retention */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-orange-500/10 rounded-xl">
-                <Server className="h-6 w-6 text-orange-500" />
-              </div>
-              6. Data Security & Storage
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-4">
-              We enforce industry-standard technical and organizational security controls to safeguard your data against unauthorized access, loss, or misuse:
-            </p>
-            <ul className="list-disc pl-5 space-y-3 text-muted-foreground text-sm">
-              <li>All web traffic is transmitted via mandatory HTTPS/TLS end-to-end encryption.</li>
-              <li>Data at rest is stored in Google Cloud Firestore with AES-256 server-side encryption.</li>
-              <li>Administrative access to backend infrastructure is restricted via multi-factor authentication and role-based permissions.</li>
-              <li>Personal account information is retained for as long as your account remains active. Virtual Coin, Creator Diamond, anti-gift-cycling audit logs, and 24-hour creator payout transaction records are retained securely as required by financial and anti-fraud regulations.</li>
+        {/* Section 1: Data We Collect */}
+        <Card className="rounded-2xl border-border/70">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <Database className="h-5 w-5 text-sky-500" />
+              1. Information We Collect
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li>
+                <strong className="text-foreground">Account &amp; Identity Data:</strong> Real full
+                name, verified <code className="text-xs bg-muted px-1 rounded">@gmail.com</code>{' '}
+                address (or verified phone number), Date of Birth (to confirm 18+ eligibility),
+                handle, avatar, and bio.
+              </li>
+              <li>
+                <strong className="text-foreground">Content &amp; Live Stream Activity:</strong>{' '}
+                Posts, comments, uploaded media, live broadcasts, live chat messages, virtual gifts,
+                and user-submitted Sponsored Ad creatives.
+              </li>
+              <li>
+                <strong className="text-foreground">Transaction Ledger Metadata:</strong>{' '}
+                Non-sensitive transaction references, currency, Virtual Coin/Diamond balances, and
+                creator payout routing details supplied by creators for payout settlement.
+              </li>
+              <li>
+                <strong className="text-foreground">Security &amp; Anti-Fraud Signals:</strong> IP
+                addresses, user-agent headers, rate-limit counters, and anonymous ad viewability
+                signals used solely to stop bots, credential stuffing, and invalid ad impressions.
+              </li>
             </ul>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Section 7: Your Rights & Account Deletion */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-6">
-              <div className="p-2.5 bg-red-500/10 rounded-xl">
-                <Trash2 className="h-6 w-6 text-red-500" />
-              </div>
-              7. Your Rights & Account Deletion
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-4">
-              Regardless of your location, you have the following data rights under applicable data protection laws (including GDPR, CCPA, and NDPA):
+        {/* Section 2: Google Firebase Security & Encrypted Daily Backups */}
+        <Card className="rounded-2xl border-border/70">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <Lock className="h-5 w-5 text-emerald-500" />
+              2. Data Security &amp; Google Firebase Infrastructure
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-3 leading-relaxed">
+            <p>
+              Lonkind Technologies uses <strong className="text-foreground">Google Firebase</strong>{' '}
+              to safeguard user accounts, media, and transaction ledgers globally:
             </p>
-            <ul className="list-disc pl-5 space-y-3 text-muted-foreground text-sm mb-6">
-              <li><strong>Right to Access:</strong> You can request a copy of your personal data stored on Lonkind.</li>
-              <li><strong>Right to Rectification:</strong> You can edit your profile information directly inside your app settings.</li>
-              <li><strong>Right to Erasure (Account Deletion):</strong> You can permanently delete your account and all associated data at any time.</li>
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li>
+                <strong className="text-foreground">Firebase Authentication:</strong> Protects
+                account credentials, Gmail verification links, and session tokens.
+              </li>
+              <li>
+                <strong className="text-foreground">Cloud Firestore &amp; Cloud Storage:</strong>{' '}
+                Enforces strict server-side Security Rules preventing unauthorized client writes to
+                wallets, roles, or private files.
+              </li>
+              <li>
+                <strong className="text-foreground">Firebase App Check:</strong> Verifies genuine
+                app requests to protect platform APIs from automated abuse.
+              </li>
+              <li>
+                <strong className="text-foreground">Encrypted Daily Backups &amp; Audit Logs:</strong>{' '}
+                Automated daily compressed backups are stored in private, non-public cloud storage
+                with a rolling 14-day retention schedule, alongside immutable security audit logs.
+              </li>
             </ul>
-            
-            <div className="p-6 bg-red-500/5 border border-red-500/20 rounded-2xl">
-              <h3 className="text-base font-bold text-foreground mb-2 flex items-center gap-2">
-                <Trash2 className="h-5 w-5 text-red-500" />
-                How to Request Data / Account Deletion
-              </h3>
-              <p className="text-muted-foreground text-sm leading-relaxed mb-3">
-                To delete your account and remove all personal information, posts, and media from our systems:
-              </p>
-              <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
-                <li>Go to <strong>Settings</strong> within the Lonkind app and click <strong>Delete Account</strong>, OR</li>
-                <li>Send an email request to <a href="mailto:privacy@lonkind.com" className="text-primary font-medium hover:underline">privacy@lonkind.com</a> with the subject line "Account Deletion Request".</li>
-              </ol>
-              <p className="text-xs text-muted-foreground mt-3">
-                Once requested, your account and all associated personal data will be permanently deleted from active databases within 30 days.
-              </p>
-            </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Section 8: Global Age Eligibility (18+) & International Privacy Rights (GDPR / CCPA) */}
-          <div className="bg-card border rounded-3xl p-8 md:p-10 shadow-sm transition-all hover:shadow-md space-y-3">
-            <h2 className="text-2xl md:text-3xl mt-0 flex items-center gap-4 text-foreground mb-2">
-              8. Global Age Policy (18+) &amp; International Privacy Rights (GDPR / CCPA)
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-sm">
-              Lonkind is an <strong className="text-foreground">18+ global platform</strong> operated worldwide by its founder based in Nigeria. We do not knowingly collect personal information from anyone under 18 years of age.
+        {/* Section 3: Payment Privacy */}
+        <Card className="rounded-2xl border-emerald-500/35 bg-emerald-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-emerald-500" />
+              3. Payment Processing Privacy (Flutterwave PCI-DSS Level 1)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+            <p>
+              Payments and creator payout disbursements are handled by our authorized third-party
+              payment gateway, <strong className="text-foreground">Flutterwave</strong>.
             </p>
-            <p className="text-muted-foreground leading-relaxed text-sm">
-              Regardless of where you live (including the European Economic Area under <strong className="text-foreground">GDPR</strong>, California under <strong className="text-foreground">CCPA/CPRA</strong>, the UK, Africa, Asia, or the Americas), you have the right to access, export, correct, or permanently delete your personal data at any time via Settings or by emailing <a href="mailto:privacy@lonkind.com" className="text-primary underline">privacy@lonkind.com</a>.
+            <p>
+              <strong className="text-foreground">Zero Bank &amp; Card Detail Exposure:</strong>{' '}
+              Lonkind Technologies never collects, views, or stores raw card numbers, CVVs, or bank
+              login credentials. All payment processing is encrypted under{' '}
+              <strong className="text-foreground">PCI-DSS Level 1</strong> standards via
+              Flutterwave, and corporate settlement banking details remain strictly confidential.
             </p>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Section 9: Contact Us */}
-          <div className="pt-8 border-t border-border/50">
-            <h2 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-3 text-foreground">
-              <Mail className="h-7 w-7 text-primary" />
-              9. Contact Us
-            </h2>
-            <p className="text-muted-foreground leading-relaxed text-lg mb-6">
-              If you have any questions, concerns, or privacy requests regarding this Privacy Policy or our data practices, please contact our Data Protection Officer at:
+        {/* Section 4: Cookies & Responsible Ads */}
+        <Card className="rounded-2xl border-border/70">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <Cookie className="h-5 w-5 text-amber-500" />
+              4. Cookies, Local Preferences &amp; Responsible Ads
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground leading-relaxed">
+            <p>
+              We use essential session cookies and browser local storage to maintain sign-in state,
+              honor Dark/Light theme and Data Saver Mode settings, and prevent duplicate Sponsored
+              Ad impressions. Lonkind Technologies does <strong className="text-foreground">not</strong>{' '}
+              sell personal data to third-party data brokers.
             </p>
-            <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-shadow space-y-2">
-              <p className="font-bold text-foreground">Lonkind Support &amp; Privacy Team</p>
-              <p className="text-muted-foreground text-sm">Founder &amp; Lead Developer: <span className="font-semibold text-foreground">Prosper Amoma</span></p>
-              <p className="text-muted-foreground text-sm">Website: <a href="https://lonkind.com" className="text-primary hover:underline">https://lonkind.com</a></p>
-              <p className="text-muted-foreground text-sm">Privacy Email: <a href="mailto:privacy@lonkind.com" className="text-primary font-bold hover:underline">privacy@lonkind.com</a></p>
-              <p className="text-muted-foreground text-sm">Support Email: <a href="mailto:support@lonkind.com" className="text-primary font-bold hover:underline">support@lonkind.com</a></p>
-            </div>
-          </div>
+          </CardContent>
+        </Card>
 
-        </div>
-      </div>
+        {/* Section 5: 18+ Global Policy & International Privacy Rights */}
+        <Card className="rounded-2xl border-border/70">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              5. Strict 18+ Policy &amp; Global Privacy Rights (GDPR / CCPA)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-3 leading-relaxed">
+            <p>
+              Lonkind is strictly an <strong className="text-foreground">18+ global platform</strong>.
+              We do not knowingly collect data from anyone under 18. Report any underage account to{' '}
+              <a href="mailto:privacy@lonkind.com" className="text-primary underline font-semibold">
+                privacy@lonkind.com
+              </a>{' '}
+              for immediate removal.
+            </p>
+            <p>
+              Users worldwide (including under <strong className="text-foreground">GDPR</strong> and{' '}
+              <strong className="text-foreground">CCPA/CPRA</strong>) may request access,
+              correction, export, or permanent deletion of their personal data via Settings or by
+              emailing{' '}
+              <a href="mailto:privacy@lonkind.com" className="text-primary underline font-semibold">
+                privacy@lonkind.com
+              </a>
+              .
+            </p>
+            <p className="text-xs flex items-center gap-1.5">
+              <Trash2 className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+              Account deletion requests are completed within 30 days, subject only to mandatory
+              anti-fraud and financial ledger retention required by law.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Section 6: Corporate Privacy Contact */}
+        <Card className="rounded-2xl border-border/70">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              6. Data Controller &amp; Privacy Contact
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-1">
+            <p className="font-bold text-foreground">
+              Lonkind Technologies (Registered with CAC, Nigeria)
+            </p>
+            <p>Founder &amp; Lead Developer: <strong className="text-foreground">Prosper Amoma</strong></p>
+            <p>
+              Privacy:{' '}
+              <a href="mailto:privacy@lonkind.com" className="text-primary underline font-semibold">
+                privacy@lonkind.com
+              </a>{' '}
+              • Support:{' '}
+              <a href="mailto:support@lonkind.com" className="text-primary underline font-semibold">
+                support@lonkind.com
+              </a>
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+
       <PublicFooter />
-    </main>
+    </div>
   );
 }

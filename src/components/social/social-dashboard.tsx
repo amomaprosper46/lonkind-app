@@ -1499,7 +1499,16 @@ function SocialDashboardInternal({ user, onSignOut }: SocialDashboardProps) {
                     />
                     <NavigationItem label="Profile" icon={User} active={currentView === 'profile'} onClick={() => changeView('profile')} />
 
-                    <div className="pt-3 mt-3 border-t border-border/50">
+                    <div className="pt-3 mt-3 border-t border-border/50 space-y-1.5">
+                        <Link href="/settings/promotions" className="block">
+                            <Button
+                                variant="ghost"
+                                className="w-full justify-start gap-3.5 h-10 px-3 rounded-xl font-semibold text-sm text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 border border-amber-500/25 transition-all group"
+                            >
+                                <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+                                <span className="truncate">Ads &amp; Promotions</span>
+                            </Button>
+                        </Link>
                         <Link href="/settings" className="block">
                             <Button
                                 variant="ghost"

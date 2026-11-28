@@ -8,22 +8,23 @@ import {
   Wallet,
   Megaphone,
   ShieldCheck,
-  Globe,
   RefreshCw,
+  Sparkles,
+  Lock,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PublicFooter } from '@/components/social/public-footer';
 
 export const metadata: Metadata = {
-  title: 'Virtual Coins, Gifts & Refund Policy — Lonkind',
+  title: 'Virtual Coins, Gifts, Ads & Refund Policy — Lonkind Technologies',
   description:
-    'Read Lonkind’s global Virtual Coins, 20% First-Time Buyer Bonus, Creator Payouts, and Direct Ad Payment & Refund Policy.',
+    'Official Virtual Coins, 20% First-Time Purchase Bonus, Creator Payouts, Flutterwave Payment Security, and Ad Refund Policy for Lonkind (lonkind.com), owned and operated globally by Lonkind Technologies (CAC, Nigeria).',
   alternates: { canonical: '/refund-policy' },
   openGraph: {
-    title: 'Virtual Coins, Gifts & Refund Policy — Lonkind',
+    title: 'Virtual Coins, Gifts, Ads & Refund Policy — Lonkind Technologies',
     description:
-      'Transparent global policy for Virtual Coins, 20% first-time buyer bonus, creator Diamond withdrawals, and ad refunds on lonkind.com.',
+      'Transparent global policy for Virtual Coins, 20% first-time bonus, creator payouts, Flutterwave PCI-DSS Level 1 security, and ad refunds on lonkind.com.',
     url: 'https://lonkind.com/refund-policy',
     siteName: 'Lonkind',
     images: [{ url: 'https://lonkind.com/og-banner.png', width: 1200, height: 630, alt: 'Lonkind Refund Policy' }],
@@ -31,9 +32,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RefundPolicyPage() {
-  const lastUpdated = 'November 24, 2026';
+const POLICY_VERSION = 'v3.1';
+const LAST_UPDATED = 'November 28, 2026';
 
+export default function RefundPolicyPage() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-md">
@@ -53,51 +55,110 @@ export default function RefundPolicyPage() {
       </header>
 
       <main className="flex-1 container max-w-4xl mx-auto px-4 py-10 sm:py-14 space-y-8">
+        {/* Hero */}
         <section className="space-y-4">
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold px-3 py-1"
-          >
-            <Globe className="h-3.5 w-3.5 mr-1.5" />
-            Global Digital Commerce Policy
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold px-3 py-1"
+            >
+              Policy {POLICY_VERSION}
+            </Badge>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/40 px-3 py-1 rounded-full border border-border/60">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Last Updated: {LAST_UPDATED}
+            </span>
+          </div>
+
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
-            Virtual Coins, Gifts &amp; Refund Policy
+            Virtual Coins, Gifts, Ads &amp; Refund Policy
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
-            This policy governs Virtual Coin purchases, promotional bonuses, virtual gift exchanges,
-            creator earnings withdrawals, and direct ad payments across{' '}
-            <strong className="text-foreground">lonkind.com</strong> worldwide. Lonkind is operated
-            globally by its founder based in Nigeria and supports international multi-currency
-            payments via Flutterwave and Paystack.
+            This policy governs Virtual Coin purchases, the 20% first-time purchase bonus, virtual
+            gifts, creator payout withdrawals, and direct Sponsored Ad payments on{' '}
+            <strong className="text-foreground">lonkind.com</strong>, owned and operated globally
+            by <strong className="text-foreground">Lonkind Technologies</strong> (registered under
+            the Corporate Affairs Commission — CAC, Nigeria). All financial features strictly
+            require an <strong className="text-foreground">18+</strong> verified account.
           </p>
-          <div className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/40 px-3.5 py-1.5 rounded-full border border-border/60">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Last Updated: {lastUpdated}
-          </div>
         </section>
 
+        {/* Policy Version & Recent Updates */}
+        <Card className="rounded-2xl border-primary/25 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-extrabold flex items-center gap-2 text-primary">
+              <Sparkles className="h-4 w-4" />
+              Policy Version &amp; Recent Updates ({POLICY_VERSION} — {LAST_UPDATED})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs sm:text-sm text-muted-foreground">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                Aligned corporate operator disclosures under{' '}
+                <strong className="text-foreground">Lonkind Technologies</strong> (CAC, Nigeria).
+              </li>
+              <li>
+                Documented <strong className="text-foreground">Flutterwave PCI-DSS Level 1</strong>{' '}
+                payment security and strict confidentiality of corporate settlement banking details.
+              </li>
+              <li>
+                Standardized <strong className="text-foreground">5–10 business day</strong> refund
+                timelines via Flutterwave and <strong className="text-foreground">18+ / verified @gmail.com</strong>{' '}
+                payout eligibility rules.
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        {/* Payment Processing & Security (No Commercial Bank Names Exposed) */}
+        <Card className="rounded-2xl border-emerald-500/35 bg-emerald-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+              <Lock className="h-5 w-5 text-emerald-500" />
+              Payment Processing &amp; Security
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-3 leading-relaxed">
+            <p>
+              <strong className="text-foreground">Authorized Payment Processor:</strong>{' '}
+              <strong className="text-foreground">Flutterwave</strong> is our licensed third-party
+              payment gateway handling global card payments (Visa, Mastercard, Verve), bank
+              transfers, USSD, and mobile money, as well as creator payout disbursements on behalf
+              of <strong className="text-foreground">Lonkind Technologies</strong>.
+            </p>
+            <p>
+              <strong className="text-foreground">Zero Bank &amp; Card Detail Exposure:</strong>{' '}
+              Lonkind Technologies never collects, views, or stores raw card numbers, CVVs, or bank
+              login credentials—all payment processing is encrypted under{' '}
+              <strong className="text-foreground">PCI-DSS Level 1</strong> standards via
+              Flutterwave, and settlement banking details remain confidential for security.
+            </p>
+            <p>
+              <strong className="text-foreground">Supported Currencies &amp; Settlement Rules:</strong>{' '}
+              Supported currencies include{' '}
+              <strong className="text-foreground">USD, NGN, GBP, EUR, GHS, KES, and ZAR</strong>.
+              Creator payouts require 18+ verification, a verified{' '}
+              <code className="text-xs">@gmail.com</code> account, and at least 1,000 Diamonds
+              ($15 USD equivalent), settled within 24–26 hours. Approved refunds processed via
+              Flutterwave settle within <strong className="text-foreground">5–10 business days</strong>.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Core Policy Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/70">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-extrabold flex items-center gap-2">
                 <Coins className="h-5 w-5 text-amber-500" />
-                1. Global Virtual Coin Purchases
+                1. Virtual Coin Purchases
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+            <CardContent className="text-sm text-muted-foreground leading-relaxed">
               <p>
-                Virtual Coins are digital credits used inside Lonkind to send interactive gifts to
-                creators or boost eligible posts and live streams. Users worldwide may purchase
-                Coins in <strong className="text-foreground">USD</strong> or supported local
-                currencies (<strong className="text-foreground">NGN, GBP, EUR, GHS, KES, ZAR</strong>)
-                using Cards, Bank Transfer, USSD, or Mobile Money.
-              </p>
-              <p>
-                Because Virtual Coins are delivered instantaneously to your wallet upon verified
-                payment settlement, completed Coin purchases are generally non-refundable except in
-                cases of verified duplicate billing, unauthorized transactions, or technical
-                delivery failure.
+                Virtual Coins are digital entertainment items delivered immediately upon payment
+                confirmation. Completed Coin purchases are non-refundable except for verified
+                duplicate charges, unauthorized billing, or confirmed technical non-delivery.
               </p>
             </CardContent>
           </Card>
@@ -106,18 +167,15 @@ export default function RefundPolicyPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-extrabold flex items-center gap-2">
                 <Gift className="h-5 w-5 text-pink-500" />
-                2. 20% First-Time Buyer Promotional Bonus
+                2. 20% First-Time Purchase Bonus
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+            <CardContent className="text-sm text-muted-foreground leading-relaxed">
               <p>
-                Eligible first-time Coin buyers automatically receive a one-time{' '}
-                <strong className="text-foreground">+20% promotional Coin bonus</strong> credited
-                atomically alongside their first settled Coin purchase.
-              </p>
-              <p>
-                Promotional bonus Coins are non-cashable, cannot be withdrawn directly as fiat
-                currency, and are limited to one bonus per verified account.
+                Eligible first-time buyers receive a one-time +20% promotional Coin bonus. Bonus
+                Coins are strictly <strong className="text-foreground">non-cashable</strong>;
+                duplicate-account or <code className="text-xs">+</code>-alias bonus abuse results
+                in account suspension and forfeiture.
               </p>
             </CardContent>
           </Card>
@@ -126,18 +184,14 @@ export default function RefundPolicyPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-extrabold flex items-center gap-2">
                 <Wallet className="h-5 w-5 text-emerald-500" />
-                3. Creator Earnings &amp; Withdrawals
+                3. Creator Earnings &amp; Payouts
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+            <CardContent className="text-sm text-muted-foreground leading-relaxed">
               <p>
-                Eligible adult creators (18+ with verified email) earn Creator Diamonds from
-                genuine audience gifts and may withdraw once reaching the minimum payout threshold
-                (1,000 Diamonds / $15 USD equivalent) in their preferred supported currency.
-              </p>
-              <p>
-                To prevent fraud and gift-cycling, high-value or flagged payouts may undergo a
-                standard 24–26 hour security review before bank or mobile-money settlement.
+                Verified 18+ creators may withdraw genuine gift Diamonds once reaching 1,000
+                Diamonds ($15 USD equivalent). Ad spend and promotional Coin refunds are strictly
+                isolated from creator withdrawable payout balances.
               </p>
             </CardContent>
           </Card>
@@ -146,24 +200,24 @@ export default function RefundPolicyPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-extrabold flex items-center gap-2">
                 <Megaphone className="h-5 w-5 text-sky-500" />
-                4. Sponsored Ads &amp; Ad Refund Rules
+                4. Sponsored Ads &amp; Ad Refunds
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground space-y-2 leading-relaxed">
               <p>
-                All user-submitted promotions undergo safety review before going live. If a
-                promotion is rejected during review:
+                All user-submitted promotions require pre-publication approval by Lonkind
+                Technologies. If rejected during moderation:
               </p>
               <ul className="list-disc pl-5 space-y-1">
                 <li>
-                  <strong className="text-foreground">Coin-Paid Promotions</strong>: 100% of spent
-                  Coins are automatically refunded to your promotional Coin balance immediately.
+                  <strong className="text-foreground">Coin-Paid Ads:</strong> 100% of spent Coins
+                  are refunded atomically to your non-cashable promotional Coin balance.
                 </li>
                 <li>
-                  <strong className="text-foreground">Direct Flutterwave Ad Payments</strong>:
-                  Eligible Card payments are automatically refunded via Flutterwave’s Refund API.
-                  Channels that do not support instant API refunds (such as certain Bank Transfers
-                  or USSD payments) are settled manually by our team within 3–5 business days.
+                  <strong className="text-foreground">Direct Flutterwave Ad Payments:</strong>{' '}
+                  Eligible card payments trigger an automated Flutterwave refund; channels
+                  requiring manual settlement are refunded by our billing team—settling within{' '}
+                  <strong className="text-foreground">5–10 business days</strong>.
                 </li>
               </ul>
             </CardContent>
@@ -178,7 +232,7 @@ export default function RefundPolicyPage() {
                 <p className="font-bold text-foreground">Need help with a payment or refund?</p>
                 <p className="text-xs text-muted-foreground">
                   Email <strong className="text-foreground">support@lonkind.com</strong> with your
-                  transaction reference (`tx_ref`) or open a ticket in our Help &amp; Support Center.
+                  transaction reference or open a ticket in our Help &amp; Support Center.
                 </p>
               </div>
             </div>
