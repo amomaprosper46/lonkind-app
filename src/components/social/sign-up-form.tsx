@@ -456,6 +456,8 @@ export function SignUpForm({ onSignUp, onShowSignIn }: SignUpFormProps) {
         email: normalizedEmail,
         canonicalEmail,
         emailVerified: false,
+        phoneVerified: false,
+        phoneVerificationRequired: true,
         dob: dobString,
         dateOfBirth: dobString,
         age: calculatedAge,

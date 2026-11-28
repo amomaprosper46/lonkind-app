@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import { assertPhoneVerifiedForAction } from '@/lib/phone-verification-gate';
 import { verifyAppCheckRequest } from '@/lib/app-check-server';
 import {
   checkRateLimit,
@@ -79,16 +80,20 @@ export async function POST(req: NextRequest) {
       return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
-    // Require verified email & 18+ age before unlocking coin purchases
-    const [verificationGate, ageGate] = await Promise.all([
+    // Require verified email, 18+ age, and mandatory phone verification (new accounts) before coin purchases
+    const [verificationGate, ageGate, phoneGate] = await Promise.all([
       assertEmailVerifiedForAction(String(userId), 'coin purchases'),
       assertAdultUserForAction(String(userId), 'purchasing coins'),
+      assertPhoneVerifiedForAction(String(userId), 'purchasing coins'),
     ]);
     if (!verificationGate.allowed) {
       return NextResponse.json({ error: verificationGate.error }, { status: 403 });
     }
     if (!ageGate.allowed) {
       return NextResponse.json({ error: ageGate.error }, { status: 403 });
+    }
+    if (!phoneGate.allowed) {
+      return NextResponse.json({ error: phoneGate.error, code: phoneGate.code }, { status: 403 });
     }
 
     const cleanCurrency = String(currency || 'NGN').toUpperCase();

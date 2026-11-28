@@ -3,6 +3,7 @@ import React, { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SignUpForm, EmailVerificationPendingScreen } from '@/components/social/sign-up-form';
+import { PhoneOtpVerificationScreen } from '@/components/social/phone-otp-verification-screen';
 import { SignInForm } from '@/components/social/sign-in-form';
 import { Users, Video, Share2, Loader2, WifiOff, AlertTriangle, Radio } from 'lucide-react';
 import SocialDashboard from './social-dashboard';
@@ -183,6 +184,7 @@ function SocialHomePageInner() {
   const [isOnline, setIsOnline] = React.useState(true);
   const [isNewUser, setIsNewUser] = React.useState(false);
   const [needsEmailVerification, setNeedsEmailVerification] = React.useState(false);
+  const [needsPhoneVerification, setNeedsPhoneVerification] = React.useState(false);
   const [showTutorial, setShowTutorial] = React.useState(false);
   
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
@@ -282,11 +284,17 @@ function SocialHomePageInner() {
             const uData = userDoc.data() || {};
             const isSuperAdminAccount = uData.role === 'super_admin' || uData.isAdmin === true;
             const hasVerifiedEmail = Boolean(user.emailVerified || uData.emailVerified === true);
+            const hasVerifiedPhone = Boolean(uData.phoneVerified === true && uData.phoneNumber);
             // Only gate unverified email-password accounts (never block @mow or phone-only accounts)
             if (user.email && !hasVerifiedEmail && !isSuperAdminAccount && uData.emailVerified === false) {
               setNeedsEmailVerification(true);
+              setNeedsPhoneVerification(false);
+            } else if (uData.phoneVerificationRequired === true && !hasVerifiedPhone && !isSuperAdminAccount) {
+              setNeedsEmailVerification(false);
+              setNeedsPhoneVerification(true);
             } else {
               setNeedsEmailVerification(false);
+              setNeedsPhoneVerification(false);
             }
             setIsNewUser(false);
           }
@@ -294,10 +302,12 @@ function SocialHomePageInner() {
           console.error("Error fetching user document:", error);
           toast({ variant: 'destructive', title: 'Database Connection Error', description: error.message });
           setNeedsEmailVerification(false);
+          setNeedsPhoneVerification(false);
           setIsNewUser(false);
         }
       } else {
         setNeedsEmailVerification(false);
+        setNeedsPhoneVerification(false);
         setIsNewUser(false);
       }
     };
@@ -375,7 +385,24 @@ function SocialHomePageInner() {
                   <CardContent className="p-6">
                     <EmailVerificationPendingScreen
                       email={user.email}
-                      onVerified={() => setNeedsEmailVerification(false)}
+                      onVerified={() => {
+                        setNeedsEmailVerification(false);
+                        setNeedsPhoneVerification(true);
+                      }}
+                      onSignOutAndBack={handleSignOut}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            );
+        }
+        if (needsPhoneVerification) {
+            return (
+              <div className="min-h-screen flex items-center justify-center bg-background p-4">
+                <Card className="w-full max-w-md rounded-2xl border-border/70 shadow-xl">
+                  <CardContent className="p-6">
+                    <PhoneOtpVerificationScreen
+                      onVerified={() => setNeedsPhoneVerification(false)}
                       onSignOutAndBack={handleSignOut}
                     />
                   </CardContent>

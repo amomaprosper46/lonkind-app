@@ -703,6 +703,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Strict 1-phone-per-account uniqueness registry & server-only hashed OTP store
+    match /phone_registry/{e164Phone} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /otp_verifications/{uid} {
+      allow read, write: if false;
+    }
+
     // Zero client-side writes on dedicated wallet, coin transaction, and payout collections
     match /wallets/{walletId} {
       allow read: if isSuperAdmin() || (isSignedIn() && (walletId == request.auth.uid || resource.data.userId == request.auth.uid));

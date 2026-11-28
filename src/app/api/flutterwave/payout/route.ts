@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { commitDoubleEntryJournalInTx, DoubleEntryLeg } from '@/lib/ledger';
 import { assertEmailVerifiedForAction } from '@/lib/email-verification-gate';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import { assertPhoneVerifiedForAction } from '@/lib/phone-verification-gate';
 import {
   checkRateLimit,
   parseStrictPositiveInt,
@@ -239,16 +240,22 @@ export async function POST(req: NextRequest) {
       return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
-    // Require verified email & 18+ age before unlocking creator payouts
-    const [verificationGate, ageGate] = await Promise.all([
+    // Require verified email, 18+ age, and verified unique phone number before unlocking creator payouts
+    const [verificationGate, ageGate, phoneGate] = await Promise.all([
       assertEmailVerifiedForAction(userId, 'creator payouts'),
       assertAdultUserForAction(userId, 'requesting creator payouts'),
+      assertPhoneVerifiedForAction(userId, 'requesting creator payouts', {
+        enforceForLegacyPayouts: true,
+      }),
     ]);
     if (!verificationGate.allowed) {
       return NextResponse.json({ error: verificationGate.error }, { status: 403 });
     }
     if (!ageGate.allowed) {
       return NextResponse.json({ error: ageGate.error }, { status: 403 });
+    }
+    if (!phoneGate.allowed) {
+      return NextResponse.json({ error: phoneGate.error, code: phoneGate.code }, { status: 403 });
     }
 
     const body = await req.json();

@@ -9,6 +9,7 @@ import {
 } from '@/lib/ads-schema';
 import { validateAdContentSafety } from '@/lib/age-and-ad-safety';
 import { assertAdultUserForAction } from '@/lib/age-gate-server';
+import { assertPhoneVerifiedForAction } from '@/lib/phone-verification-gate';
 import { verifyAppCheckRequest } from '@/lib/app-check-server';
 import {
   checkRateLimit,
@@ -69,9 +70,15 @@ export async function POST(req: NextRequest) {
       return rateLimitExceededResponse(rl.retryAfterSeconds);
     }
 
-    const ageGate = await assertAdultUserForAction(uid, 'purchasing promoted ads');
+    const [ageGate, phoneGate] = await Promise.all([
+      assertAdultUserForAction(uid, 'purchasing promoted ads'),
+      assertPhoneVerifiedForAction(uid, 'purchasing promoted ads'),
+    ]);
     if (!ageGate.allowed) {
       return NextResponse.json({ error: ageGate.error }, { status: 403 });
+    }
+    if (!phoneGate.allowed) {
+      return NextResponse.json({ error: phoneGate.error, code: phoneGate.code }, { status: 403 });
     }
 
     const body = await req.json().catch(() => null);

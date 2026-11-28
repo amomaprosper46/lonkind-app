@@ -198,7 +198,8 @@ export type SecurityAuditAction =
   | 'rate_limit_exceeded'
   | 'webhook_signature_rejected'
   | 'database_backup_created'
-  | 'database_backup_downloaded';
+  | 'database_backup_downloaded'
+  | 'sms_provider_failover';
 
 /**
  * Appends an immutable entry to `security_audit_logs` (Admin SDK server-only).

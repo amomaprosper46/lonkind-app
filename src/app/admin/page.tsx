@@ -34,6 +34,10 @@ const AdminDatabaseBackups = dynamic(
   () => import('@/components/social/admin-database-backups').then((m) => m.AdminDatabaseBackups),
   { ssr: false, loading: () => <SettingsRowSkeleton count={3} /> }
 );
+const AdminOtpFailoverMonitor = dynamic(
+  () => import('@/components/social/admin-otp-failover-monitor').then((m) => m.AdminOtpFailoverMonitor),
+  { ssr: false, loading: () => <SettingsRowSkeleton count={3} /> }
+);
 
 export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -102,6 +106,7 @@ export default function AdminDashboardPage() {
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6">
+          <AdminOtpFailoverMonitor />
           <AdminDatabaseBackups />
           <AdminSecurityShield showAuditTable />
         </TabsContent>
